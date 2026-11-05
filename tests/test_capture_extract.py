@@ -445,3 +445,293 @@ def test_hotel_patterns_do_not_fire_on_a_non_hotel_row():
     rec = ce.classify(row, OSM_ROW)
     assert rec["leave_for_grok"] is True
 
+
+# ================= hotel pattern gap, round 2: the 24 real stuck rows ======
+
+# ---- PP-001538: "chargeable at £X for 24 hours" (connector before unit) ---
+def test_hotel_chargeable_at_price_for_24_hours():
+    row = sheet_row(
+        "PP-001538", type_captured="Hotel",
+        charges="Car parking is available for our guests and is chargeable at £20 for 24 hours.",
+    )
+    rec = ce.classify(row, OSM_ROW)
+    assert rec["leave_for_grok"] is False
+    assert rec["fields"]["can_park"]["value"] == "Conditional"
+    assert rec["fields"]["who_can_park"]["value"] == "Guests only"
+    assert rec["fields"]["cost_type"]["value"] == "Paid"
+    assert rec["fields"]["tariff_type"]["value"] == "Flat rate per 24 hours"
+    assert rec["fields"]["tariff_detail"]["value"] == "£20.00 per 24 hours"
+    assert cf.validate_record(rec) == []
+
+
+# ---- PP-001539: "£X per car, per night" (qualifier between price and unit) -
+def test_hotel_price_per_car_per_night():
+    row = sheet_row("PP-001539", type_captured="Hotel", charges="£20 per car, per night")
+    rec = ce.classify(row, OSM_ROW)
+    assert rec["leave_for_grok"] is False
+    assert rec["fields"]["tariff_type"]["value"] == "Flat rate per night"
+    assert rec["fields"]["tariff_detail"]["value"] == "£20.00 per night"
+    assert cf.validate_record(rec) == []
+
+
+# ---- PP-001548: "Daily fee of £X" (unit named before the price) -----------
+def test_hotel_daily_fee_of_price():
+    row = sheet_row("PP-001548", type_captured="Hotel", charges="Daily fee of £45.")
+    rec = ce.classify(row, OSM_ROW)
+    assert rec["leave_for_grok"] is False
+    assert rec["fields"]["tariff_type"]["value"] == "Flat rate per 24 hours"
+    assert rec["fields"]["tariff_detail"]["value"] == "£45.00 per day"
+    assert cf.validate_record(rec) == []
+
+
+# ---- PP-001551: two duration bands in one charges string -------------------
+def test_hotel_two_duration_bands_become_banded_by_stay_length():
+    row = sheet_row("PP-001551", type_captured="Hotel",
+                     charges="£25 for 24 hrs; £6.00 per hour up to 4 hours")
+    rec = ce.classify(row, OSM_ROW)
+    assert rec["leave_for_grok"] is False
+    assert rec["fields"]["tariff_type"]["value"] == "Banded by stay length"
+    detail = rec["fields"]["tariff_detail"]["value"]
+    assert "£25.00" in detail and "£6.00" in detail and ";" in detail
+    assert "–" not in detail and "—" not in detail
+    assert cf.validate_record(rec) == []
+
+
+# ---- PP-001553: "£X per vehicle per night (valet, underground)" -----------
+def test_hotel_valet_price_goes_to_tariff_detail_valet_detail_to_notes():
+    row = sheet_row("PP-001553", type_captured="Hotel",
+                     charges="£65 per vehicle per night (valet, underground)")
+    rec = ce.classify(row, OSM_ROW)
+    assert rec["leave_for_grok"] is False
+    assert rec["fields"]["tariff_type"]["value"] == "Flat rate per night"
+    assert rec["fields"]["tariff_detail"]["value"] == "£65.00 per night"
+    assert any("valet" in n.lower() for n in rec["notes_append"])
+    assert cf.validate_record(rec) == []
+
+
+# ---- PP-001693: non-residents may also park, a real R1 exception ----------
+def test_hotel_non_residents_welcome_opens_who_can_park_to_anyone():
+    row = sheet_row(
+        "PP-001693", type_captured="Hotel",
+        charges=("Residents £40.00/day; non-residents £5.00/hr (Mon–Fri 8am–4pm), "
+                 "£4.00/hr off-peak & weekends"),
+        notes=("Hotel guest parking per official hotel page. Source: Accor ALL official hotel "
+               "page. Card payment only. Outside Congestion Charge zone (per hotel). 240 spaces "
+               "+ 6 coach bays. Parking detail: Yes – hotel guests and non-residents (chargeable)."),
+    )
+    rec = ce.classify(row, OSM_ROW)
+    assert rec["leave_for_grok"] is False
+    assert rec["fields"]["can_park"]["value"] == "Yes"
+    assert rec["fields"]["who_can_park"]["value"] == "Anyone (paid)"
+    assert rec["fields"]["cost_type"]["value"] == "Paid"
+    assert "£40.00" in rec["notes_append"][0] and "£5.00" in rec["notes_append"][0]
+    assert "–" not in rec["notes_append"][0] and "—" not in rec["notes_append"][0]
+    assert cf.validate_record(rec) == []
+
+
+# ---- PP-002541: "per overnight stay per car" plus a trailing condition ----
+def test_hotel_per_overnight_stay_per_car():
+    row = sheet_row(
+        "PP-002541", type_captured="Hotel",
+        charges=("£18.00 per overnight stay per car (additional cars/days); "
+                 "payable at lobby car park stations"),
+    )
+    rec = ce.classify(row, OSM_ROW)
+    assert rec["leave_for_grok"] is False
+    assert rec["fields"]["tariff_type"]["value"] == "Flat rate per night"
+    assert rec["fields"]["tariff_detail"]["value"] == "£18.00 per night"
+    assert any("payable at lobby" in n.lower() for n in rec["notes_append"])
+    assert cf.validate_record(rec) == []
+
+
+# ---- PP-002542: valet short-stay band plus a 24-hour band -----------------
+def test_hotel_valet_banded_tariff():
+    row = sheet_row("PP-002542", type_captured="Hotel",
+                     charges="Valet £50 for 4 hours; £75 per vehicle per 24 hours")
+    rec = ce.classify(row, OSM_ROW)
+    assert rec["leave_for_grok"] is False
+    assert rec["fields"]["tariff_type"]["value"] == "Banded by stay length"
+    detail = rec["fields"]["tariff_detail"]["value"]
+    assert "£50.00" in detail and "£75.00" in detail
+    assert any("valet" in n.lower() for n in rec["notes_append"])
+    assert cf.validate_record(rec) == []
+
+
+# ---- PP-002543: a single valet 24-hour rate --------------------------------
+def test_hotel_valet_single_24_hour_rate():
+    row = sheet_row("PP-002543", type_captured="Hotel", charges="Valet £75 for 24 hours")
+    rec = ce.classify(row, OSM_ROW)
+    assert rec["leave_for_grok"] is False
+    assert rec["fields"]["tariff_type"]["value"] == "Flat rate per 24 hours"
+    assert rec["fields"]["tariff_detail"]["value"] == "£75.00 per 24 hours"
+    assert any("valet" in n.lower() for n in rec["notes_append"])
+    assert cf.validate_record(rec) == []
+
+
+# ---- PP-002846: valet confirmed, price genuinely not stated ---------------
+def test_hotel_valet_confirmed_but_price_not_stated_is_cost_unknown():
+    row = sheet_row(
+        "PP-002846", type_captured="Hotel", charges="NOT STATED on official page",
+        notes="Official Radisson page FAQ: valet parking available 8am–8pm; price not stated.",
+    )
+    rec = ce.classify(row, OSM_ROW)
+    assert rec["leave_for_grok"] is False
+    assert rec["fields"]["cost_type"]["value"] == "Unknown"
+    assert rec["fields"]["tariff_type"]["value"] == "Not published"
+    assert cf.validate_record(rec) == []
+
+
+# ---- PP-002851: a long multi-band GBP tariff -------------------------------
+def test_hotel_long_banded_gbp_tariff():
+    row = sheet_row(
+        "PP-002851", type_captured="Hotel",
+        charges=("Up to 4h GBP 13.20; 4–5h GBP 16.50; 5–6h GBP 19.80; 6–7h GBP 23.10; "
+                 "7–8h GBP 27.00; 8–23h GBP 27.50; Daily GBP 33.00; Weekly GBP 165.00"),
+    )
+    rec = ce.classify(row, OSM_ROW)
+    assert rec["leave_for_grok"] is False
+    assert rec["fields"]["tariff_type"]["value"] == "Banded by stay length"
+    detail = rec["fields"]["tariff_detail"]["value"]
+    for price in ("£13.20", "£16.50", "£19.80", "£23.10", "£27.00", "£27.50", "£33.00", "£165.00"):
+        assert price in detail
+    assert "–" not in detail and "—" not in detail
+    assert cf.validate_record(rec) == []
+
+
+# ---- PP-002855: weekday/weekend/motorcycle banded tariff ------------------
+def test_hotel_weekday_weekend_motorcycle_banded_tariff():
+    row = sheet_row(
+        "PP-002855", type_captured="Hotel",
+        charges=("Mon–Fri: up to 2h GBP 17.50; 2–3h GBP 27.50; 4–24h GBP 47.50. Weekend: up to 2h "
+                 "GBP 10.00; 2–3h GBP 15.00; 4–24h GBP 30.00 (before pre-book discount). "
+                 "Motorcycles GBP 8.00/day"),
+    )
+    rec = ce.classify(row, OSM_ROW)
+    assert rec["leave_for_grok"] is False
+    assert rec["fields"]["tariff_type"]["value"] == "Banded by stay length"
+    detail = rec["fields"]["tariff_detail"]["value"]
+    assert "£17.50" in detail and "£30.00" in detail and "£8.00" in detail
+    assert "–" not in detail and "—" not in detail
+    assert cf.validate_record(rec) == []
+
+
+# ---- PP-002861: chargeable, price genuinely not published, no "unclear" ---
+def test_hotel_chargeable_on_match_days_price_not_published():
+    row = sheet_row(
+        "PP-002861", type_captured="Hotel",
+        charges="Chargeable on match days; price varies – not published (contact hotel)",
+    )
+    rec = ce.classify(row, OSM_ROW)
+    assert rec["leave_for_grok"] is False
+    assert rec["fields"]["cost_type"]["value"] == "Paid"
+    assert rec["fields"]["tariff_type"]["value"] == "Not published"
+    assert cf.validate_record(rec) == []
+
+
+# ---- PP-002871 / PP-004842 / PP-004874: broadened free detection -----------
+def test_hotel_bare_free_confirmed_by_notes():
+    row = sheet_row(
+        "PP-002871", type_captured="Hotel", charges="Free",
+        notes="Official Best Western page: \"Free parking available. Street parking is not available.\"",
+    )
+    rec = ce.classify(row, OSM_ROW)
+    assert rec["leave_for_grok"] is False
+    assert rec["fields"]["cost_type"]["value"] == "Free"
+    assert cf.validate_record(rec) == []
+
+
+def test_hotel_free_for_brand_guests_only_not_just_hotel_guests():
+    row = sheet_row("PP-004842", type_captured="Hotel", charges="Free for Travelodge guests only")
+    rec = ce.classify(row, OSM_ROW)
+    assert rec["leave_for_grok"] is False
+    assert rec["fields"]["cost_type"]["value"] == "Free"
+    assert cf.validate_record(rec) == []
+
+
+def test_hotel_limited_free_hotel_parking_stays_free():
+    row = sheet_row("PP-004874", type_captured="Hotel",
+                     charges="Limited free hotel parking (permit from reception)")
+    rec = ce.classify(row, OSM_ROW)
+    assert rec["leave_for_grok"] is False
+    assert rec["fields"]["cost_type"]["value"] == "Free"
+    assert any("permit" in n.lower() for n in rec["notes_append"])
+    assert cf.validate_record(rec) == []
+
+
+# ---- the remaining 7 negatives: must still read as leave_for_grok ---------
+def test_hotel_unclear_no_tariff_stated_stays_left_for_grok():
+    row = sheet_row("PP-001554", type_captured="Hotel",
+                     charges="UNCLEAR – no tariff stated on official page")
+    assert ce.classify(row, OSM_ROW)["leave_for_grok"] is True
+
+
+def test_hotel_unclear_no_valet_tariff_stated_stays_left_for_grok():
+    row = sheet_row("PP-001644", type_captured="Hotel",
+                     charges="UNCLEAR – no valet tariff stated (page wording may imply complimentary)")
+    assert ce.classify(row, OSM_ROW)["leave_for_grok"] is True
+
+
+def test_hotel_unclear_canary_riverside_stays_left_for_grok():
+    row = sheet_row("PP-001645", type_captured="Hotel",
+                     charges="UNCLEAR – no tariff stated on official page")
+    assert ce.classify(row, OSM_ROW)["leave_for_grok"] is True
+
+
+def test_hotel_no_free_parking_any_paid_not_stated_stays_left_for_grok():
+    # "No free parking" carries the literal "free parking" substring; the
+    # negation guard must keep it out of the broadened free match, and
+    # "any paid parking not stated" must not be read as a confirmed charge.
+    row = sheet_row(
+        "PP-002865", type_captured="Hotel",
+        charges="No free parking; any paid parking not stated",
+        notes="Official Best Western page: \"No free parking available. Street parking is not available.\"",
+    )
+    assert ce.classify(row, OSM_ROW)["leave_for_grok"] is True
+
+
+def test_hotel_no_free_parking_ilford_stays_left_for_grok():
+    row = sheet_row(
+        "PP-002867", type_captured="Hotel",
+        charges="No free parking; any paid parking not stated",
+        notes="Official Best Western page: \"No free parking available. Street parking is not available.\"",
+    )
+    assert ce.classify(row, OSM_ROW)["leave_for_grok"] is True
+
+
+def test_hotel_no_free_parking_corona_stays_left_for_grok():
+    row = sheet_row(
+        "PP-002870", type_captured="Hotel",
+        charges="No free parking; any paid parking not stated",
+        notes="Official Best Western page: \"No free parking available. Street parking is not available.\"",
+    )
+    assert ce.classify(row, OSM_ROW)["leave_for_grok"] is True
+
+
+def test_hotel_charged_offsite_zero_pounds_conflict_stays_left_for_grok():
+    row = sheet_row(
+        "PP-002866", type_captured="Hotel",
+        charges='UNCLEAR – page says "Charged offsite parking cost of £0.00 (per 24 hours)"',
+        notes=("Official Best Western page: \"No free parking available. Charged offsite parking "
+               "cost of £0.00 (per 24 hours). Street parking is not available.\" CONFLICT: "
+               "\"charged\" but £0.00."),
+    )
+    assert ce.classify(row, OSM_ROW)["leave_for_grok"] is True
+
+
+# ---- regression: "free" near "parking" that is about something else -------
+def test_hotel_ev_charging_free_does_not_make_parking_free():
+    # "2 EV charging points ... free to use (daily parking charge applies)":
+    # the free thing is the EV charging, and the same sentence says a
+    # parking charge applies. Real row: Park Plaza Westminster Bridge,
+    # Charges "£70 per day", wrongly read as Free before this guard existed.
+    row = sheet_row(
+        "PP-002844", type_captured="Hotel", charges="£70 per day",
+        notes=("Official Radisson page FAQ. Hotel is within the London Congestion Charge Area "
+               "(owner pays). 2 EV charging points on site, free to use (daily parking charge "
+               "applies)."),
+    )
+    rec = ce.classify(row, OSM_ROW)
+    assert rec["leave_for_grok"] is False
+    assert rec["fields"]["cost_type"]["value"] == "Paid"
+    assert rec["fields"]["tariff_detail"]["value"] == "£70.00 per day"
+    assert cf.validate_record(rec) == []

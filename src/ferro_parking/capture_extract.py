@@ -86,9 +86,11 @@ def parse_max_stay_minutes(text):
     return n * 60 if match.group(2).lower().startswith("h") else n
 
 
-def record(place_id, fields=None, leave_for_grok=False, reason=""):
+def record(place_id, fields=None, leave_for_grok=False, reason="", notes_append=None):
+    """notes_append holds sentences capture_fill appends to the row's Notes
+    (never replaces it) via page_fill's existing "_notes" hook."""
     return {"place_id": place_id, "leave_for_grok": leave_for_grok, "reason": reason,
-            "fields": fields or {}}
+            "fields": fields or {}, "notes_append": notes_append or []}
 
 
 def field(value, scope, quote):
@@ -255,54 +257,192 @@ def customer_car_park_record(place_id, notes):
 
 HOTEL_WHO_CAN_PARK = rules_mod.load_rules().r1_category_defaults["hotel"]
 
-# "Chargeable ... amount UNCLEAR (official page says "additional fee", no
-# tariff)" is a fixed capture phrase meaning the page confirms a charge and
-# withholds the price, so it is checked before the generic "unclear" skip
-# below, which exists for pages that genuinely contradict themselves.
-HOTEL_CHARGEABLE_AMOUNT_UNCLEAR_RE = re.compile(r"chargeable\b.{0,40}\bamount unclear", re.I)
-HOTEL_FREE_FOR_GUESTS_RE = re.compile(r"free for hotel guests", re.I)
-HOTEL_PRICE_PER_UNIT_RE = re.compile(
-    r"(?:£|GBP\s?)(\d+(?:\.\d{1,2})?)\s*per\s*(night|day|24 hours)", re.I)
+HOTEL_TYPE_RE = re.compile(r"hotel", re.I)
+PRICE_RE = re.compile(r"(?:£|GBP\s?)(\d+(?:\.\d{1,2})?)")
+# Written as codepoints: no file in this project carries an en or em dash.
+EN_DASH, EM_DASH = chr(0x2013), chr(0x2014)
+DASHES_RE = re.compile(f"[{EN_DASH}{EM_DASH}]")
+
+# "free for hotel guests", "Free for Travelodge guests only", "Limited free
+# hotel parking", and a bare "Free" in Charges whose Notes say "Free parking
+# available" all state the same fact. A bare "Free" on its own does not: it
+# needs the "guests" or "parking" word within the same clause, which is what
+# the gap limit here requires.
+HOTEL_FREE_RE = re.compile(r"\bfree\b[^.;]{0,30}?\b(guests?|parking)\b", re.I)
+
+# "No free parking; any paid parking not stated" (the Best Western rows)
+# carries the literal "free parking" and states the opposite of it. "2 EV
+# charging points ... free to use (daily parking charge applies)" (Park
+# Plaza Westminster Bridge) is the same trap from the other direction: the
+# free thing nearby is the EV charging, not the parking, and the same
+# sentence says a parking charge applies.
+NO_FREE_RE = re.compile(r"\bno\s+free\b|\bnot\s+free\b|\bcharge applies\b|\bcharges apply\b", re.I)
+
+# A confirmed charge, whatever the figure. "any paid parking not stated" is
+# not one: it reports the absence of a tariff, not that parking costs money.
+HOTEL_CHARGEABLE_RE = re.compile(
+    r"\bchargeable\b|\bparking is charged\b|\bthere is a charge\b|\bprice varies\b", re.I)
+
+NON_GUEST_RE = re.compile(r"non-?residents?|non-?guests?", re.I)
+VALET_RE = re.compile(r"\bvalet\b", re.I)
+
+# "night" sits inside "overnight stay" and both mean the same tariff, so the
+# earliest hit wins and no separate ordering is needed between them.
+STAY_UNITS = (("overnight stay", "night"), ("night", "night"), ("24 hours", "24 hours"),
+              ("24 hrs", "24 hours"), ("day", "day"))
+UNIT_BEFORE_PRICE_RE = re.compile(r"\b(daily|nightly)\b", re.I)
 
 
-def hotel_record(place_id, charges, cost_type, tariff_type, tariff_detail):
-    # Who Can Park is always the hotel R1 default (Guests only), a
-    # restricted group, so Can Park? is Conditional, the same as
-    # customer_car_park_record's "Customers only" case, never Yes (Yes is
-    # for unconditional access, Who Can Park Anyone / Anyone (paid)).
-    quote = charges[:200]
+def plain_dashes(text):
+    """No en dash or em dash reaches a cell. Prose keeps a plain hyphen."""
+    return DASHES_RE.sub("-", text or "")
+
+
+def restate(text):
+    """A captured rate or band string rewritten for a cell: GBP to £, every
+    price to two decimals, "2h" to "2 hours", "/day" to " per day", "&" to
+    "and", and a dash range to "4 to 5 hours". Only rate strings go through
+    this, where a dash always joins the two ends of a range. Prose keeps its
+    dash as a hyphen via plain_dashes instead."""
+    out = re.sub(r"^\s*valet\b[:,]?\s*", "", text.strip(), flags=re.I)
+    out = re.sub(r"/\s*hr\b", " per hour", out, flags=re.I)
+    out = re.sub(r"/\s*day\b", " per day", out, flags=re.I)
+    out = re.sub(r"/\s*night\b", " per night", out, flags=re.I)
+    out = PRICE_RE.sub(lambda m: f"£{float(m.group(1)):.2f}", out)
+    out = re.sub(r"(\d)\s*h\b", r"\1 hours", out)
+    out = re.sub(r"\bhrs?\b", "hours", out, flags=re.I)
+    out = DASHES_RE.sub(" to ", out)
+    return re.sub(r"\s{2,}", " ", out.replace("&", "and")).strip()
+
+
+def price_per_unit(text):
+    """(price, unit) for one single stated rate, or None.
+
+    A £ or GBP price counts when a stay unit follows it within 40 characters
+    and a "per" or "for" joins the two: "£15 per night", "£65 per vehicle
+    per night", "£18.00 per overnight stay per car", "£20 for 24 hours". The
+    connector requirement is what stops a bare price in prose being read as
+    a rate. A unit named just before the price counts too ("Daily fee of
+    £45"), which is the only shape where no connector exists to find.
+
+    Callers must try the banded branch first: the last band of a banded
+    tariff often reads "Daily GBP 33.00", which this would otherwise return
+    as one flat daily rate for the whole car park."""
+    for match in PRICE_RE.finditer(text or ""):
+        window = text[match.end():match.end() + 40].lower()
+        unit_at = None
+        for phrase, unit in STAY_UNITS:
+            idx = window.find(phrase)
+            if idx != -1 and (unit_at is None or idx < unit_at[0]):
+                unit_at = (idx, unit)
+        if unit_at and re.search(r"\b(per|for)\b", window[:unit_at[0]]):
+            return float(match.group(1)), unit_at[1]
+        before = UNIT_BEFORE_PRICE_RE.search(text[max(0, match.start() - 25):match.start()])
+        if before:
+            return float(match.group(1)), "day" if before.group(1).lower() == "daily" else "night"
+    return None
+
+
+def valet_note(charges):
+    """A valet detail belongs in Notes, never in Tariff Detail. A charges
+    string that opens with "Valet" prices the valet service itself, so that
+    is the only way to park there."""
+    if re.match(r"\s*valet\b", charges, re.I):
+        return "Valet only."
+    parenthetical = re.search(r"\(([^)]*\bvalet\b[^)]*)\)", charges, re.I)
+    if parenthetical:
+        rest = ", ".join(p.strip() for p in parenthetical.group(1).split(",")
+                          if "valet" not in p.lower())
+        return f"Valet parking ({rest})." if rest else "Valet parking."
+    return "Valet parking."
+
+
+def hotel_record(place_id, quote, cost_type, tariff_type, tariff_detail,
+                  can_park="Conditional", who_can_park=HOTEL_WHO_CAN_PARK, notes_append=None):
+    """A hotel car park is for the hotel's own guests under rule R1 and is
+    Conditional on being one, unless the row's own text opens it to anyone.
+    Nothing in a hotel row's captured text has ever given hours, a max stay,
+    an operator or a PCN amount, so those stay Not published."""
+    evidence = plain_dashes(quote)[:200]
     fields = {
-        "can_park": field("Conditional", "site", quote),
-        "who_can_park": field(HOTEL_WHO_CAN_PARK, "site", quote),
-        "cost_type": field(cost_type, "site", quote),
-        "tariff_type": field(tariff_type, "site", quote),
-        "tariff_detail": field(tariff_detail, "site", quote),
+        "can_park": field(can_park, "site", evidence),
+        "who_can_park": field(who_can_park, "site", evidence),
+        "cost_type": field(cost_type, "site", evidence),
+        "tariff_type": field(tariff_type, "site", evidence),
+        "tariff_detail": field(tariff_detail, "site", evidence),
     }
     for name in ("max_stay_mins", "hours_osm_format", "hours_basis", "control_type",
                  "operator", "pcn_gbp"):
-        fields[name] = field("Not published", "site", quote)
-    return record(place_id, fields)
+        fields[name] = field("Not published", "site", evidence)
+    return record(place_id, fields, notes_append=notes_append)
 
 
-def hotel_charges_record(place_id, type_text, charges):
-    """A hotel row whose Charges (as published) states this hotel's own
-    parking terms: free for its guests, chargeable at a stated nightly or
-    daily price, or chargeable with the price withheld. None for any other
-    row, including a hotel whose page is unclear or contradicts itself."""
-    if type_text.strip().lower() != "hotel":
+def sentence(text):
+    return f"{plain_dashes(text).strip().rstrip('.')}."
+
+
+def hotel_charges_record(place_id, charges, notes):
+    """One hotel row's Charges (as published) and Notes as a record, or None
+    to leave the row for Grok. None is the answer whenever the text states
+    both free and chargeable, says "unclear", or names no parking fact at
+    all: a guess about a price or about who may park costs a driver money."""
+    text = f"{charges} {notes}"
+    is_free = bool(HOTEL_FREE_RE.search(text)) and not NO_FREE_RE.search(text)
+    is_chargeable = bool(HOTEL_CHARGEABLE_RE.search(text))
+
+    # Premier Inn London Docklands: the page states free parking and a
+    # charge for the same car park. Neither half can be trusted over the other.
+    if is_free and is_chargeable:
         return None
-    if HOTEL_CHARGEABLE_AMOUNT_UNCLEAR_RE.search(charges):
-        return hotel_record(place_id, charges, "Paid", "Not published", "Not published")
+    # "Chargeable - amount UNCLEAR (... no tariff)" confirms the charge and
+    # only withholds the figure, unlike a row whose own page contradicts
+    # itself, so this is checked before the blanket "unclear" skip below.
+    if is_chargeable and "unclear" in charges.lower():
+        return hotel_record(place_id, charges, "Paid", "Not published", "Not published",
+                             notes_append=[sentence(charges)])
     if "unclear" in charges.lower():
         return None
-    price = HOTEL_PRICE_PER_UNIT_RE.search(charges)
-    if price:
-        unit = price.group(2).lower()
+
+    if is_free:
+        # "Limited" is a capacity note and a permit is an access condition.
+        # Neither withholds Free, and neither fits one of the eleven fields.
+        condition = [sentence(charges)] if "(" in charges else []
+        return hotel_record(place_id, charges, "Free", "Free (time limit not published)",
+                             "Free", notes_append=condition)
+
+    # Novotel London West: two populations on two rate structures fit no
+    # single tariff template, so the rates go to Notes rather than be lost.
+    if NON_GUEST_RE.search(text):
+        return hotel_record(place_id, charges, "Paid", "Not published", "Not published",
+                             can_park="Yes", who_can_park="Anyone (paid)",
+                             notes_append=[sentence(restate(charges))])
+
+    valet = [valet_note(charges)] if VALET_RE.search(charges) else None
+    prices = PRICE_RE.findall(charges)
+    if ";" in charges and len(prices) >= 2:
+        return hotel_record(place_id, charges, "Paid", "Banded by stay length",
+                             restate(charges), notes_append=valet)
+
+    rate = price_per_unit(charges)
+    if rate:
+        price, unit = rate
         tariff_type = "Flat rate per night" if unit == "night" else "Flat rate per 24 hours"
+        # A second clause next to the rate carries a condition the flat-rate
+        # template drops ("payable at lobby car park stations"), so it is
+        # restated in Notes rather than lost.
+        conditions = [sentence(charges)] if ";" in charges else []
         return hotel_record(place_id, charges, "Paid", tariff_type,
-                             f"£{float(price.group(1)):.2f} per {unit}")
-    if HOTEL_FREE_FOR_GUESTS_RE.search(charges):
-        return hotel_record(place_id, charges, "Free", "Free (time limit not published)", "Free")
+                             f"£{price:.2f} per {unit}", notes_append=(valet or []) + conditions)
+
+    # The May Fair: Charges says nothing, and Notes is the only column that
+    # shows a car park exists at all. Valet existing is not evidence it
+    # costs money, so Cost Type stays Unknown rather than becoming Paid.
+    if VALET_RE.search(notes) and not prices:
+        return hotel_record(place_id, notes, "Unknown", "Not published", "Not published")
+
+    if is_chargeable:
+        return hotel_record(place_id, charges, "Paid", "Not published", "Not published",
+                             notes_append=[sentence(charges)])
     return None
 
 
@@ -380,9 +520,10 @@ def classify(sr, osm_row):
         }
         return record(place_id, fields)
 
-    hotel = hotel_charges_record(place_id, type_text, charges)
-    if hotel:
-        return hotel
+    if HOTEL_TYPE_RE.search(type_text):
+        hotel = hotel_charges_record(place_id, charges, notes)
+        if hotel:
+            return hotel
 
     return record(place_id, leave_for_grok=True,
                    reason="Captured text has no site-specific parking fact beyond NO OFFICIAL INFO / N/A")
