@@ -87,6 +87,15 @@ def test_autopay_price_flag_none_when_not_autopay():
     assert pf.autopay_price_flag(sr, "£3.00 per hour") is None
 
 
+def test_autopay_price_flag_uses_only_the_first_price_in_a_banded_detail():
+    # Stripping every non-digit character from the whole string would run
+    # all four band prices together into one meaningless number instead of
+    # reading the first one, £6.00.
+    sr = sheet_row(**{"Ferro Autopay": "✅", "Parking Charge (£)": "25.00"})
+    detail = "0-1 hrs £6.00; 1-2 hrs £12.00; 2-3 hrs £18.00; 3-4 hrs £24.00; 4-24 hrs £25.00"
+    assert pf.autopay_price_flag(sr, detail) == "Autopay price differs: sheet £25.00, source £6.00"
+
+
 # ---- build_row_values: Notes/Review Flag appending, protected columns ---------
 def captured(value="Conditional", place_id="PP-1"):
     """ALL LONDON's own Can Park?, by Place ID."""

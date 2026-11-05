@@ -523,8 +523,13 @@ def test_hotel_non_residents_welcome_opens_who_can_park_to_anyone():
     assert rec["leave_for_grok"] is False
     assert rec["fields"]["can_park"]["value"] == "Yes"
     assert rec["fields"]["who_can_park"]["value"] == "Anyone (paid)"
+    # The non-resident clause's own first rate is the real, usable tariff.
     assert rec["fields"]["cost_type"]["value"] == "Paid"
-    assert "£40.00" in rec["notes_append"][0] and "£5.00" in rec["notes_append"][0]
+    assert rec["fields"]["tariff_type"]["value"] == "Hourly rate"
+    assert rec["fields"]["tariff_detail"]["value"] == "£5.00 per hour"
+    assert "£40.00" in rec["notes_append"][0] and "£4.00" in rec["notes_append"][0]
+    assert "–" not in rec["notes_append"][0] and "—" not in rec["notes_append"][0]
+    assert cf.validate_record(rec) == []
     assert "–" not in rec["notes_append"][0] and "—" not in rec["notes_append"][0]
     assert cf.validate_record(rec) == []
 
@@ -591,10 +596,12 @@ def test_hotel_long_banded_gbp_tariff():
     rec = ce.classify(row, OSM_ROW)
     assert rec["leave_for_grok"] is False
     assert rec["fields"]["tariff_type"]["value"] == "Banded by stay length"
-    detail = rec["fields"]["tariff_detail"]["value"]
-    for price in ("£13.20", "£16.50", "£19.80", "£23.10", "£27.00", "£27.50", "£33.00", "£165.00"):
-        assert price in detail
-    assert "–" not in detail and "—" not in detail
+    # Strict "0-N hrs £X" template: the weekly rate has no hour cap of its
+    # own, so it cannot be a band and goes to Notes instead.
+    assert rec["fields"]["tariff_detail"]["value"] == (
+        "0-4 hrs £13.20; 4-5 hrs £16.50; 5-6 hrs £19.80; 6-7 hrs £23.10; "
+        "7-8 hrs £27.00; 8-23 hrs £27.50; 23-24 hrs £33.00")
+    assert rec["notes_append"] == ["Weekly £165.00"]
     assert cf.validate_record(rec) == []
 
 
@@ -609,9 +616,17 @@ def test_hotel_weekday_weekend_motorcycle_banded_tariff():
     rec = ce.classify(row, OSM_ROW)
     assert rec["leave_for_grok"] is False
     assert rec["fields"]["tariff_type"]["value"] == "Banded by stay length"
-    detail = rec["fields"]["tariff_detail"]["value"]
-    assert "£17.50" in detail and "£30.00" in detail and "£8.00" in detail
-    assert "–" not in detail and "—" not in detail
+    # Tariff Detail carries only the weekday schedule; the weekend schedule,
+    # the motorcycle rate and the pre-book disclaimer all go to Notes.
+    assert rec["fields"]["tariff_detail"]["value"] == (
+        "0-2 hrs £17.50; 2-3 hrs £27.50; 4-24 hrs £47.50")
+    notes = "; ".join(rec["notes_append"])
+    assert "Weekend: 0-2 hrs £10.00; 2-3 hrs £15.00; 4-24 hrs £30.00" in notes
+    assert "£8.00" in notes and "pre-book discount" in notes
+    assert "–" not in notes and "—" not in notes
+    # Both the weekday and the weekend schedule skip straight from a 2-3
+    # hour band to a 4-24 hour band: the source names no 3-4 hour band.
+    assert rec["flags"] == ["Source tariff has no 3-4 hr band"]
     assert cf.validate_record(rec) == []
 
 

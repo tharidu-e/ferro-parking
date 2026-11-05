@@ -60,13 +60,17 @@ def page_url(sheet_row, osm_row):
 
 def autopay_price_flag(sheet_row, first_price_text):
     """R: compare the first price found with Parking Charge (£); never edit
-    that protected column, just flag a difference."""
+    that protected column, just flag a difference. "First price found"
+    means exactly that even when the text names several, a banded tariff
+    detail included: stripping every non-digit character from the whole
+    string instead would run every band's price together into one number."""
     if sheet_row.get("Ferro Autopay", "") != "✅" or not first_price_text:
         return None
     sheet_price = (sheet_row.get("Parking Charge (£)", "") or "").strip()
     if not sheet_price:
         return None
-    found = re.sub(r"[^0-9.]", "", first_price_text)
+    found_match = re.search(r"£\s?(\d+(?:\.\d+)?)", first_price_text)
+    found = found_match.group(1) if found_match else ""
     sheet_num = re.sub(r"[^0-9.]", "", sheet_price)
     if found and sheet_num and found != sheet_num:
         return f"Autopay price differs: sheet £{sheet_num}, source £{found}"

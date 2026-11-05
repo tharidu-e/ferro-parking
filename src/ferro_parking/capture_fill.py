@@ -272,6 +272,8 @@ def record_to_new(sheet_row, osm_row, record, today, captured_can_park):
 
     if record.get("notes_append"):
         extracted["_notes"] = list(record["notes_append"])
+    if record.get("flags"):
+        extracted["_flags"] = list(record["flags"])
 
     autopay_price_text = record["fields"]["tariff_detail"]["value"]
     flag = page_fill.autopay_price_flag(sheet_row, autopay_price_text)
