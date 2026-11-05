@@ -14,6 +14,7 @@ import re
 from pathlib import Path
 
 from . import capture_fill
+from . import rules as rules_mod
 
 NOT_APPLICABLE = {
     "who_can_park": "Not applicable", "cost_type": "Not applicable",
@@ -252,6 +253,59 @@ def customer_car_park_record(place_id, notes):
     return record(place_id, fields)
 
 
+HOTEL_WHO_CAN_PARK = rules_mod.load_rules().r1_category_defaults["hotel"]
+
+# "Chargeable ... amount UNCLEAR (official page says "additional fee", no
+# tariff)" is a fixed capture phrase meaning the page confirms a charge and
+# withholds the price, so it is checked before the generic "unclear" skip
+# below, which exists for pages that genuinely contradict themselves.
+HOTEL_CHARGEABLE_AMOUNT_UNCLEAR_RE = re.compile(r"chargeable\b.{0,40}\bamount unclear", re.I)
+HOTEL_FREE_FOR_GUESTS_RE = re.compile(r"free for hotel guests", re.I)
+HOTEL_PRICE_PER_UNIT_RE = re.compile(
+    r"(?:£|GBP\s?)(\d+(?:\.\d{1,2})?)\s*per\s*(night|day|24 hours)", re.I)
+
+
+def hotel_record(place_id, charges, cost_type, tariff_type, tariff_detail):
+    # Who Can Park is always the hotel R1 default (Guests only), a
+    # restricted group, so Can Park? is Conditional, the same as
+    # customer_car_park_record's "Customers only" case, never Yes (Yes is
+    # for unconditional access, Who Can Park Anyone / Anyone (paid)).
+    quote = charges[:200]
+    fields = {
+        "can_park": field("Conditional", "site", quote),
+        "who_can_park": field(HOTEL_WHO_CAN_PARK, "site", quote),
+        "cost_type": field(cost_type, "site", quote),
+        "tariff_type": field(tariff_type, "site", quote),
+        "tariff_detail": field(tariff_detail, "site", quote),
+    }
+    for name in ("max_stay_mins", "hours_osm_format", "hours_basis", "control_type",
+                 "operator", "pcn_gbp"):
+        fields[name] = field("Not published", "site", quote)
+    return record(place_id, fields)
+
+
+def hotel_charges_record(place_id, type_text, charges):
+    """A hotel row whose Charges (as published) states this hotel's own
+    parking terms: free for its guests, chargeable at a stated nightly or
+    daily price, or chargeable with the price withheld. None for any other
+    row, including a hotel whose page is unclear or contradicts itself."""
+    if type_text.strip().lower() != "hotel":
+        return None
+    if HOTEL_CHARGEABLE_AMOUNT_UNCLEAR_RE.search(charges):
+        return hotel_record(place_id, charges, "Paid", "Not published", "Not published")
+    if "unclear" in charges.lower():
+        return None
+    price = HOTEL_PRICE_PER_UNIT_RE.search(charges)
+    if price:
+        unit = price.group(2).lower()
+        tariff_type = "Flat rate per night" if unit == "night" else "Flat rate per 24 hours"
+        return hotel_record(place_id, charges, "Paid", tariff_type,
+                             f"£{float(price.group(1)):.2f} per {unit}")
+    if HOTEL_FREE_FOR_GUESTS_RE.search(charges):
+        return hotel_record(place_id, charges, "Free", "Free (time limit not published)", "Free")
+    return None
+
+
 def classify(sr, osm_row):
     place_id = sr["Place ID"]
     captured = {c: strip_cross_references(sr.get(c, "")) for c in capture_fill.CAPTURE_COLS}
@@ -325,6 +379,10 @@ def classify(sr, osm_row):
             "pcn_gbp": field("Not published", "site", enforcement[:150]),
         }
         return record(place_id, fields)
+
+    hotel = hotel_charges_record(place_id, type_text, charges)
+    if hotel:
+        return hotel
 
     return record(place_id, leave_for_grok=True,
                    reason="Captured text has no site-specific parking fact beyond NO OFFICIAL INFO / N/A")
