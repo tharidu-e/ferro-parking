@@ -1,0 +1,128 @@
+# Ferro PP discovery: category definitions for the OSM-vs-sheet place count
+# (docs/HANDOVER.md, "Discovery count"). Read by src/ferro_parking/discovery.py.
+#
+# Each [categories.X] table has:
+#   osm_rules              list of tag rules; a feature matches this category
+#                           if ANY rule's tags are ALL present (rule = {key = [allowed values]}).
+#                           An empty list means "no clear single OSM tag" (see flagged).
+#   sheet_place_categories  exact values of the sheet's "Place Category" column
+#                           that belong to this group (checked first, so table
+#                           order never matters for a finished row).
+#   sheet_keywords          whole words to look for in "Type (as captured)" when
+#                           Place Category is blank. Checked in the file order
+#                           below, first match wins: a more specific category
+#                           (car_park, petrol_station) is listed before a related
+#                           general one (station) that its own text also contains
+#                           ("Petrol Station (Shell)" has the word "station" too).
+#   sheet_keyword_excludes  a keyword hit is ignored if the text also contains one
+#                           of these (so "Station Car Park" does not read as "station").
+#   sheet_brand_in          brand names (from osm_match.brand_key: the Brand column,
+#                           or the text in brackets in Type (as captured)) that force
+#                           this category regardless of the keyword above.
+#   flagged / flag_reason   true when the category has no reliable single OSM tag,
+#                           or the tag badly undercounts. flagged categories are
+#                           still matched if osm_rules is non-empty; "other" is the
+#                           one exception (osm_rules empty, never counted as missing).
+#
+# This file is city-agnostic: swap config/rules.toml and the sheet export for
+# another city and these tag rules still apply, since they describe OSM, not London.
+
+[categories.car_park]
+osm_rules = [{ amenity = ["parking"] }]
+sheet_place_categories = ["Council car park", "Private / operator car park"]
+sheet_keywords = ["car park", "parking"]
+# Access-tag split (public / customers / private / residents / unknown) is
+# computed separately by discovery.py; this category covers both council
+# and private/operator car parks, since OSM amenity=parking does not reliably
+# say which one owns a given lot.
+
+[categories.petrol_station]
+osm_rules = [{ amenity = ["fuel"] }]
+sheet_place_categories = ["Petrol station"]
+sheet_keywords = ["petrol station", "fuel station", "fuel"]
+
+[categories.station]
+osm_rules = [
+    { railway = ["station", "halt"] },
+    { public_transport = ["station"] },
+    { station = ["subway", "light_rail", "train"] },
+]
+sheet_place_categories = ["Station"]
+sheet_keywords = ["station"]
+sheet_keyword_excludes = ["car park"]
+
+[categories.fast_food]
+osm_rules = [{ amenity = ["fast_food"] }]
+sheet_place_categories = ["Fast food / drive-thru"]
+sheet_keywords = ["fast food", "drive thru", "drive-thru"]
+sheet_brand_in = ["kfc", "mcdonalds", "burger king", "nandos"]
+
+[categories.diy_store]
+osm_rules = [{ shop = ["doityourself"] }]
+sheet_place_categories = ["Retail warehouse / DIY / trade"]
+sheet_keywords = ["diy", "trade", "home improvement"]
+
+[categories.retail_park]
+osm_rules = [{ shop = ["mall"] }]
+sheet_place_categories = ["Shopping centre"]
+sheet_keywords = ["shopping centre", "retail park"]
+flagged = true
+flag_reason = "OSM has no single reliable point tag for a whole retail park or shopping centre. shop=mall only covers an indoor mall building, so most open-air retail parks have no matching node: this count is a floor, not the true total."
+
+[categories.supermarket]
+osm_rules = [{ shop = ["supermarket"] }]
+sheet_place_categories = ["Supermarket - large format"]
+sheet_keywords = ["supermarket"]
+# These brands trade as small-format shops even under the generic "Retail /
+# Supermarket" text, so they go to convenience_store instead of here.
+# "co-operative" is listed separately from "co-op", and "cooperative" (no
+# hyphen at all, a real OSM name spelling) separately again:
+# osm_match.norm() turns a hyphen into a space, so "Co-op" becomes "co op",
+# "Co-operative" becomes "co operative", and plain "Cooperative" stays one
+# word, "cooperative" - three different strings, none a substring of
+# either other.
+sheet_small_format_brands = ["co-op", "co-operative", "cooperative", "iceland", "morrisons daily",
+                              "m&s simply food", "simply food", "tesco express", "tesco metro",
+                              "sainsburys local", "little waitrose"]
+
+[categories.convenience_store]
+osm_rules = [{ shop = ["convenience"] }]
+sheet_place_categories = ["Supermarket - convenience"]
+
+[categories.hotel]
+osm_rules = [{ tourism = ["hotel"] }]
+sheet_place_categories = ["Hotel"]
+sheet_keywords = ["hotel"]
+
+[categories.hospital]
+osm_rules = [{ amenity = ["hospital"] }]
+sheet_place_categories = ["Hospital / health centre"]
+sheet_keywords = ["hospital", "health centre"]
+
+[categories.gym]
+osm_rules = [{ leisure = ["fitness_centre"] }]
+sheet_place_categories = ["Gym / leisure centre"]
+sheet_keywords = ["gym", "leisure centre"]
+
+[categories.cinema]
+osm_rules = [{ amenity = ["cinema"] }]
+sheet_keywords = ["cinema"]
+
+[categories.pub]
+osm_rules = [{ amenity = ["pub"] }]
+sheet_keywords = ["pub"]
+
+[categories.cafe]
+osm_rules = [{ amenity = ["cafe"] }]
+sheet_keywords = ["cafe", "coffee"]
+
+[categories.restaurant]
+osm_rules = [{ amenity = ["restaurant"] }]
+sheet_place_categories = ["Restaurant / pub / cafe"]
+sheet_keywords = ["restaurant"]
+
+[categories.other]
+osm_rules = []
+sheet_place_categories = ["Other", "Council park / open space", "School / college", "Business park / office"]
+flagged = true
+flag_reason = "Catch-all: schools, parks, cemeteries, places of worship, EV charging points, general retail shops (Primark, Argos, B&M...), universities, stadiums, and anything else with no single clear OSM tag. osm_rules is empty on purpose: this group is never counted on the OSM side and never appears in missing_places.csv."

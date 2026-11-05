@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<osm version="0.6" generator="test">
+ <!-- supermarket matched to the sheet -->
+ <node id="1" version="1" timestamp="2026-05-01T00:00:00Z" lat="51.4000" lon="-0.3000">
+  <tag k="shop" v="supermarket"/><tag k="name" v="Lidl"/><tag k="addr:postcode" v="KT1 1AA"/></node>
+
+ <!-- supermarket missing from the sheet -->
+ <node id="2" version="1" timestamp="2026-05-01T00:00:00Z" lat="51.4100" lon="-0.3100">
+  <tag k="shop" v="supermarket"/><tag k="name" v="Aldi Kingston"/><tag k="addr:postcode" v="KT1 2BB"/></node>
+
+ <!-- unnamed supermarket: counted separately, never "missing" -->
+ <node id="3" version="1" timestamp="2026-05-01T00:00:00Z" lat="51.4200" lon="-0.3200">
+  <tag k="shop" v="supermarket"/></node>
+
+ <!-- three car parks for the access split -->
+ <node id="10" version="1" timestamp="2026-05-01T00:00:00Z" lat="51.5000" lon="-0.1000">
+  <tag k="amenity" v="parking"/><tag k="name" v="Tesco Hackney Car Park"/><tag k="access" v="customers"/></node>
+ <node id="11" version="1" timestamp="2026-05-01T00:00:00Z" lat="51.5010" lon="-0.1010">
+  <tag k="amenity" v="parking"/><tag k="name" v="Vinci Car Park"/><tag k="access" v="yes"/><tag k="operator" v="Vinci"/></node>
+ <node id="12" version="1" timestamp="2026-05-01T00:00:00Z" lat="51.5020" lon="-0.1020">
+  <tag k="amenity" v="parking"/><tag k="name" v="Resident Bay Car Park"/><tag k="access" v="residents"/></node>
+
+ <!-- convenience store; two duplicate sheet rows sit near it, only one may match -->
+ <node id="20" version="1" timestamp="2026-05-01T00:00:00Z" lat="51.6000" lon="-0.2000">
+  <tag k="shop" v="convenience"/><tag k="name" v="Iceland Romford"/></node>
+
+ <!-- cross-category: an OSM supermarket matched to a sheet row the sheet
+      classifier puts under convenience_store (small-format brand) -->
+ <node id="30" version="1" timestamp="2026-05-01T00:00:00Z" lat="51.4400" lon="-0.3300">
+  <tag k="shop" v="supermarket"/><tag k="name" v="M&amp;S Simply Food"/></node>
+
+ <!-- widened car-park pool, phase 2 (unnamed car parks): an unnamed node
+      car park close enough for the "distance" method -->
+ <node id="40" version="1" timestamp="2026-05-01T00:00:00Z" lat="51.75004" lon="-0.40004">
+  <tag k="amenity" v="parking"/></node>
+
+ <!-- an unnamed polygon car park whose area contains a sheet row's point,
+      for the "polygon" method -->
+ <node id="41" version="1" timestamp="2026-01-01T00:00:00Z" lat="51.7590" lon="-0.4110"/>
+ <node id="42" version="1" timestamp="2026-01-01T00:00:00Z" lat="51.7590" lon="-0.4090"/>
+ <node id="43" version="1" timestamp="2026-01-01T00:00:00Z" lat="51.7610" lon="-0.4090"/>
+ <node id="44" version="1" timestamp="2026-01-01T00:00:00Z" lat="51.7610" lon="-0.4110"/>
+ <way id="150" version="1" timestamp="2026-01-01T00:00:00Z">
+  <nd ref="41"/><nd ref="42"/><nd ref="43"/><nd ref="44"/><nd ref="41"/>
+  <tag k="amenity" v="parking"/></way>
+
+ <!-- a borough boundary for the borough lookup -->
+ <node id="100" version="1" timestamp="2026-01-01T00:00:00Z" lat="51.39" lon="-0.31"/>
+ <node id="101" version="1" timestamp="2026-01-01T00:00:00Z" lat="51.39" lon="-0.29"/>
+ <node id="102" version="1" timestamp="2026-01-01T00:00:00Z" lat="51.43" lon="-0.29"/>
+ <node id="103" version="1" timestamp="2026-01-01T00:00:00Z" lat="51.43" lon="-0.31"/>
+ <way id="200" version="1" timestamp="2026-01-01T00:00:00Z">
+  <nd ref="100"/><nd ref="101"/><nd ref="102"/><nd ref="103"/><nd ref="100"/>
+  <tag k="boundary" v="administrative"/><tag k="admin_level" v="8"/><tag k="name" v="Royal Borough of Kingston upon Thames"/></way>
+</osm>
