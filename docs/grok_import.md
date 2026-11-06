@@ -7,7 +7,9 @@ Run `.venv/bin/python -m ferro_parking.grok_import`. It reads every current
 Grok Results row, the main sheet and the template dropdown validations.
 It writes a new `data/runs/<London date>/grok_import` folder exclusively.
 For replay, use `--snapshot PATH`; use `--out NEW_PATH` for later runs.
-Existing run artifacts are never overwritten. No write mode is exposed.
+Existing run artifacts are never overwritten. The planning command has no
+write mode. After explicit approval, grok_apply provides a separate apply
+command with fresh ID/snapshot checks and the existing writer.
 
 The value map is `config/grok_value_map.toml`. Direct mappings, conditional
 mapping inputs, tariff transformation patterns and allowed dropdowns are
@@ -87,3 +89,20 @@ rows by Place ID. Require zero mismatches and stop on any discrepancy.
 The existing sync.verify_append is append-specific, not an update-plan
 comparison, so it is not used for this dry run. The independent comparison
 is a required post-apply step, not claimed as completed by planning.
+
+## Approved initial application
+
+On 2026-11-06 the owner explicitly approved the initial 100 accepted rows
+and the Reported dropdown extension. `grok_apply` resolved IDs afresh,
+rechecked reviewer/finished locks, source and full target snapshots, undo
+values, consistency checks and second reading before any mutation. It
+preserved dropdown rule properties, applied the extension, and used
+fill._apply_write and sheets.write_cells, with Verification Result last.
+Result: 100 rows, 3,174 cells, zero aborted rows, zero independent re-export
+mismatches. Evidence is in data/runs/2026-11-06/grok_import_apply.
+
+The existing sync comparison module now supports update-plan comparisons
+alongside append verification. Formula-mode exports compare every unplanned
+underlying cell and formula exactly, including protected formulas, while
+permitting their calculated results to update from the newly imported data.
+The original dry run and undo artifacts were not overwritten.

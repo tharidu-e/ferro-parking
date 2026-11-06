@@ -109,11 +109,12 @@ def read_formula(service, sheet_row, col_header, headers,
     return values[0][0] if values and values[0] else ""
 
 
-def read_tab(service, spreadsheet_id=SPREADSHEET_ID, tab=TAB):
+def read_tab(service, spreadsheet_id=SPREADSHEET_ID, tab=TAB, value_render_option=None):
     """Read the tab. Returns (headers, rows); each row is a dict keyed by
     header text, plus "_sheet_row" (the 1-based row number in the sheet)."""
+    options = {"valueRenderOption": value_render_option} if value_render_option else {}
     resp = service.spreadsheets().values().get(
-        spreadsheetId=spreadsheet_id, range=tab).execute()
+        spreadsheetId=spreadsheet_id, range=tab, **options).execute()
     values = resp.get("values", [])
     if not values:
         return [], []
