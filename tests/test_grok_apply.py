@@ -95,3 +95,21 @@ def test_existing_writer_sends_verification_result_last():
     sheets.write_cells(Service(), ["Notes", "Verification Result"], [(2, "Verification Result", "Confirmed"), (2, "Notes", "Note")])
     assert calls[0]["body"]["data"][0]["values"] == [["Note"]]
     assert calls[1]["body"]["data"][0]["values"] == [["Confirmed"]]
+
+
+def test_apply_preflight_rejects_explicit_scope_flags_even_with_old_approved_values():
+    a = args()
+    a[5] = [source(**{"Notes": "Out of scope: HGV/coach"})]
+    with pytest.raises(ValueError, match="marked out of scope"):
+        ga.preflight(*a)
+
+
+def test_approved_extensions_support_old_and_new_envelopes_but_never_remove_values():
+    old = {"tab": gi.sheets.TAB, "column": "Evidence Level", "before": ["Presumed"], "after": ["Presumed", "Reported"]}
+    third = {"tab": gi.sheets.TAB, "column": "Evidence Type", "before": ["No info found"], "after": ["No info found", "Third-party only"]}
+    assert ga.approved_extensions(old) == [old]
+    assert ga.approved_extensions({"changes": [third]}) == [third]
+    for invalid in ({**third, "after": ["Third-party only"]}, {**third, "column": "Who Can Park"},
+                    {**third, "tab": "Grok Queue"}):
+        with pytest.raises(ValueError, match="Only explicitly planned"):
+            ga.approved_extensions({"changes": [invalid]})

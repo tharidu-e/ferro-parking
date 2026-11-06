@@ -34,6 +34,8 @@ def preflight(saved, plan, undo, live, source_headers, source_rows, config):
             raise ValueError(f"{pid}: already finished")
         if target.get("Verified By", "") not in config["reviewers"]["automation"]:
             raise ValueError(f"{pid}: person-locked reviewer")
+        if gi.out_of_scope_reason(source[pid], target):
+            raise ValueError(f"{pid}: HGV/coach marked out of scope")
         if any(str(target.get(c, "")) != str(old[pid].get(c, "")) for c in headers):
             raise ValueError(f"{pid}: target snapshot changed")
         if any(str(source[pid].get(c, "")) != str(old_source[pid].get(c, "")) for c in source_headers):
@@ -93,6 +95,19 @@ def validation_requests(meta, headers, approved):
     return requests, expected
 
 
+def approved_extensions(envelope):
+    changes = envelope.get("changes", [envelope])
+    allowed = {"Evidence Level": "Reported", "Evidence Type": "Third-party only"}
+    seen = set()
+    for change in changes:
+        column = change["column"]
+        if (change["tab"] != sheets.TAB or column not in allowed or column in seen
+                or change["after"] != change["before"] + [allowed[column]]):
+            raise ValueError("Only explicitly planned Reported/Third-party only additions are supported")
+        seen.add(column)
+    return changes
+
+
 def apply_run(service, run_dir, out):
     run_dir, out = Path(run_dir), Path(out)
     saved = json.loads((run_dir / "snapshot.json").read_text())
@@ -100,16 +115,19 @@ def apply_run(service, run_dir, out):
     undo = json.loads((run_dir / "undo.json").read_text())
     config = json.loads((run_dir / "value_map.json").read_text())
     approved = json.loads((run_dir / "validation_plan.json").read_text())
-    if approved["tab"] != sheets.TAB or approved["column"] != "Evidence Level" or approved["after"] != approved["before"] + ["Reported"]:
-        raise ValueError("Only the approved Reported extension is supported")
+    changes = approved_extensions(approved)
     live = sheets.read_tab(service)
     source = sheets.read_tab(service, tab=gi.RESULTS)
     resolved, restored = preflight(saved, plan, undo, live, *source, config)
     formula_headers, formulas = sheets.read_tab(service, value_render_option="FORMULA")
     if formula_headers != live[0] or [r["Place ID"] for r in formulas] != [r["Place ID"] for r in live[1]]:
         raise ValueError("Sheet changed during preflight")
-    metadata = read_validation(service, live[0], "Evidence Level")
-    requests, expected_rules = validation_requests(metadata, live[0], approved)
+    metadata, expected_rules, requests = {}, {}, []
+    for change in changes:
+        column = change["column"]
+        metadata[column] = read_validation(service, live[0], column)
+        additions, expected_rules[column] = validation_requests(metadata[column], live[0], change)
+        requests.extend(additions)
     out.mkdir(parents=True, exist_ok=False)
     for name, data in (("plan", resolved), ("undo", restored), ("pre_write", {"headers": live[0], "rows": live[1]}),
                        ("pre_write_formulas", {"headers": formula_headers, "rows": formulas}),
@@ -118,9 +136,10 @@ def apply_run(service, run_dir, out):
     # All checks and exclusive undo creation precede the first mutation.
     if requests:
         service.spreadsheets().batchUpdate(spreadsheetId=sheets.SPREADSHEET_ID, body={"requests": requests}).execute()
-    _, rules = validation_rules(read_validation(service, live[0], "Evidence Level"))
-    if rules != expected_rules:
-        raise ValueError("Dropdown readback mismatch; no data rows written")
+    for column, expected in expected_rules.items():
+        _, rules = validation_rules(read_validation(service, live[0], column))
+        if rules != expected:
+            raise ValueError("Dropdown readback mismatch; no data rows written")
     writer_result = fill._apply_write(service, live[0], resolved, {e["sheet_row"]: e for e in restored}, True)
     after_headers, after = sheets.read_tab(service, value_render_option="FORMULA")
     value_headers, values = sheets.read_tab(service)
@@ -130,7 +149,7 @@ def apply_run(service, run_dir, out):
     gi.save_json(out / "reexport_formulas.json", {"headers": after_headers, "rows": after})
     gi.save_json(out / "reexport.json", {"headers": value_headers, "rows": values})
     report = {"rows": len(resolved), "cells": sum(len(e["new"]) for e in resolved),
-              "dropdown": "Reported added to Evidence Level", "mismatches": mismatches,
+              "dropdown_changes": changes, "mismatches": mismatches,
               "mismatch_count": len(mismatches), "writer_result": writer_result}
     gi.save_json(out / "compare.json", report)
     if mismatches:

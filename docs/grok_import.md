@@ -13,12 +13,16 @@ command with fresh ID/snapshot checks and the existing writer.
 
 The value map is `config/grok_value_map.toml`. Direct mappings, conditional
 mapping inputs, tariff transformation patterns and allowed dropdowns are
-configured there. Unknown values, including Signed hours, are not guessed.
+configured there. Signed hours maps explicitly to Car park hours; unknown
+values are not guessed.
 Tariffs must match the requested templates, with closed, ordered contiguous
 bands and two-decimal pound prices. Unsupported tariffs reject the entire
-row, even if other mappings succeeded. En/em dashes in any proposed cell,
-including merged existing Notes, also reject the row rather than silently
-rewriting captured text. JSON preserves exact inputs with ASCII escapes;
+row, even if other mappings succeeded. As authorized on 2026-11-06, Notes,
+Review Flag, Rules Summary, Evidence Detail and Decision Reason normalize
+en/em dashes to plain hyphens, including existing merged Notes and flags.
+Dropdown values and all other columns never receive this normalization.
+Non-plain dashes outside the authorized free-text columns still reject.
+JSON preserves exact inputs with ASCII escapes;
 CSV and Markdown display typography uses plain hyphens.
 
 Rows match by Place ID. Duplicate/unknown IDs reject; finished rows skip;
@@ -66,8 +70,17 @@ means rerunning the importer skips that row, including previous imports.
 - second_reading.json: existing second-reader results.
 - snapshot.json and value_map.json: exact inputs and mapping configuration.
 - validation_plan.json: add Reported to the main-sheet Evidence Level
-  dropdown, preserving its other options. Existing validations are read
+  dropdown if absent, and propose Third-party only for Evidence Type if
+  absent, preserving all existing options. Its changes list contains only
+  the extensions still required. Existing validations are read
   by header name and compared with the configured allowed values.
+- out_of_scope.csv: rows explicitly marked HGV/coach out of scope in Notes
+  or Review Flag, from either Grok or the target row. These are included in
+  reject counts and never enter the plan. A car park merely prohibiting HGVs
+  is not considered out of scope.
+- scope_audit.json and previously_imported_out_of_scope.csv: scope flags on
+  rows imported under an earlier approval, outside the current selected IDs.
+  Those finished rows are reported only and never changed by the dry run.
 
 ## Approval and subsequent apply
 
@@ -106,3 +119,19 @@ alongside append verification. Formula-mode exports compare every unplanned
 underlying cell and formula exactly, including protected formulas, while
 permitting their calculated results to update from the newly imported data.
 The original dry run and undo artifacts were not overwritten.
+
+## Revised dry run on the original rejects only
+
+Use `--rejects-from data/runs/2026-11-06/grok_import/grok_rejects.csv --out NEW_DIR`.
+The importer reads the sheet afresh, then selects only the original reject
+Place IDs. Missing IDs abort rather than silently reducing the population.
+The saved snapshot keeps the full read-only context, while the report and
+plan cover only selected rows. Every remaining reject reason includes up to
+five samples in report.md (all available samples when fewer than five).
+
+When Fields Found contains findings and the mapped strongest Source Tier is
+Google search / third-party, Parkopedia or Google Maps - reviews, Evidence
+Type becomes Third-party only. Source Tier, Evidence Level and safety rules
+are not upgraded or relaxed. Empty/None findings and strong sources do not
+receive this label. The new Evidence Type value is a proposal until approved;
+the revised dry run makes no sheet or dropdown changes.

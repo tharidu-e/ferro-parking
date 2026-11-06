@@ -83,6 +83,17 @@ def append_text(existing, extra):
     return " | ".join(x for x in (existing, extra) if x)
 
 
+def out_of_scope_reason(source, target):
+    """Require an explicit scope marker and HGV/coach wording, not a name guess."""
+    for row in (source, target):
+        for column in ("Notes", "Review Flag"):
+            text = str(row.get(column, "")).replace(chr(8211), "-").replace(chr(8212), "-")
+            if (re.search(r"\bout[\s-]+of[\s-]+scope\b", text, re.I)
+                    and re.search(r"\b(?:HGVs?|coaches|coach)\b", text, re.I)):
+                return "scope: HGV/coach explicitly marked out of scope"
+    return ""
+
+
 def site_identity_supported(source, target):
     evidence = norm(source.get("Evidence Detail", "") + " " + source.get("Source URLs", ""))
     name = norm(source.get("Location Name", ""))
@@ -156,6 +167,9 @@ def map_values(source, target, config):
             change("Evidence Type", "No info found", "Evidence Type: forum only")
             change("Review Flag", append_text(mapped["Review Flag"], "Forum evidence only"),
                    "Review Flag: forum only")
+    if (mapped["Source Tier"] in rules.get("third_party_sources", [])
+            and source.get("Fields Found", "").strip().lower() not in {"", "none"}):
+        change("Evidence Type", "Third-party only", "Evidence Type: weak source with fields")
     # A route label identifies this importer, without inventing a research route A-E.
     if mapped["Decision Reason"] and "Route" not in mapped["Decision Reason"]:
         change("Decision Reason", "Route Grok detail pass: " + mapped["Decision Reason"],
@@ -170,6 +184,14 @@ def map_values(source, target, config):
         for part in text.split(";") if part.strip()))
     if new["Review Flag"]:
         new["Flag Status"] = "Open"
+    for source_column in config.get("normalization", {}).get("free_text_columns", []):
+        column = ALIASES.get(source_column, source_column)
+        before = new[column]
+        after = before.replace(chr(8211), "-").replace(chr(8212), "-")
+        if before != after:
+            new[column] = after
+            changes.append({"Rule": f"Typography: {source_column}", "Column": source_column,
+                            "Before": before, "After": after})
     # Location Status is explicitly permitted by this task. fill's identity lock
     # is intentionally stricter for OSM fills; all other columns use its guard.
     fill.assert_not_protected({k: v for k, v in new.items() if k != "Location Status"})
@@ -284,6 +306,8 @@ def mapping_rules(config):
               "Evidence Type: Conflicting sources", "Conflict: conflicting evidence",
               "Evidence Type: forum with official source", "Evidence Type: forum only",
               "Review Flag: forum only", "Decision Reason: importer route label"]
+    names += ["Evidence Type: weak source with fields"]
+    names += [f"Typography: {c}" for c in config.get("normalization", {}).get("free_text_columns", [])]
     return names
 
 
@@ -299,13 +323,19 @@ def build_plan(headers, rows, result_headers, results, config=None, today=None, 
         raise ValueError(f"Missing main-sheet headers: {sorted(required - set(headers))}")
     main, duplicates = indexed(rows, "main")
     _, result_duplicates = indexed(results, "results")
-    candidates, skipped, rejects, audit, mapped_rows = {}, [], [], [], []
+    candidates, skipped, rejects, audit, mapped_rows, out_of_scope = {}, [], [], [], [], []
     for source in results:
         pid = source.get("Place ID", "")
         base = {"Place ID": pid, "Location Name": source.get("Location Name", "")}
         target = main.get(pid)
         if pid in duplicates or pid in result_duplicates or not pid or pid != pid.strip() or target is None:
             rejects.append({**base, "Reasons": ["identity: missing, duplicate or unknown Place ID"]})
+            continue
+        scope = out_of_scope_reason(source, target)
+        if scope:
+            record = {**base, "Reasons": [scope]}
+            rejects.append(record)
+            out_of_scope.append(record)
             continue
         finished = bool(str(target.get("Verification Result", "")).strip())
         human = target.get("Verified By", "") not in config["reviewers"]["automation"]
@@ -336,11 +366,12 @@ def build_plan(headers, rows, result_headers, results, config=None, today=None, 
             change["Disposition"] = "accepted"
     all_counts = Counter(e["Rule"] for e in audit)
     accepted_counts = Counter(e["Rule"] for e in audit if e["Disposition"] == "accepted")
-    return {"plan": plan, "undo": undo, "skipped": skipped, "rejects": rejects,
+    return {"plan": plan, "undo": undo, "skipped": skipped, "rejects": rejects, "out_of_scope": out_of_scope,
             "mapping_audit": audit, "mapped_rows": mapped_rows,
             "second_reading": {"checked": len(candidates), "failures": failures},
             "report": {"source_rows": len(results), "accepted": len(plan), "skipped": len(skipped),
                        "rejected": len(rejects),
+                       "out_of_scope": len(out_of_scope),
                        "accepted_by_result": dict(Counter(e["new"]["Verification Result"] for e in plan)),
                        "skipped_by_reason": dict(Counter(r for e in skipped for r in e["Reasons"])),
                        "rejected_by_reason": dict(Counter(r for e in rejects for r in e["Reasons"])),
@@ -382,14 +413,18 @@ def dropdown_plan(snapshot, config):
     for column, allowed in config["dropdowns"].items():
         if column not in live:
             raise ValueError(f"Missing live dropdown validation: {column}")
-        wanted = set(allowed) - ({"Reported"} if column == "Evidence Level" else set())
+        extensions = {"Evidence Level": {"Reported"}, "Evidence Type": {"Third-party only"}}
+        wanted = set(allowed) - extensions.get(column, set())
         if not wanted.issubset(live[column]):
             raise ValueError(f"Config differs from live dropdown: {column}")
-    before = live["Evidence Level"]
-    return {"tab": sheets.TAB, "column": "Evidence Level", "before": before,
-            "after": list(dict.fromkeys(before + ["Reported"])), "apply": False,
-            "action": "extend ONE_OF_LIST with Reported, preserving existing validation",
-            "required": "Reported" not in before}
+    changes = []
+    for column, addition in (("Evidence Level", "Reported"), ("Evidence Type", "Third-party only")):
+        before = live[column]
+        changes.append({"tab": sheets.TAB, "column": column, "before": before,
+                        "after": list(dict.fromkeys(before + [addition])), "apply": False,
+                        "action": f"extend ONE_OF_LIST with {addition}, preserving existing validation",
+                        "required": addition not in before})
+    return {**changes[0], "changes": [c for c in changes if c["required"]]}
 
 
 def report_markdown(result, samples):
@@ -408,6 +443,12 @@ def report_markdown(result, samples):
               "| Reason | Rows |", "|---|---:|"]
     for reason, count in sorted(report["rejected_by_reason"].items(), key=lambda x: (-x[1], x[0])):
         lines.append(f"| {reason} | {count} |")
+    lines += ["", "### Up to five samples for every remaining reject reason", ""]
+    for reason in sorted(report["rejected_by_reason"]):
+        lines += [f"#### {reason}", "", "| Place ID | Location Name |", "|---|---|"]
+        for row in [r for r in result["rejects"] if reason in r["Reasons"]][:5]:
+            lines.append(f"| {row['Place ID']} | {row['Location Name']} |")
+        lines.append("")
     lines += ["", "## Values changed by mapping rule", "",
               "All mapped rows excludes finished/person-locked rows and includes rejects. Notes and flag",
               "side effects are counted separately. Accepted counts are the changes proposed for writing.", "",
@@ -431,8 +472,8 @@ def report_markdown(result, samples):
               "source-strength, specificity, date, numeric and typography checks.", "",
               f"Second reading: {result['second_reading']['checked']} candidates; "
               f"{len(result['second_reading']['failures'])} failures.", "",
-              "Evidence Level Reported is allowed by the importer. The dry run separately proposes",
-              "adding it to the live dropdown; no validation or cell has been changed.", "",
+              "The importer accepts Reported and Third-party only. validation_plan.json lists",
+              "only the dropdown extensions still required; no validation or cell is changed by this dry run.", "",
               "Before apply, resolve Place IDs afresh and check locks and source/target snapshots.",
               "Use the existing writer, which writes Verification Result last. Require an independent",
               "full re-export comparison with zero mismatches after applying. Do not use the generic",
@@ -440,13 +481,22 @@ def report_markdown(result, samples):
     return "\n".join(lines).replace(chr(8211), "-").replace(chr(8212), "-") + "\n"
 
 
-def prepare(snapshot, out, config_path=CONFIG):
+def prepare(snapshot, out, config_path=CONFIG, only_ids=None):
     config = load_config(config_path)
     tabs = snapshot["tabs"]
     headers, rows = tabs[sheets.TAB]
-    result_headers, results = tabs[RESULTS]
+    result_headers, all_results = tabs[RESULTS]
+    results = all_results
+    if only_ids is not None:
+        only_ids = set(only_ids)
+        missing = only_ids - {r.get("Place ID") for r in all_results}
+        if missing:
+            raise ValueError(f"Requested reject IDs missing from live results: {sorted(missing)}")
+        results = [r for r in all_results if r.get("Place ID") in only_ids]
     validation = dropdown_plan(snapshot, config)
     result = build_plan(headers, rows, result_headers, results, config)
+    result["report"]["selection"] = "original reject IDs only" if only_ids is not None else "all result rows"
+    result["report"]["selected_ids"] = [r["Place ID"] for r in results]
     proposed = {e["place_id"]: e["new"] for e in result["plan"]}
     simulated_rows = [{**r, **proposed.get(r.get("Place ID"), {})} for r in rows]
     rerun = build_plan(headers, simulated_rows, result_headers, results, config)
@@ -461,9 +511,20 @@ def prepare(snapshot, out, config_path=CONFIG):
     save_json(out / "value_map.json", config)
     for key in ("plan", "undo", "report", "second_reading", "mapped_rows"):
         save_json(out / f"{key}.json", result[key])
-    for key, filename in (("rejects", "grok_rejects.csv"), ("skipped", "grok_skipped.csv")):
+    for key, filename in (("rejects", "grok_rejects.csv"), ("skipped", "grok_skipped.csv"),
+                          ("out_of_scope", "out_of_scope.csv")):
         save_csv(out / filename, ["Place ID", "Location Name", "Reasons"], [
             {**r, "Reasons": "; ".join(r["Reasons"])} for r in result[key]])
+    main, _ = indexed(rows, "main")
+    selected_ids = {r["Place ID"] for r in results}
+    previous_scope = [{"Place ID": r["Place ID"], "Location Name": r["Location Name"],
+                       "Reasons": out_of_scope_reason(r, main.get(r["Place ID"], {}))}
+                      for r in all_results if r["Place ID"] not in selected_ids
+                      and main.get(r["Place ID"], {}).get("Verified By") == "Grok (detail pass)"
+                      and out_of_scope_reason(r, main.get(r["Place ID"], {}))]
+    save_csv(out / "previously_imported_out_of_scope.csv", ["Place ID", "Location Name", "Reasons"], previous_scope)
+    save_json(out / "scope_audit.json", {"excluded_from_this_plan": result["out_of_scope"],
+              "previously_imported": previous_scope, "note": "Finished rows are reported only; no rollback is proposed or applied"})
     save_csv(out / "mapping_audit.csv", ["Place ID", "Location Name", "Rule", "Column", "Before", "After", "Disposition"], result["mapping_audit"])
     undo = {e["place_id"]: e["old"] for e in result["undo"]}
     dry = [{"Place ID": e["place_id"], "Location Name": e["name"], "Column": column,
@@ -491,6 +552,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--snapshot", type=Path)
     parser.add_argument("--out", type=Path)
+    parser.add_argument("--rejects-from", type=Path, help="Limit dry run to Place IDs in a prior grok_rejects.csv")
     args = parser.parse_args(argv)
     if args.snapshot:
         snapshot = json.loads(args.snapshot.read_text())
@@ -502,7 +564,11 @@ def main(argv=None):
             fields="sheets(properties.title,data(startRow,startColumn,rowData(values(dataValidation))))").execute()
     today = datetime.now(ZoneInfo("Europe/London")).date().isoformat()
     out = args.out or Path("data/runs") / today / "grok_import"
-    result = prepare(snapshot, out)
+    only_ids = None
+    if args.rejects_from:
+        with args.rejects_from.open(encoding="utf-8", newline="") as f:
+            only_ids = {r["Place ID"] for r in csv.DictReader(f)}
+    result = prepare(snapshot, out, only_ids=only_ids)
     print(json.dumps(result["report"], indent=2, ensure_ascii=True))
     print(f"Dry run only: {out}. Nothing written to Sheets. Awaiting go.")
     return 0

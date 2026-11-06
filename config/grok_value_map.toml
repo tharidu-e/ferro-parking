@@ -17,6 +17,8 @@
 "Partial" = "Yes"
 [direct."Evidence Age"]
 "12-24 months" = "1-2 years"
+[direct."Hours Basis"]
+"Signed hours" = "Car park hours"
 [direct."Specificity"]
 "Chain-wide only" = "Chain-wide"
 [direct."Evidence Type"]
@@ -30,6 +32,10 @@ payment_controls = ["Pay by phone", "Pay on exit", "Mixed"]
 unclear_specificity = "Unclear"
 conflicting_evidence = "Conflicting sources"
 forum_evidence = "Local forum / community"
+third_party_sources = ["Google search / third-party", "Parkopedia", "Google Maps - reviews"]
+
+[normalization]
+free_text_columns = ["Notes", "Review Flag", "Rules Summary", "Evidence Detail", "Decision Reason"]
 
 [tariff_patterns]
 daily = '^£(\d+(?:\.\d{1,2})?) per day$'
@@ -45,7 +51,7 @@ free_bands = '^Free for up to (\d+) mins, then (.+)$'
 "Tariff Type" = ["Free (time limit not published)", "Free with time limit", "Free period, then hourly", "Hourly rate", "Flat rate per 24 hours", "Flat rate per night", "Banded by stay length", "Not published", "Not applicable"]
 "Hours Basis" = ["Car park hours", "Store hours", "Site hours", "Not published", "Not applicable"]
 "Parking Control Type (Cameras / Barrier / Patrol)" = ["ANPR (Automatic Number Plate Recognition) camera", "Pay and display", "Barrier", "Patrol", "Not published", "Not applicable"]
-"Evidence Type" = ["Official site: clear answer", "Official site: partial info", "Google Maps only", "OpenStreetMap only", "No info found"]
+"Evidence Type" = ["Official site: clear answer", "Official site: partial info", "Google Maps only", "OpenStreetMap only", "No info found", "Third-party only"]
 "Source Tier" = ["Official site - text", "Operator / council site", "Official site - logo or icon", "Google Maps - tariff photo", "Google Maps - About", "OpenStreetMap", "Parkopedia", "Google Maps - reviews", "Google search / third-party", "Gemini only", "None found"]
 "Specificity" = ["Site-specific", "Chain-wide", "Area only"]
 "Rules Stated" = ["Yes", "No"]

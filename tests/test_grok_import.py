@@ -52,7 +52,7 @@ def build(results=None, rows=None):
 def snapshot(results=None):
     headers = list(target())
     cells = [{"dataValidation": {"condition": {"type": "ONE_OF_LIST", "values": [
-        {"userEnteredValue": v} for v in CFG["dropdowns"][h] if v != "Reported"]}}}
+        {"userEnteredValue": v} for v in CFG["dropdowns"][h] if v not in {"Reported", "Third-party only"}]}}}
         if h in CFG["dropdowns"] else {} for h in headers]
     return {"tabs": {gi.RESULTS: [gi.RESULT_COLUMNS, results or [source()]], gi.sheets.TAB: [headers, [target()]]},
             "validations": {"sheets": [{"properties": {"title": gi.sheets.TAB},
@@ -149,9 +149,9 @@ def test_conflicting_and_forum_evidence():
     ({"Source Tier": "Parkopedia", "Who Can Park": "Anyone (paid)"}, "strong site-specific"),
     ({"Source Tier": "Parkopedia", "Tariff Detail": "£1.00 per hour"}, "strong site-specific"),
     ({"Specificity": "Chain-wide", "Max Stay (mins)": "120"}, "max stay requires"),
-    ({"Hours Basis": "Signed hours"}, "dropdown: Hours Basis"),
-    ({"Notes": "Text" + chr(8212) + "text"}, "typography"),
-    ({"Rules Summary": "Text" + chr(8211) + "text"}, "typography"),
+    ({"Hours Basis": "Invented hours"}, "dropdown: Hours Basis"),
+    ({"Tariff Detail": "Text" + chr(8212) + "text"}, "typography"),
+    ({"Hours Basis": "Text" + chr(8211) + "text"}, "typography"),
     ({"Researched Date": "2026-11-07"}, "date:"),
     ({"Researched Date": "06/11/2026"}, "date:"),
     ({"Agreeing Sources": "4"}, "Agreeing Sources"),
@@ -269,7 +269,7 @@ def test_artifacts_are_immutable_and_cli_cannot_write_or_connect_with_snapshot(t
 
 
 def test_rejects_are_audited_but_never_reach_plan(tmp_path):
-    s = snapshot([source(**{"Hours Basis": "Signed hours", "Source Tier": "Other"})])
+    s = snapshot([source(**{"Hours Basis": "Invented hours", "Source Tier": "Other"})])
     result = gi.prepare(s, tmp_path / "run")
     assert result["plan"] == []
     assert len(result["rejects"]) == 1
@@ -334,3 +334,94 @@ def test_second_reading_and_all_six_original_consistency_rules_are_enforced():
         result = build([strong(**updates)])
         assert result["rejects"]
         assert not result["plan"]
+
+
+@pytest.mark.parametrize("column", CFG["normalization"]["free_text_columns"])
+@pytest.mark.parametrize("dash", [chr(8211), chr(8212)])
+def test_normalizes_only_authorized_free_text_columns(column, dash):
+    s = source(**{column: f"Before{dash}after"})
+    new, audit, _ = mapped(s)
+    assert dash not in new[gi.ALIASES.get(column, column)]
+    assert "Before-after" in new[gi.ALIASES.get(column, column)]
+    assert any(r["Rule"] == f"Typography: {column}" for r in audit)
+
+
+def test_normalizes_merged_existing_notes_and_flags_without_changing_dropdown():
+    s = source(**{"Hours Basis": "Car" + chr(8211) + "park hours"})
+    t = target(**{"Notes": "Old" + chr(8212) + "note", "Review Flag": "Old" + chr(8211) + "flag"})
+    new, audit, _ = gi.map_values(s, t, CFG)
+    assert new["Notes"] == "Old-note"
+    assert new["Review Flag"] == "Old-flag"
+    assert new["Hours Basis"] == s["Hours Basis"]
+    assert any("dropdown: Hours Basis" in e for e in gi.validate(s, new, CFG, TODAY))
+
+
+def test_signed_hours_maps_exactly_and_is_audited():
+    s = strong(**{"Hours Basis": "Signed hours"})
+    new, audit, _ = mapped(s)
+    assert new["Hours Basis"] == "Car park hours"
+    assert any(c["Rule"] == "Hours Basis: Signed hours" for c in audit)
+
+
+@pytest.mark.parametrize("column", ["Notes", "Review Flag"])
+@pytest.mark.parametrize("text", ["HGV/coach only, out of scope for car drivers", "Out of scope: HGV/coach",
+    "OUT-OF-SCOPE: coaches", "HGVs - out of scope"])
+def test_explicit_scope_flags_never_import(column, text):
+    result = build([strong(**{column: text})])
+    assert result["plan"] == []
+    assert len(result["out_of_scope"]) == 1
+    assert result["report"]["out_of_scope"] == 1
+    assert result["report"]["rejected"] == 1
+
+
+def test_target_scope_flag_blocks_import_but_hgv_prohibition_alone_does_not():
+    assert not build([strong()], [target(**{"Notes": "Out of scope: HGV/coach"})])["plan"]
+    assert build([strong(**{"Notes": "No HGVs allowed; car parking is available"})])["plan"]
+
+
+@pytest.mark.parametrize("tier", CFG["conditional"]["third_party_sources"])
+@pytest.mark.parametrize("evidence", ["No info found", "Official site: partial info"])
+def test_use_third_party_only_for_weak_sources_with_findings(tier, evidence):
+    s = strong(**{"Source Tier": tier, "Evidence Type": evidence, "Evidence Level": "Reported"})
+    new, _, _ = mapped(s)
+    assert new["Evidence Type"] == "Third-party only"
+    assert not gi.validate(s, new, CFG, TODAY)
+
+
+def test_third_party_label_never_promotes_source_or_bypasses_price_guard():
+    s = strong(**{"Source Tier": "Parkopedia", "Evidence Level": "Reported", "Cost Type": "Paid",
+                  "Tariff Type": "Hourly rate", "Tariff Detail": "£1.00 per hour"})
+    new, _, _ = mapped(s)
+    assert new["Source Tier"] == "Parkopedia"
+    assert new["Evidence Type"] == "Third-party only"
+    assert any("strong site-specific" in e for e in gi.validate(s, new, CFG, TODAY))
+    s["Fields Found"] = "None"
+    assert mapped(s)[0]["Evidence Type"] == "Official site: partial info"
+    s = strong()
+    assert mapped(s)[0]["Evidence Type"] == "Official site: partial info"
+
+
+def test_only_original_reject_ids_selected_and_missing_ids_abort(tmp_path):
+    s = snapshot([source(), source(**{"Place ID": "PP-2"})])
+    s["tabs"][gi.sheets.TAB][1].append(target(**{"Place ID": "PP-2", "_sheet_row": 11}))
+    result = gi.prepare(s, tmp_path / "only", only_ids={"PP-2"})
+    assert result["report"]["source_rows"] == 1
+    assert [r["place_id"] for r in result["plan"]] == ["PP-2"]
+    validation = json.loads((tmp_path / "only" / "validation_plan.json").read_text())
+    assert {r["column"] for r in validation["changes"]} == {"Evidence Type", "Evidence Level"}
+    evidence = next(r for r in validation["changes"] if r["column"] == "Evidence Type")
+    assert evidence["after"] == evidence["before"] + ["Third-party only"]
+    with pytest.raises(ValueError, match="missing from live results"):
+        gi.prepare(s, tmp_path / "missing", only_ids={"missing"})
+
+
+def test_scope_files_distinguish_new_exclusions_from_previously_imported_rows(tmp_path):
+    s = snapshot([strong(**{"Notes": "Out of scope: HGV/coach"}),
+                  strong(**{"Place ID": "PP-2", "Notes": "Out of scope: HGV/coach"})])
+    s["tabs"][gi.sheets.TAB][1].append(target(**{"Place ID": "PP-2", "_sheet_row": 11,
+        "Verified By": "Grok (detail pass)", "Verification Result": "No evidence"}))
+    result = gi.prepare(s, tmp_path / "run", only_ids={"PP-1"})
+    assert result["report"]["out_of_scope"] == 1
+    audit = json.loads((tmp_path / "run" / "scope_audit.json").read_text())
+    assert audit["excluded_from_this_plan"][0]["Place ID"] == "PP-1"
+    assert audit["previously_imported"][0]["Place ID"] == "PP-2"
