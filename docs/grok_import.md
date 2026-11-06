@@ -135,3 +135,30 @@ Type becomes Third-party only. Source Tier, Evidence Level and safety rules
 are not upgraded or relaxed. Empty/None findings and strong sources do not
 receive this label. The new Evidence Type value is a proposal until approved;
 the revised dry run makes no sheet or dropdown changes.
+
+## Final importer pass and Grok Bot handoff
+
+Use `--unimported-only --out NEW_DIR` for the final dry run. It reads all
+current Grok Results rows and excludes rows already finished by Grok (detail
+pass), matching by Place ID. Finished rows from other reviewers and personal
+locks are still reported as skipped. Duplicate target IDs are never hidden
+by this selection. Stop for approval before applying any final candidates.
+
+After that final import is approved, applied and independently compared,
+Grok Bot will write directly to ALL LONDON (clean) rather than staging new
+rows in Grok Results for this importer.
+
+Application metadata reads request uncompressed HTTP content because repeated
+dropdown rules can exceed the HTTP client's decompression limit. When a
+legacy row has a shorter dropdown list than the template, the approved value
+is appended to that row's existing list; existing options, order, strictness
+and input messages are preserved.
+
+The approved second batch was applied on 2026-11-06: 47 rows, 1,496 cells,
+zero aborted rows and zero independent re-export mismatches. Third-party only
+was added to Evidence Type. Evidence is in grok_import_rejects_apply.
+The subsequent fresh final dry run read 199 Grok Results rows, excluded 147
+completed Grok imports, skipped 18 rows already finished by other passes,
+and rejected the remaining 34 (including two HGV/coach scope exclusions).
+No further rows passed. Evidence is in grok_import_final; no final-dry-run
+rows were written, and the handoff remains pending the owner's next go.

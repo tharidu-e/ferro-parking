@@ -425,3 +425,30 @@ def test_scope_files_distinguish_new_exclusions_from_previously_imported_rows(tm
     audit = json.loads((tmp_path / "run" / "scope_audit.json").read_text())
     assert audit["excluded_from_this_plan"][0]["Place ID"] == "PP-1"
     assert audit["previously_imported"][0]["Place ID"] == "PP-2"
+
+
+def test_unimported_selection_excludes_only_finished_grok_imports(tmp_path):
+    s = snapshot([source(**{"Place ID": f"PP-{i}"}) for i in range(1, 5)])
+    s["tabs"][gi.sheets.TAB][1] = [
+        target(**{"Place ID": "PP-1", "Verified By": "Grok (detail pass)", "Verification Result": "No evidence"}),
+        target(**{"Place ID": "PP-2", "Verified By": "Grok (detail pass)", "_sheet_row": 11}),
+        target(**{"Place ID": "PP-3", "Verified By": "Tharidu", "Verification Result": "Confirmed", "_sheet_row": 12}),
+        target(**{"Place ID": "PP-4", "_sheet_row": 13}),
+    ]
+    result = gi.prepare(s, tmp_path / "run", unimported_only=True)
+    assert result["report"]["total_result_rows"] == 4
+    assert result["report"]["already_imported_excluded"] == 1
+    assert result["report"]["source_rows"] == 3
+    assert result["report"]["skipped"] == 1
+    assert {r["place_id"] for r in result["plan"]} == {"PP-2", "PP-4"}
+    with pytest.raises(ValueError, match="not both"):
+        gi.prepare(s, tmp_path / "invalid", only_ids={"PP-1"}, unimported_only=True)
+
+
+def test_unimported_selection_never_hides_ambiguous_duplicate_target_ids(tmp_path):
+    s = snapshot()
+    s["tabs"][gi.sheets.TAB][1] = [
+        target(**{"Verified By": "Grok (detail pass)", "Verification Result": "Confirmed"}), target()]
+    result = gi.prepare(s, tmp_path / "run", unimported_only=True)
+    assert result["report"]["already_imported_excluded"] == 0
+    assert result["report"]["rejected"] == 1

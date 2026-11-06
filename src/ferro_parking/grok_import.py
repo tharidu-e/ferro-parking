@@ -434,6 +434,9 @@ def report_markdown(result, samples):
              f"skipped: {report['skipped']}; rejected: {report['rejected']}.", "",
              "Accepted means proposed for import, not already written.", "",
              "## Proposed imports", "", "| Proposed Result | Rows |", "|---|---:|"]
+    if report.get("already_imported_excluded"):
+        lines[7:7] = [f"Full Grok Results population: {report['total_result_rows']}; "
+                      f"finished Grok imports excluded: {report['already_imported_excluded']}.", ""]
     for key, count in report["accepted_by_result"].items():
         lines.append(f"| {key} | {count} |")
     lines += ["", "## Skipped rows", "", "Counts overlap when a finished row also has a person's name.", ""]
@@ -481,12 +484,21 @@ def report_markdown(result, samples):
     return "\n".join(lines).replace(chr(8211), "-").replace(chr(8212), "-") + "\n"
 
 
-def prepare(snapshot, out, config_path=CONFIG, only_ids=None):
+def prepare(snapshot, out, config_path=CONFIG, only_ids=None, unimported_only=False):
     config = load_config(config_path)
     tabs = snapshot["tabs"]
     headers, rows = tabs[sheets.TAB]
     result_headers, all_results = tabs[RESULTS]
     results = all_results
+    if only_ids is not None and unimported_only:
+        raise ValueError("Choose original reject IDs or unimported rows, not both")
+    imported_ids = set()
+    if unimported_only:
+        main, duplicates = indexed(rows, "main")
+        imported_ids = {pid for pid, row in main.items() if pid not in duplicates
+                        and row.get("Verified By") == "Grok (detail pass)"
+                        and str(row.get("Verification Result", "")).strip()}
+        results = [r for r in all_results if r.get("Place ID") not in imported_ids]
     if only_ids is not None:
         only_ids = set(only_ids)
         missing = only_ids - {r.get("Place ID") for r in all_results}
@@ -495,7 +507,10 @@ def prepare(snapshot, out, config_path=CONFIG, only_ids=None):
         results = [r for r in all_results if r.get("Place ID") in only_ids]
     validation = dropdown_plan(snapshot, config)
     result = build_plan(headers, rows, result_headers, results, config)
-    result["report"]["selection"] = "original reject IDs only" if only_ids is not None else "all result rows"
+    result["report"]["selection"] = ("not yet imported from Grok Results" if unimported_only else
+                                      "original reject IDs only" if only_ids is not None else "all result rows")
+    result["report"]["total_result_rows"] = len(all_results)
+    result["report"]["already_imported_excluded"] = sum(r.get("Place ID") in imported_ids for r in all_results)
     result["report"]["selected_ids"] = [r["Place ID"] for r in results]
     proposed = {e["place_id"]: e["new"] for e in result["plan"]}
     simulated_rows = [{**r, **proposed.get(r.get("Place ID"), {})} for r in rows]
@@ -552,7 +567,9 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--snapshot", type=Path)
     parser.add_argument("--out", type=Path)
-    parser.add_argument("--rejects-from", type=Path, help="Limit dry run to Place IDs in a prior grok_rejects.csv")
+    selection = parser.add_mutually_exclusive_group()
+    selection.add_argument("--rejects-from", type=Path, help="Limit dry run to Place IDs in a prior grok_rejects.csv")
+    selection.add_argument("--unimported-only", action="store_true", help="Exclude finished Grok detail-pass imports by Place ID")
     args = parser.parse_args(argv)
     if args.snapshot:
         snapshot = json.loads(args.snapshot.read_text())
@@ -568,7 +585,7 @@ def main(argv=None):
     if args.rejects_from:
         with args.rejects_from.open(encoding="utf-8", newline="") as f:
             only_ids = {r["Place ID"] for r in csv.DictReader(f)}
-    result = prepare(snapshot, out, only_ids=only_ids)
+    result = prepare(snapshot, out, only_ids=only_ids, unimported_only=args.unimported_only)
     print(json.dumps(result["report"], indent=2, ensure_ascii=True))
     print(f"Dry run only: {out}. Nothing written to Sheets. Awaiting go.")
     return 0
