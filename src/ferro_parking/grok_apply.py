@@ -55,9 +55,14 @@ def preflight(saved, plan, undo, live, source_headers, source_rows, config):
 
 def read_validation(service, headers, column):
     letter = sheets.col_letter(headers.index(column))
-    return service.spreadsheets().get(spreadsheetId=sheets.SPREADSHEET_ID,
+    request = service.spreadsheets().get(spreadsheetId=sheets.SPREADSHEET_ID,
         ranges=[f"'{sheets.TAB}'!{letter}2:{letter}"],
-        fields="sheets(properties,data(startRow,startColumn,rowData(values(dataValidation))))").execute()
+        fields="sheets(properties,data(startRow,startColumn,rowData(values(dataValidation))))")
+    # Repeated column validation rules can legitimately exceed httplib2's
+    # gzip amplification limit. Request plain HTTP content instead of
+    # weakening that protection or truncating the validation snapshot.
+    request.headers["accept-encoding"] = "identity"
+    return request.execute()
 
 
 def validation_rules(meta):
@@ -75,15 +80,22 @@ def validation_requests(meta, headers, approved):
     template = rules.get(1)
     if not template:
         raise ValueError("Missing dropdown template")
+    template_values = [v["userEnteredValue"] for v in template.get("condition", {}).get("values", [])]
+    if template_values not in (approved["before"], approved["after"]):
+        raise ValueError("Dropdown template changed since approval")
+    additions = [v for v in approved["after"] if v not in approved["before"]]
     requests, expected = [], {}
     col = headers.index(approved["column"])
     for row in range(1, props["gridProperties"]["rowCount"]):
         rule = copy.deepcopy(rules.get(row, template))
         condition = rule.get("condition", {})
         values = [v["userEnteredValue"] for v in condition.get("values", [])]
-        if condition.get("type") != "ONE_OF_LIST" or values not in (approved["before"], approved["after"]):
+        if (condition.get("type") != "ONE_OF_LIST" or not values
+                or not set(values).issubset(approved["after"])):
             raise ValueError(f"Dropdown rule changed at data row {row + 1}")
-        rule["condition"]["values"] = [{"userEnteredValue": v} for v in approved["after"]]
+        # Historical rows may offer fewer options than the header template.
+        # Approval permits adding one value, not replacing those legacy lists.
+        rule["condition"]["values"] = [{"userEnteredValue": v} for v in dict.fromkeys(values + additions)]
         expected[row] = rule
         if rules.get(row) == rule:
             continue

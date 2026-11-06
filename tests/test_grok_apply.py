@@ -113,3 +113,34 @@ def test_approved_extensions_support_old_and_new_envelopes_but_never_remove_valu
                     {**third, "tab": "Grok Queue"}):
         with pytest.raises(ValueError, match="Only explicitly planned"):
             ga.approved_extensions({"changes": [invalid]})
+
+
+def test_repetitive_validation_metadata_is_requested_without_gzip():
+    class Request:
+        headers = {}
+        def execute(self):
+            assert self.headers["accept-encoding"] == "identity"
+            return {"complete": True}
+    class Service:
+        def spreadsheets(self): return self
+        def get(self, **kwargs):
+            assert kwargs["ranges"] == ["'ALL LONDON (clean)'!B2:B"]
+            return Request()
+    assert ga.read_validation(Service(), ["Place ID", "Evidence Type"], "Evidence Type") == {"complete": True}
+
+
+def test_legacy_shorter_dropdown_retains_its_options_and_only_gets_approved_addition():
+    m = metadata()
+    grid = m["sheets"][0]["data"][0]
+    legacy = copy.deepcopy(grid["rowData"][0])
+    legacy["values"][0]["dataValidation"]["condition"]["values"].pop(1)
+    grid["rowData"].append(legacy)
+    approved = {"column": "Evidence Level", "before": ["Verified", "Chain policy", "Presumed"],
+                "after": ["Verified", "Chain policy", "Presumed", "Reported"]}
+    requests, expected = ga.validation_requests(m, ["Evidence Level"], approved)
+    assert [v["userEnteredValue"] for v in expected[2]["condition"]["values"]] == ["Verified", "Presumed", "Reported"]
+    assert [v["userEnteredValue"] for v in expected[1]["condition"]["values"]] == approved["after"]
+    assert len(requests) == 3
+    legacy["values"][0]["dataValidation"]["condition"]["values"].append({"userEnteredValue": "Unexpected"})
+    with pytest.raises(ValueError, match="Dropdown rule changed"):
+        ga.validation_requests(m, ["Evidence Level"], approved)
