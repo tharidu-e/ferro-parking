@@ -13,6 +13,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from . import fill, sheets
+from .osm_match import contains_word, norm
 
 QUEUE = "Grok Queue"
 RESULTS = "Grok Results"
@@ -25,9 +26,25 @@ NAME_MATCH = re.compile(r"\b(?:" + "|".join(re.escape(w) for w in WORDS) + r")\b
 REQUIRED = {"Place ID", "Location Name", "Place Category", "Priority", "Official URL",
             "OSM Website", "Ferro Autopay"}
 SKIP_COLUMNS = ["Place ID", "Location Name", "Place Category", "Priority", "Reason"]
+PUBLIC_NAMES = ("Car Park", "Multi Storey", "NCP", "Q-Park", "Euro Car Parks", "APCOA",
+                "Saba", "Council", "Station", "Shopping Centre", "Retail Park")
 
 
-def skip_reason(row):
+def public_signs(row):
+    """Conservative keep signals, not proof that the public may park."""
+    signals = [f"name: {phrase}" for phrase in PUBLIC_NAMES
+               if contains_word(norm(row.get("Location Name", "")), norm(phrase))]
+    for tags in row.get("_osm_tags", []):
+        if tags.get("fee", "").strip().lower() == "yes":
+            signals.append("OSM fee=yes")
+        if tags.get("operator", "").strip():
+            signals.append("OSM operator")
+        if tags.get("access", "").strip().lower() in {"yes", "public", "permissive"}:
+            signals.append("OSM public access")
+    return sorted(set(signals))
+
+
+def skip_reason(row, tightened=True):
     name = row.get("Location Name", "")
     # The explicit 'regardless' rule takes precedence over Autopay and URLs.
     if OUT_OF_SCOPE.search(name):
@@ -36,10 +53,13 @@ def skip_reason(row):
         return ""
     if any(row.get(c, "").strip() for c in ("Official URL", "OSM Website")):
         return ""
-    if row.get("Place Category", "").strip() == PRIVATE_CATEGORY:
-        return "No official or OSM website: private / operator car park"
     match = NAME_MATCH.search(name)
-    return f"No official or OSM website: name contains {match.group().lower()}" if match else ""
+    if match:
+        return f"No official or OSM website: name contains {match.group().lower()}"
+    if row.get("Place Category", "").strip() == PRIVATE_CATEGORY:
+        if not tightened or not public_signs(row):
+            return "No official or OSM website: private / operator car park"
+    return ""
 
 
 def validate_input(headers, rows, result_headers, results):
@@ -74,7 +94,15 @@ def second_reading(rows, results, plan):
             re.search(r"\bgoods in\b", row["Location Name"], re.I))
         no_urls = not row["Official URL"].strip() and not row["OSM Website"].strip()
         private = row["Place Category"].strip() == PRIVATE_CATEGORY
-        if scope or (no_urls and (private or restricted) and row["Ferro Autopay"].strip() != "✅"):
+        normalized_name = " ".join(re.findall(r"[a-z0-9]+", row["Location Name"].lower()))
+        public = any(re.search(r"\b" + re.escape(" ".join(re.findall(r"[a-z0-9]+", p.lower())))
+                               + r"\b", normalized_name) for p in PUBLIC_NAMES)
+        for tags in row.get("_osm_tags", []):
+            public |= (str(tags.get("fee", "")).strip().lower() == "yes"
+                       or bool(str(tags.get("operator", "")).strip())
+                       or str(tags.get("access", "")).strip().lower() in {"yes", "public", "permissive"})
+        if scope or (no_urls and (restricted or (private and not public))
+                     and row["Ferro Autopay"].strip() != "✅"):
             expected.add(row["Place ID"])
     actual = {e["place_id"] for e in plan}
     if actual != expected or len(actual) != len(plan):
@@ -103,6 +131,63 @@ def build_plan(headers, rows, result_headers, results):
     return plan, undo, skips, reading
 
 
+def attach_osm(rows, main_rows, object_tags, packets):
+    """Join direct OSM IDs and existing match packets by Place ID only."""
+    main = {r["Place ID"]: r for r in main_rows}
+    by_id = {}
+    for packet in packets:
+        by_id.setdefault(packet["Place ID"], []).append(packet)
+    enriched = []
+    for row in rows:
+        tag_sets, provenance = [], []
+        oid = main.get(row["Place ID"], {}).get("OSM ID", "")
+        if oid in object_tags:
+            tag_sets.append(object_tags[oid])
+            provenance.append(f"direct OSM ID: {oid}")
+        for packet in by_id.get(row["Place ID"], []):
+            tag_sets.append(fill.parse_tags(packet.get("OSM Raw Tags", "")))
+            provenance.append(f"existing match packet: {packet.get('OSM Car Park', '')}")
+        enriched.append({**row, "_osm_tags": tag_sets, "_osm_provenance": provenance})
+    return enriched
+
+
+def backtest(queue_rows, results, tightened=True, fallback_rows=()):
+    """Report every result ID; absent queue inputs are explicit, never assumed blank."""
+    by_id = {r["Place ID"]: r for r in fallback_rows}
+    by_id.update({r["Place ID"]: r for r in queue_rows})
+    skipped, unavailable, fallback_evaluated = [], [], []
+    queue_ids = {r["Place ID"] for r in queue_rows}
+    for result in results:
+        pid = result["Place ID"]
+        row = by_id.get(pid)
+        if row is None:
+            unavailable.append(pid)
+            continue
+        if pid not in queue_ids:
+            # Non-queue test rows can be ruled out by category and name alone.
+            # Never fabricate missing website inputs for a possible candidate.
+            if row.get("Place Category", "").strip() != PRIVATE_CATEGORY and not NAME_MATCH.search(
+                    row.get("Location Name", "")):
+                fallback_evaluated.append(pid)
+                continue
+            if not REQUIRED.issubset(row):
+                unavailable.append(pid)
+                continue
+        reason = skip_reason(row, tightened=tightened)
+        if reason:
+            skipped.append({"Place ID": pid, "Location Name": row["Location Name"],
+                            "Source Tier": result.get("Source Tier", ""),
+                            "Fields Found": result.get("Fields Found", ""),
+                            "Evidence Level": result.get("Evidence Level", ""), "Reason": reason})
+    found = [r for r in skipped if r["Fields Found"].strip().lower() not in {"none", ""}]
+    return {"results": len(results), "evaluated": len(results) - len(unavailable),
+            "main_sheet_noncandidates": fallback_evaluated,
+            "unavailable_ids": unavailable, "would_skip": len(skipped),
+            "with_fields": len(found),
+            "verified": sum(r["Evidence Level"].strip() == "Verified" for r in skipped),
+            "found_rows": found, "all_would_skip": skipped}
+
+
 def _save_json(path, value):
     with path.open("x", encoding="utf-8") as f:
         json.dump(value, f, indent=2, ensure_ascii=True)
@@ -117,7 +202,7 @@ def _save_csv(path, headers, rows):
                           for k, v in row.items()} for row in rows)
 
 
-def prepare(queue, results, out):
+def prepare(queue, results, out, review=None):
     headers, rows = queue
     result_headers, result_rows = results
     plan, undo, skips, reading = build_plan(headers, rows, result_headers, result_rows)
@@ -145,6 +230,11 @@ def prepare(queue, results, out):
               "parking_checks": "Not applicable: queue markers do not set parking answers or finish rows",
               "samples": skips[:15]}
     _save_json(out / "report.json", report)
+    if review is not None:
+        _save_json(out / "review.json", review)
+        for label in ("original_backtest", "tightened_backtest"):
+            _save_csv(out / f"{label}.csv", ["Place ID", "Location Name", "Source Tier",
+                      "Fields Found", "Evidence Level", "Reason"], review[label]["all_would_skip"])
     return report
 
 
@@ -152,12 +242,32 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--snapshot", type=Path, help="Use a previously saved read-only snapshot")
     parser.add_argument("--out", type=Path)
+    parser.add_argument("--osm-object-tags", type=Path, help="Saved exact OSM object tags, keyed by type/id")
+    parser.add_argument("--osm-packets", nargs="*", type=Path, default=[
+        Path("data/runs/2026-11-04/fill_round2/osm_results.csv"),
+        Path("data/runs/2026-11-04/tranche1_write/osm_results.csv")])
+    parser.add_argument("--pbf", type=Path, default=Path("data/raw/greater-london-latest.osm.pbf"))
     args = parser.parse_args(argv)
     if args.snapshot:
         tabs = json.loads(args.snapshot.read_text())
     else:
         service = sheets.get_service()
-        tabs = {tab: sheets.read_tab(service, tab=tab) for tab in (QUEUE, RESULTS)}
+        tabs = {tab: sheets.read_tab(service, tab=tab) for tab in (QUEUE, RESULTS, sheets.TAB)}
+    if sheets.TAB not in tabs:
+        raise ValueError("Snapshot must include main-sheet OSM IDs for public-sign checking")
+    if args.osm_object_tags:
+        object_tags = json.loads(args.osm_object_tags.read_text())
+    else:
+        from .osm_match import Collector
+        collector = Collector()
+        collector.apply_file(str(args.pbf), locations=True)
+        object_tags = {f"{r['type']}/{r['id']}": r["tags"] for r in collector.parks + collector.pois}
+    packets = []
+    for path in args.osm_packets:
+        with path.open(encoding="utf-8", newline="") as f:
+            packets.extend(csv.DictReader(f))
+    headers, rows = tabs[QUEUE]
+    tabs[QUEUE] = (headers, attach_osm(rows, tabs[sheets.TAB][1], object_tags, packets))
     today = datetime.now(ZoneInfo("Europe/London")).date().isoformat()
     out = args.out or Path("data/runs") / today / "grok_skip"
     print(json.dumps(prepare(tabs[QUEUE], tabs[RESULTS], out), indent=2, ensure_ascii=True))

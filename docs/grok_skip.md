@@ -9,7 +9,28 @@ Only unresearched Place IDs qualify. HGV, lorry and coach whole-word name
 matches take precedence over URLs and Autopay. Otherwise a row needs both
 websites blank, Autopay unchecked, and either the exact private/operator
 category or one of the requested whole-word name matches. Category guesses
-are not made for blank categories.
+are not made for blank categories. The category-only rule now keeps any row
+with a public-name phrase (Car Park, Multi Storey, NCP, Q-Park, Euro Car Parks,
+APCOA, Saba, Council, Station, Shopping Centre or Retail Park), fee=yes,
+any nonempty operator tag, or access=yes/public/permissive. Restrictive
+keywords and the HGV/coach rule are unchanged and take precedence.
+
+OSM tags come from exact main-sheet OSM IDs in the local extract, reusing
+osm_match.Collector, and existing match packets joined by Place ID. These
+are conservative keep signals, not claims of public access. The CLI reads
+the main sheet for OSM IDs as well as the two Grok tabs. Its default packet
+paths are the two 4 November runs; pass --osm-packets explicitly for newer
+inputs. Snapshots used by the CLI must include the main sheet.
+
+`python -m ferro_parking.grok_skip_review --help` describes the offline
+backtest command. It compares original and revised eligibility on the same
+result population, and breaks down the original approved-for-review plan
+by keyword versus category only. Five initial test IDs outside the queue
+are evaluated from main-sheet category and name when those alone conclusively
+rule out skipping; missing website inputs are never invented for a candidate.
+The report preserves every would-be-skipped row, its Fields Found, Source
+Tier and Evidence Level. These are Grok's reported labels, not revalidated
+evidence assessments. Original artifacts remain unchanged.
 
 The run contains a complete input snapshot, skip list, per-cell dry run,
 plan, undo data and counts with an independent recomputation. Run folders
