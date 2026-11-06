@@ -1,5 +1,13 @@
 # Grok skip filter
 
+Evaluated on 2026-11-06 and not applied, by the owner's decision. No Skip
+column was added. The original rule would have skipped 93 researched rows:
+45 had fields found and 41 were marked Verified. The tightened rule would
+have skipped 39 researched rows: 12 had fields found (30.8%) and 10 were
+marked Verified. It selected only 56 unresearched rows, saving about an hour
+of Grok time, so the observed loss of useful findings outweighed the saving.
+Code and the original and revised run folders are retained unchanged.
+
 Part 1 only. `python -m ferro_parking.grok_skip` reads Grok Queue and Grok
 Results and creates a new dated `grok_skip` run folder. It has no write mode.
 Use `--out` for a new suffixed folder if the default already exists.
