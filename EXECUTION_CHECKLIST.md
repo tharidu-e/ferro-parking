@@ -188,7 +188,7 @@ Do not repeat `categories-20261110-authorised`. It already holds 2,903 changes.
 
 ## Run record: steps 1 and 2, 10 November 2026
 
-The database holds 12,459 places. It held 7,607 before this work. The 4,852 new
+The database holds 11,552 places. It held 7,607 before this work. The 3,945 new
 records are car parks discovered in OpenStreetMap. Every parking answer on them
 is blank.
 
@@ -199,16 +199,17 @@ python -m ferro_parking osm-places data/raw/greater-london-latest.osm.pbf
 python -m ferro_parking db-create --plan <candidates_pilot20.jsonl> --apply
 python -m ferro_parking db-create --plan <candidates_strong.jsonl> --apply
 python -m ferro_parking db-create --plan <candidates_area_only.jsonl> --apply
+python -m ferro_parking db-create-redo --run <each run id> --apply
 python -m ferro_parking route
 ```
 
 Three create runs, so the weakest group stays undoable on its own:
 
-| Run | Records | What qualified them |
-|---|---|---|
-| create-20261110T225542Z | 20 | pilot, taken from the strong set |
-| create-20261110T225635Z | 2,891 | an access tag, a name, an operator, a fee, a capacity or a type |
-| create-20261110T225717Z | 1,941 | polygon area alone, the weakest evidence |
+| Run | Proposed | Created | What qualified them |
+|---|---|---|---|
+| create-20261110T225542Z | 20 | 6 | pilot, taken from the strong set |
+| create-20261110T225635Z | 2,891 | 2,092 | an access tag, a name, an operator, a fee, a capacity or a type |
+| create-20261110T225717Z | 1,941 | 1,847 | polygon area alone, the weakest evidence |
 
 Candidate counts, measured from the extract whose SHA256 is
 `75e4840a9c9d957649664ea85b16df02e2f2d5f20ee3ff810410421639ca2616`:
@@ -222,27 +223,59 @@ Candidate counts, measured from the extract whose SHA256 is
 | excluded as lorry or coach only | 12 |
 | excluded as outside Greater London | 138 |
 | excluded with no qualifier | 3,460 |
-| proposed and created | 4,852 |
+| proposed | 4,852 |
+| skipped, an existing place already names the feature | 446 |
+| held as a possible duplicate within 30 m | 461 |
+| created | 3,945 |
 
-Of the 4,852, 1,039 carry an OpenStreetMap name, 78 are council car parks and
-56 carry a postcode from an `addr:postcode` tag.
+Of the 3,945 created, 436 carry an OpenStreetMap name and 3,509 are unnamed.
 
-Verification:
+## The duplicate defect, found and fixed on 10 November 2026
+
+The first apply created all 4,852 records and 907 of them were duplicates. The
+create path checked only its own `created` table for a source reference it had
+already used. It never read the `OSM ID` column on the places that came from
+the sheet, and 2,140 of those carry one. So 446 car parks were created a second
+time, including whole rows an earlier discovery round had already appended.
+
+The fix is one guard in `create.check_plan`, which every caller routes through.
+A record whose OpenStreetMap reference already belongs to a place is skipped. A
+record whose pin lands within 30 m of an existing place is held for a person,
+which is the rule the guide already stated and which the first version did not
+implement. Two candidates in the same plan within 30 m of each other are held
+the same way, because one car park is often mapped as both a node and an area.
+
+Two further defects were found and fixed at the same time. `db-rebuild` never
+deleted a derived row, so a deactivated created record stayed in `places` and
+every count of places kept reporting it. The rebuild now clears the derived
+rows of deactivated created records only, and an imported Place ID that a newer
+import dropped still keeps its last values. And a plain `db-create` cannot
+bring back an undone record, which is correct, so `db-create-redo` reactivates
+a run's records after a fix, re-running both guards and keeping each existing
+Place ID.
+
+All three create runs were undone, the guards were added with tests, and the
+records were reactivated. The hold list of 461 records is in
+`data/runs/2026-11-10_19/hold_list/held_all.csv` and is step 3 of this
+checklist. It contains real duplicates the name normalizer misses, such as
+`QPark Chinatown` 12 m from the existing `Q-Park Chinatown`, and
+`Hayes Station Car Park` 14 m from the existing `Hayes Station` row.
+
+## Verification of steps 1 and 2
 
 - The backup is `data/db/ferro_parking.sqlite.backup-20261110T1730`.
 - The baseline export is `data/runs/2026-11-10/baseline_export_before_create`.
-- The final export is `data/runs/2026-11-10_19/export_final`.
+- The final export is `data/runs/2026-11-10_19/export_final2`.
 - All 7,607 imported rows are byte for byte identical in both exports.
-- Zero duplicate Place IDs and zero duplicate OpenStreetMap references.
+- Zero places share an OpenStreetMap reference.
 - Zero created records carry a parking answer.
-- Rerunning a create plan creates nothing: the second pilot run reported 20
-  already created and 0 created.
+- Rerunning a create plan creates nothing.
 - The full apply, repeat, export and undo cycle was rehearsed on a copy of the
-  real database before any of this. Undo restored the baseline export exactly
-  and kept all 4,852 rows, deactivated, with no Place ID freed.
-- Routing run route-20261110T225742Z covers all 12,459 places. All 4,852 new
-  records are on the Grok research stage. None is unrouted.
-- Test suite: 1,370 passed.
+  real database first. Undo restored the baseline export exactly and kept every
+  row, deactivated, with no Place ID freed.
+- Routing run route-20261110T230913Z covers all 11,552 places. No active
+  created record is unrouted.
+- Test suite: 1,383 passed.
 
 Nothing was written to the Google Sheet. No created record can reach it yet:
 publication matches applied changes against the live sheet by Place ID, and a

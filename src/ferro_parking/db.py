@@ -437,6 +437,14 @@ def rebuild(conn, import_id=None):
         + ", ".join("?" * len(PARKING_COLUMNS)) + ") ON CONFLICT(place_id) DO UPDATE SET "
         + ", ".join(f"{name} = excluded.{name}" for name in PARKING_COLUMNS if name != "place_id"),
         [_derived_values(PARKING_COLUMNS, row) for row in rows])
+    # A deactivated created record must leave the derived tables, or a count of
+    # places keeps reporting it. Its authoritative row in created stays, so
+    # nothing is lost and its Place ID is never freed. Imported rows are never
+    # removed here: a Place ID a newer import dropped keeps its last values.
+    conn.execute("DELETE FROM places WHERE place_id IN"
+                 " (SELECT place_id FROM created WHERE active = 0)")
+    conn.execute("DELETE FROM parking WHERE place_id IN"
+                 " (SELECT place_id FROM created WHERE active = 0)")
     conn.commit()
     return {"places": len(rows), "parking": len(rows)}
 

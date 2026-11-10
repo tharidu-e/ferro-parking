@@ -5,6 +5,61 @@ using free data first (OpenStreetMap + rules) and the Grok PP bot only for the r
 
 Design: `docs/PP_architecture_OSM_first.md`. Rules R1-R6 and the pilot: `docs/PP_rules_and_pilot.md`.
 Bot prompt for the residue rows: `docs/PP_Validator_prompt_v2_OSM.md`.
+Step order for the London expansion: `EXECUTION_CHECKLIST.md`.
+Commands for adding car parks: `ADD_PLACES_RUNBOOK.md`.
+
+## Run the project
+
+Three commands get you from a clean checkout to a working database.
+
+```bash
+cd ~/Documents/ferro-parking
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
+```
+
+Put `all_london_clean.csv` and `greater-london-latest.osm.pbf` in `data/raw/`.
+The links are in the Setup section below. Then load the sheet into the database.
+
+```bash
+python -m pytest                                                   # 1,383 tests
+python -m ferro_parking db-import --sheet-csv data/raw/all_london_clean.csv
+python -m ferro_parking route
+```
+
+`db-import` reads the CSV and writes the database. `route` gives every place one
+research stage. Neither command touches the Google Sheet.
+
+Nothing writes to the Google Sheet unless you type `--apply` on a publish
+command, and publishing needs a reviewed plan. Every other command is a dry run
+or writes only to the local database.
+
+To see what is in the database, read "Query the database" below.
+
+## Why adding places needed new code
+
+The short version: the database could only hold places that came from the
+Google Sheet, so there was nowhere to put a car park the sheet did not have.
+
+In more detail. `db-import` stores each sheet row in the `raw` table. The
+`places` and `parking` tables are not stored, they are computed from `raw` plus
+the `changes` log, and `db-rebuild` recomputes them from scratch. That design is
+deliberate, because it means the database can never silently disagree with the
+sheet.
+
+It also meant a record created in the database had no home. You could insert a
+row into `places`, and the next `db-rebuild` would compute the tables from `raw`
+again and your row would be gone. `db-apply` could not help either, because it
+only edits cells on a Place ID that already exists, and it refuses an unknown
+one.
+
+So the fix was a second origin. The `created` table holds places the database
+made itself, and the readers that build `places` and `parking` now read the
+sheet rows and then the created records. A created record therefore survives a
+rebuild, reaches the export, and gets a research stage from `route`.
+
+This is why 4,852 London car parks from OpenStreetMap could be proposed but not
+stored until now, and it is step 1 of `EXECUTION_CHECKLIST.md`.
 
 ## Setup (once)
 
@@ -225,6 +280,216 @@ published.
 
 The `db-import` output also prints the next unused Place ID, which later phases
 use when they append a new place.
+
+## Query the database
+
+The database is one SQLite file at `data/db/ferro_parking.sqlite`. Any SQLite
+client reads it. The `sqlite3` command ships with macOS.
+
+```bash
+sqlite3 data/db/ferro_parking.sqlite
+```
+
+Inside the shell, `.tables` lists the tables, `.schema places` shows one table's
+columns and `.quit` exits. Two settings make the output readable.
+
+```
+.mode box
+.headers on
+```
+
+To run one query and exit, pass it on the command line.
+
+```bash
+sqlite3 -box data/db/ferro_parking.sqlite "SELECT COUNT(*) FROM places;"
+```
+
+Reading the file is always safe. It cannot change the Google Sheet. Do not run
+`INSERT`, `UPDATE` or `DELETE` by hand, because `db-rebuild` recomputes the
+derived tables and your edit disappears. Use the commands instead, so the change
+is logged and has an undo.
+
+### How many rows are there
+
+```sql
+SELECT 'places'  AS table_name, COUNT(*) AS rows FROM places
+UNION ALL SELECT 'parking', COUNT(*) FROM parking
+UNION ALL SELECT 'created', COUNT(*) FROM created
+UNION ALL SELECT 'changes', COUNT(*) FROM changes
+UNION ALL SELECT 'raw',     COUNT(*) FROM raw;
+```
+
+`places` and `parking` hold one row per live place. `raw` holds every sheet row
+of every import, so it is larger. `changes` holds one row per edited cell.
+
+### Where the places came from
+
+```sql
+SELECT CASE WHEN c.place_id IS NULL THEN 'from the sheet'
+            ELSE 'created from OpenStreetMap' END AS origin,
+       COUNT(*) AS places
+FROM places p
+LEFT JOIN created c ON c.place_id = p.place_id AND c.active = 1
+GROUP BY origin;
+```
+
+### Places per borough
+
+```sql
+SELECT borough, COUNT(*) AS places
+FROM places GROUP BY borough ORDER BY places DESC;
+```
+
+### Find a place by name
+
+`LIKE` is case insensitive here and `%` matches any text.
+
+```sql
+SELECT place_id, name, borough, category
+FROM places WHERE name LIKE '%chinatown%';
+```
+
+### Read one place in full
+
+```sql
+SELECT p.place_id, p.name, p.borough, p.latitude, p.longitude, p.osm_id,
+       k.can_park, k.who_can_park, k.cost_type, k.tariff_detail,
+       k.max_stay_mins, k.verification_result
+FROM places p JOIN parking k ON k.place_id = p.place_id
+WHERE p.place_id = 'PP-000125';
+```
+
+Use `-line` instead of `-box` for a one record per line layout, which is easier
+to read when a query returns many columns.
+
+```bash
+sqlite3 -line data/db/ferro_parking.sqlite "SELECT * FROM places WHERE place_id = 'PP-000125';"
+```
+
+### How much is still unanswered
+
+```sql
+SELECT COUNT(*) AS no_can_park_answer FROM parking WHERE can_park = '';
+```
+
+### What each research stage holds
+
+```sql
+SELECT stage, COUNT(*) AS places FROM routing
+WHERE run_id = (SELECT run_id FROM routing ORDER BY rowid DESC LIMIT 1)
+GROUP BY stage ORDER BY places DESC;
+```
+
+### What every run changed
+
+```sql
+SELECT run_id, COUNT(*) AS cells FROM changes GROUP BY run_id ORDER BY cells DESC;
+```
+
+To see the cells of one run:
+
+```sql
+SELECT place_id, column_name, old_value, new_value
+FROM changes WHERE run_id = 'categories-20261110-authorised' LIMIT 20;
+```
+
+### The created records
+
+```sql
+SELECT run_id, source, COUNT(*) AS records,
+       SUM(active) AS active, SUM(1 - active) AS deactivated
+FROM created GROUP BY run_id, source ORDER BY run_id;
+```
+
+### Check for a duplicate OpenStreetMap reference
+
+This must return no rows. Two places naming the same OpenStreetMap feature are
+the same car park twice.
+
+```sql
+SELECT osm_id, COUNT(*) AS places, GROUP_CONCAT(place_id) AS ids
+FROM places WHERE osm_id != ''
+GROUP BY osm_id HAVING COUNT(*) > 1;
+```
+
+### Check that no created record claims a parking answer
+
+This must also return 0. A created record holds an identity only.
+
+```sql
+SELECT COUNT(*) AS created_records_with_an_answer
+FROM parking k JOIN created c ON c.place_id = k.place_id AND c.active = 1
+WHERE k.can_park != '' OR k.who_can_park != '' OR k.cost_type != ''
+   OR k.verification_result != '';
+```
+
+### Export a query to a CSV file
+
+```bash
+sqlite3 -header -csv data/db/ferro_parking.sqlite \
+  "SELECT place_id, name, borough FROM places WHERE borough = 'Sutton';" \
+  > /tmp/sutton.csv
+```
+
+## Created records: adding places the sheet does not have
+
+```bash
+python -m ferro_parking osm-places data/raw/greater-london-latest.osm.pbf
+python -m ferro_parking db-create --plan CANDIDATES.jsonl
+python -m ferro_parking db-create --plan CANDIDATES.jsonl --apply
+python -m ferro_parking db-create-undo --run RUN_ID --apply
+python -m ferro_parking db-create-redo --run RUN_ID --apply
+```
+
+`ADD_PLACES_RUNBOOK.md` holds the ordered procedure. This section describes what
+the commands do.
+
+`osm-places` reads an OpenStreetMap extract and writes a create plan. It is
+read-only and makes no network request. It proposes an identity only: a name, a
+point, a borough, a category and the OpenStreetMap reference. It never proposes
+who can park, what it costs or a maximum stay. An OpenStreetMap tag proves that
+a car park exists. It does not prove permission.
+
+The access filter is the gate that matters. An access tag of private, no,
+residents, permit, employees, delivery, staff or students excludes the feature,
+as do street side, lane, kerb and shoulder parking, and parking a car may not
+enter. Only yes, public, permissive and customers count as public access. A
+feature with no access tag needs one qualifier: a name, an operator, a fee tag,
+a capacity of 10 or more, a multi-storey or underground type, or an area of at
+least 500 square metres. A qualifier admits a candidate identity. It is not a
+claim of public access.
+
+Greater London containment is a geometry test against the union of the borough
+polygons read from the extract itself, not a postcode lookup. For a polygon the
+record takes the centroid, or a point inside the polygon when the centroid falls
+outside its own shape.
+
+`db-create` is a dry run unless you add `--apply`. A created record may fill only
+the fifteen columns in `create.CREATE_COLUMNS`, so no create plan can state a
+parking answer or write any of the four owner payment columns. The database
+allocates the Place ID. These lines are refused, and one refusal blocks the whole
+plan:
+
+- a column outside `create.CREATE_COLUMNS`, or an unknown column
+- a plan that chooses its own Place ID
+- a record with no Location Name, or with no usable coordinate
+- the same source reference twice in one plan
+
+Two outcomes are not refusals, because neither is an error and neither blocks
+the plan. A record whose OpenStreetMap reference already belongs to a place is
+skipped, which is what makes a repeated or interrupted run safe. A record whose
+pin lands within 30 m of a place the database already holds is held and listed
+in `held.csv`, because a pin that close is a possible duplicate and not proof.
+Different businesses, levels and adjacent car parks sit metres apart, so a
+person decides.
+
+`db-create-undo` deactivates the records one run made. It deletes no row and
+frees no Place ID, so a later run never reuses one. It refuses a record a later
+run has changed, because that would discard newer evidence.
+
+`db-create-redo` brings those records back after a fix. The guards run again, so
+a record that now duplicates a place stays deactivated, and each record keeps
+the Place ID it already has.
 
 ## Router (Phase 2 of the db-router work)
 

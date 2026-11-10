@@ -110,6 +110,36 @@ Undo deactivates the records. It deletes no row and frees no Place ID, so a
 later create run never reuses one. Undo is refused for a record that a later
 run has changed, because that would discard newer evidence.
 
+## If you undo, fix something, and want the records back
+
+```
+python -m ferro_parking db-create-redo --run <run id>
+python -m ferro_parking db-create-redo --run <run id> --apply
+```
+
+Redo brings back the records one create run made. The duplicate guards run
+again, so a record that now duplicates a place stays deactivated. Each record
+keeps the Place ID it already has.
+
+A plain `db-create` will not bring an undone record back. That is deliberate.
+An undo is a decision, and the next run must not quietly reverse it.
+
+## Duplicates
+
+Two checks stop the same car park being added twice. Neither is a refusal, so
+neither blocks the plan.
+
+A record whose OpenStreetMap reference already belongs to a place is skipped.
+This is what makes a repeated or interrupted run safe, and it also catches a
+car park an earlier discovery round already added to the sheet.
+
+A record whose pin lands within 30 m of a place the database already holds is
+held, and listed in `held.csv`. A pin that close is a possible duplicate and
+not proof. Different businesses, levels and adjacent car parks sit metres
+apart. Read `held.csv` and decide each case yourself. Two candidates in the
+same plan that land within 30 m of each other are treated the same way, because
+one car park is often mapped twice, once as a node and once as an area.
+
 ## What these commands refuse
 
 - A create plan that sets any parking answer, any evidence field, or any of the

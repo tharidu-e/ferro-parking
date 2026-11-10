@@ -27,8 +27,8 @@ def record(source_ref="way/100", **overrides):
         "Geo Precision": "Polygon centroid",
         "Captured By": "OSM discovery",
         "Date Captured": "2026-11-10",
-        "Source URLs (primary first)": "https://www.openstreetmap.org/way/100",
-        "OSM ID": "way/100",
+        "Source URLs (primary first)": f"https://www.openstreetmap.org/{source_ref}",
+        "OSM ID": source_ref,
         "Notes": "OSM tags: access=yes; capacity=40.",
     }
     row.update(overrides.pop("row", {}))
@@ -42,6 +42,9 @@ def conn(tmp_path):
     connection = db.connect(tmp_path / "test.sqlite")
     db.import_sheet_csv(connection, FIXTURE)
     return connection
+
+
+FAR = {"Latitude": "51.500000", "Longitude": "-0.400000"}
 
 
 def run(conn, records, run_id="create-test", apply=True):
@@ -200,7 +203,7 @@ def test_place_ids_continue_from_the_highest_imported_id(conn):
 
 
 def test_two_records_in_one_plan_get_different_ids(conn):
-    run(conn, [record(source_ref="way/1"), record(source_ref="way/2")])
+    run(conn, [record(source_ref="way/1"), record(source_ref="way/2", row=FAR)])
     ids = [row["place_id"] for row in conn.execute(
         "SELECT place_id FROM created ORDER BY rowid")]
     assert len(set(ids)) == 2
@@ -209,7 +212,7 @@ def test_two_records_in_one_plan_get_different_ids(conn):
 # ---------------------------------------------------------------- repeat safety
 
 def test_running_the_same_plan_twice_creates_nothing_the_second_time(conn):
-    plan = [record(source_ref="way/1"), record(source_ref="way/2")]
+    plan = [record(source_ref="way/1"), record(source_ref="way/2", row=FAR)]
     first = run(conn, plan, run_id="create-1")
     assert first["created"] == 2
     second = run(conn, plan, run_id="create-2")
@@ -221,8 +224,8 @@ def test_running_the_same_plan_twice_creates_nothing_the_second_time(conn):
 
 def test_a_source_ref_already_created_does_not_block_a_new_one(conn):
     run(conn, [record(source_ref="way/1")], run_id="create-1")
-    report = run(conn, [record(source_ref="way/1"), record(source_ref="way/2")],
-                 run_id="create-2")
+    report = run(conn, [record(source_ref="way/1"),
+                        record(source_ref="way/2", row=FAR)], run_id="create-2")
     assert report["created"] == 1
     assert len(report["skipped"]) == 1
 
@@ -369,3 +372,172 @@ def test_a_created_record_is_not_showable_because_its_answers_are_blank(conn):
     showable, complete = readiness.bars(row)
     assert not showable
     assert not complete
+
+
+# ---------------------------------------------------------------- duplicates
+
+def test_a_record_naming_a_place_the_sheet_already_names_is_skipped(conn):
+    """Regression: the create path checked only its own table for a source it
+    had already created. A sheet row that already carries that OpenStreetMap
+    reference was invisible, so the same car park was created a second time."""
+    headers, rows = db.current_rows(conn)
+    target = rows[0]["Place ID"]
+    conn.execute(
+        "INSERT INTO changes (run_id, place_id, column_name, old_value, new_value,"
+        " stage, applied_at) VALUES ('osm-link', ?, 'OSM ID', '', 'way/500',"
+        " 'default', '2026-11-09T00:00:00+00:00')", (target,))
+    conn.commit()
+    db.rebuild(conn)
+    report = run(conn, [record(source_ref="way/500", row=dict(FAR, **{"OSM ID": "way/500"}))])
+    assert report["created"] == 0
+    assert report["rejected"] == []
+    assert len(report["skipped"]) == 1
+    assert target in report["skipped"][0]["reason"]
+
+
+def test_a_pin_within_thirty_metres_of_an_existing_place_is_held(conn):
+    _, rows = db.current_rows(conn)
+    twin = next(row for row in rows
+                if str(row.get("Latitude", "")).strip()
+                and str(row.get("Longitude", "")).strip())
+    report = run(conn, [record(source_ref="way/900", row={
+        "Latitude": twin["Latitude"], "Longitude": twin["Longitude"],
+        "OSM ID": "way/900"})])
+    assert report["created"] == 0
+    assert report["rejected"] == []
+    assert len(report["held"]) == 1
+    assert report["held"][0]["near place_id"] == twin["Place ID"]
+    assert "not proof" in report["held"][0]["reason"]
+
+
+def test_a_held_record_does_not_block_the_rest_of_the_plan(conn):
+    _, rows = db.current_rows(conn)
+    twin = next(row for row in rows
+                if str(row.get("Latitude", "")).strip()
+                and str(row.get("Longitude", "")).strip())
+    report = run(conn, [
+        record(source_ref="way/900", row={"Latitude": twin["Latitude"],
+                                          "Longitude": twin["Longitude"],
+                                          "OSM ID": "way/900"}),
+        record(source_ref="way/901", row=dict(FAR, **{"OSM ID": "way/901"}))])
+    assert report["created"] == 1
+    assert len(report["held"]) == 1
+
+
+def test_a_pin_far_from_every_existing_place_is_created(conn):
+    report = run(conn, [record(source_ref="way/902",
+                               row=dict(FAR, **{"OSM ID": "way/902"}))])
+    assert report["created"] == 1
+    assert report["held"] == []
+
+
+def test_a_deactivated_record_does_not_hold_a_later_one(conn):
+    """An undone record must not block its own replacement, or a fix followed
+    by a re-run would create nothing."""
+    plan = [record(source_ref="way/903", row=dict(FAR, **{"OSM ID": "way/903"}))]
+    run(conn, plan, run_id="create-1")
+    create.undo_run(conn, "create-1", apply=True)
+    report = run(conn, [record(source_ref="way/904",
+                               row=dict(FAR, **{"OSM ID": "way/904"}))],
+                 run_id="create-2")
+    assert report["created"] == 1
+    assert report["held"] == []
+
+
+def test_a_deactivated_record_leaves_the_derived_tables(conn):
+    """Regression: rebuild never deletes, so a deactivated created record stayed
+    in places and every count of places kept reporting it."""
+    run(conn, [record(source_ref="way/905", row=dict(FAR, **{"OSM ID": "way/905"}))],
+        run_id="create-1")
+    place_id = conn.execute(
+        "SELECT place_id FROM created WHERE source_ref = 'way/905'").fetchone()["place_id"]
+    assert conn.execute("SELECT COUNT(*) AS n FROM places WHERE place_id = ?",
+                        (place_id,)).fetchone()["n"] == 1
+    create.undo_run(conn, "create-1", apply=True)
+    assert conn.execute("SELECT COUNT(*) AS n FROM places WHERE place_id = ?",
+                        (place_id,)).fetchone()["n"] == 0
+    assert conn.execute("SELECT COUNT(*) AS n FROM parking WHERE place_id = ?",
+                        (place_id,)).fetchone()["n"] == 0
+    assert conn.execute("SELECT COUNT(*) AS n FROM created WHERE place_id = ?",
+                        (place_id,)).fetchone()["n"] == 1
+
+
+def test_an_imported_row_missing_from_a_newer_import_stays_in_places(conn):
+    """The delete must only touch deactivated created records. An imported
+    Place ID a newer import dropped keeps its last derived values."""
+    _, rows = db.current_rows(conn)
+    kept = rows[0]["Place ID"]
+    db.rebuild(conn)
+    assert conn.execute("SELECT COUNT(*) AS n FROM places WHERE place_id = ?",
+                        (kept,)).fetchone()["n"] == 1
+
+
+# ---------------------------------------------------------------- redo
+
+def test_redo_brings_back_an_undone_record_with_its_own_place_id(conn):
+    run(conn, [record(source_ref="way/910", row=dict(FAR, **{"OSM ID": "way/910"}))],
+        run_id="create-1")
+    place_id = conn.execute("SELECT place_id FROM created").fetchone()["place_id"]
+    create.undo_run(conn, "create-1", apply=True)
+    report = create.reactivate_run(conn, "create-1", apply=True)
+    assert report["reactivated"] == 1
+    assert conn.execute("SELECT active FROM created").fetchone()["active"] == 1
+    assert conn.execute("SELECT place_id FROM created").fetchone()["place_id"] == place_id
+    _, rows = db.current_rows(conn)
+    assert any(row["Place ID"] == place_id for row in rows)
+
+
+def test_redo_is_a_dry_run_without_apply(conn):
+    run(conn, [record(source_ref="way/911", row=dict(FAR, **{"OSM ID": "way/911"}))],
+        run_id="create-1")
+    create.undo_run(conn, "create-1", apply=True)
+    report = create.reactivate_run(conn, "create-1", apply=False)
+    assert report["reactivated"] == 0
+    assert len(report["rows"]) == 1
+    assert conn.execute("SELECT active FROM created").fetchone()["active"] == 0
+
+
+def test_redo_leaves_a_record_that_is_now_a_duplicate_deactivated(conn):
+    """The point of the undo was a missing guard. Redo must not bring back the
+    records that guard would now stop."""
+    run(conn, [record(source_ref="way/912", row=dict(FAR, **{"OSM ID": "way/912"}))],
+        run_id="create-1")
+    create.undo_run(conn, "create-1", apply=True)
+    _, rows = db.current_rows(conn)
+    target = rows[0]["Place ID"]
+    conn.execute(
+        "INSERT INTO changes (run_id, place_id, column_name, old_value, new_value,"
+        " stage, applied_at) VALUES ('osm-link', ?, 'OSM ID', '', 'way/912',"
+        " 'default', '2026-11-09T00:00:00+00:00')", (target,))
+    conn.commit()
+    db.rebuild(conn)
+    report = create.reactivate_run(conn, "create-1", apply=True)
+    assert report["reactivated"] == 0
+    assert len(report["skipped"]) == 1
+    assert conn.execute("SELECT active FROM created").fetchone()["active"] == 0
+
+
+def test_redo_of_an_active_run_changes_nothing(conn):
+    run(conn, [record(source_ref="way/913", row=dict(FAR, **{"OSM ID": "way/913"}))],
+        run_id="create-1")
+    report = create.reactivate_run(conn, "create-1", apply=True)
+    assert report["reactivated"] == 0
+    assert report["already_active"] == 1
+
+
+def test_redo_of_an_unknown_run_is_reported(conn):
+    report = create.reactivate_run(conn, "create-nope", apply=True)
+    assert any("no create run" in line["reason"] for line in report["skipped"])
+
+
+# ---------------------------------------------------------------- within a plan
+
+def test_two_candidates_on_the_same_spot_hold_the_second(conn):
+    """Two OpenStreetMap features metres apart are often one car park mapped
+    twice, as a node and as a way."""
+    report = run(conn, [
+        record(source_ref="way/920", row=dict(FAR, **{"OSM ID": "way/920"})),
+        record(source_ref="node/921", row=dict(FAR, **{"OSM ID": "node/921"}))])
+    assert report["created"] == 1
+    assert len(report["held"]) == 1
+    assert report["held"][0]["source ref"] == "node/921"
