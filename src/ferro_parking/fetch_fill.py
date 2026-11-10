@@ -15,6 +15,7 @@ to the bot, or to no_evidence, by the ordinary rules.
 """
 import argparse
 import csv
+import json
 
 from . import db, fill, page_fill, plan as plan_mod
 from .fill import LOCATION_NAME, PLACE_ID
@@ -63,7 +64,7 @@ def rows_for(conn, key, stage_keys=True):
         if fill.is_named_person(row.get(fill.VERIFIED_BY)):
             continue
         if key == "station":
-            if stage == "station":
+            if stage == "station" or (stage == "grok" and route.is_station(row)):
                 out.append((row, stage))
         elif route.source_key(row) == key:
             out.append((row, stage))
@@ -89,6 +90,9 @@ def plan_lines(place_id, stage, values, notes, flags, row, quote, url, verified_
                         f"asks for on a Yes or Conditional row")
         for column in CONTEXT_COLUMNS:
             new.setdefault(column, row.get(column, ""))
+
+    previous_urls = row.get(fill.SOURCE_URLS, "") or ""
+    new[fill.SOURCE_URLS] = "; ".join(dict.fromkeys([url] + [part.strip() for part in previous_urls.split(";") if part.strip()]))
 
     # The sheet's own Notes sometimes holds an en dash, and appending to it
     # would fail the validator on text somebody else wrote. The parking fact
@@ -131,7 +135,14 @@ def run(conn, key, limit=None, today=None, fetcher=None):
               "silent pages": 0, "blocked pages": 0, "unresolved names": 0,
               "rows with values": 0, "rows held for a person": 0}
 
+    from .category_default import load_osm_rows
+    from .route import mapped_car_park_50m
+    osm_rows, osm_source = load_osm_rows()
     for row, stage in candidates:
+        row = dict(row)
+        if key == "station":
+            mapped = mapped_car_park_50m(osm_rows.get(row.get(PLACE_ID)))
+            row["_mapped_car_park_50m"] = mapped is not False
         place_id = (row.get(PLACE_ID) or "").strip()
         counts["rows attempted"] += 1
         url = fetcher.branch_url(row)
@@ -139,11 +150,14 @@ def run(conn, key, limit=None, today=None, fetcher=None):
             counts["unresolved names"] += 1
             unresolved.append({"key": key, "Place ID": place_id,
                                 "Location Name": row.get(LOCATION_NAME, ""),
-                                "reason": "no page could be resolved from the name"})
+                                "reason": "not National Rail" if key == "station" else "no official branch URL"})
+            examples.append({"key": key, "Place ID": place_id, "Location Name": row.get(LOCATION_NAME, ""),
+                                 "url": "", "http status": "", "outcome": "not National Rail" if key == "station" else "unresolved",
+                                 "quote": "", "columns": ""})
             continue
 
         status, text, _ = fetch(url, conn)
-        blocked = status in (0, 401, 403, 429) or (status == 200 and looks_like_a_challenge(text))
+        blocked = (status != 200 and status != 404) or (status == 200 and looks_like_a_challenge(text))
         if blocked:
             counts["blocked pages"] += 1
             outcome = "blocked"
@@ -163,6 +177,8 @@ def run(conn, key, limit=None, today=None, fetcher=None):
                 result = fetcher.values(text, row)
                 values, notes, flags, quote = (result if len(result) == 4
                                                 else (result[0], result[1], [], result[2]))
+                if values.get(fill.REVIEW_FLAG):
+                    flags.append(values.pop(fill.REVIEW_FLAG))
                 if values:
                     outcome = "values"
                     counts["rows with values"] += 1
@@ -184,17 +200,16 @@ def run(conn, key, limit=None, today=None, fetcher=None):
                 outcome = "held"
             lines.extend(row_lines)
             counts["plan lines"] += len(row_lines)
-        if len(examples) < 10 and outcome in ("values", "blocked", "cached only"):
-            examples.append({
+        examples.append({
                 "key": key, "Place ID": place_id, "Location Name": row.get(LOCATION_NAME, ""),
                 "url": url, "http status": status, "outcome": outcome,
-                "quote": quote[:300],
+                "quote": quote,
                 "columns": ", ".join(sorted({line["column"] for line in row_lines})),
             })
 
     return lines, {"key": key, "routing_run": run_id, "counts": counts,
-                   "examples": examples, "unresolved": unresolved,
-                   "held": blocked_rows}
+                   "examples": sorted(examples, key=lambda e: (e["outcome"] != "values", e["outcome"] == "not National Rail"))[:10], "unresolved": unresolved,
+                   "held": blocked_rows, "osm_source": osm_source}
 
 
 def main(argv=None):
@@ -206,6 +221,9 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     conn = db.connect(args.db)
+    if args.key == "station":
+        from .sources.station_list import load
+        REGISTRY["station"] = StationFetcher(load(conn))
     lines, report = run(conn, args.key, args.limit)
 
     out_dir = reserve_output(args.out) if args.out else new_run_dir("fetch_fill")
@@ -217,6 +235,9 @@ def main(argv=None):
             writer = csv.DictWriter(stream, fieldnames=headers)
             writer.writeheader()
             writer.writerows(rows)
+
+    with (out_dir / "summary.json").open("x", encoding="utf-8") as stream:
+        json.dump(report, stream, indent=2, ensure_ascii=True)
 
     print(f"Fetcher {args.key!r}, routing run {report['routing_run']}")
     for name, count in report["counts"].items():

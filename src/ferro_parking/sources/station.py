@@ -25,6 +25,8 @@ import re
 from .. import page_fill
 from ..osm_match import norm
 
+CONFLICT_FLAG = "Station page says no parking but the row shows a car park: confirm"
+
 BASE = "https://www.nationalrail.co.uk/stations/{slug}/"
 
 # Words that belong to the sheet's own wording rather than the station name.
@@ -77,6 +79,13 @@ def _sentence_around(text, match):
     return text[start:end if end != -1 else len(text)].strip()
 
 
+def denial_conflict(row):
+    row = row or {}
+    return (bool(str(row.get("Charges (as published)", "")).strip())
+            or str(row.get("Tariff Detail", "")).strip() not in ("", "Not published")
+            or row.get("_mapped_car_park_50m", False))
+
+
 class StationFetcher:
     """key is the routing stage name, because the station stage is chosen by
     category rather than by a source key."""
@@ -84,9 +93,14 @@ class StationFetcher:
     key = "station"
     source_tier = "Operator / council site"
 
+    def __init__(self, lookup=None):
+        self.lookup = lookup
+
     def branch_url(self, row):
-        slug = station_slug(row.get("Location Name", ""))
-        return BASE.format(slug=slug) if slug else ""
+        from .station_list import load
+        lookup = self.lookup if self.lookup is not None else load()
+        key = station_slug(row.get("Location Name", ""))
+        return (lookup or {}).get(key, "")
 
     def quotes(self, text, row=None):
         found = []
@@ -105,10 +119,11 @@ class StationFetcher:
             return {}, [], ""
 
         spaces = SPACES.search(text)
-        if spaces:
+        if spaces and int(spaces.group(1).replace(",", "")) > 0:
             quote = _sentence_around(text, spaces)
             values = {
                 "Can Park? (Yes/No/Conditional)": "Yes",
+                "Brand": "National Rail",
                 "Evidence Detail (what the source shows)": quote,
                 "Source Tier": self.source_tier,
                 "Specificity": "Site-specific",
@@ -127,8 +142,19 @@ class StationFetcher:
         denial = NO_SPACES.search(text)
         if denial:
             quote = _sentence_around(text, denial)
+            if denial_conflict(row):
+                return {
+                    "Review Flag": CONFLICT_FLAG,
+                    "Flag Status": "Open",
+                    "Decision Reason": "Route A: National Rail denial conflicts with existing car park evidence; confirm with Grok",
+                    "Source Tier": self.source_tier,
+                    "Specificity": "Site-specific",
+                    "Evidence Level": "Verified",
+                    "Evidence Detail (what the source shows)": quote,
+                }, [], quote
             return {
                 "Can Park? (Yes/No/Conditional)": "No",
+                "Brand": "National Rail",
                 "Evidence Detail (what the source shows)": quote,
                 "Source Tier": self.source_tier,
                 "Specificity": "Site-specific",

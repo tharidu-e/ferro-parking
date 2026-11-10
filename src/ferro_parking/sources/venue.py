@@ -43,7 +43,8 @@ FREE = re.compile(
 PCN_WORDING = re.compile(r"parking charge notice(?:s)?(\s*\(pcn\))?", re.I)
 CHARGE = re.compile(
     r"\bcharge to park\b|\bmust pay\b|\bpay and display\b|\bpay on exit\b"
-    r"|\bpaid parking\b|\bparking charges\b|£\s?\d", re.I)
+    r"|\bpaid parking\b|\bparking charges\b|£\s?\d"
+    r"|\b(?:charge|charges|charging|costs?|payment|fees?|payable)\b", re.I)
 
 MAX_STAY = re.compile(
     r"\bmax(?:imum)?\s+stay\b[^.\n]{0,40}?(\d[\d,]*)\s*(hours?|hrs?|minutes?|mins?)", re.I)
@@ -162,7 +163,10 @@ class VenueFetcher:
 
     def branch_url(self, row):
         from .fetch import SourceUrlFetcher
-        return SourceUrlFetcher(self.key).branch_url(row)
+        from urllib.parse import urlsplit
+        url = SourceUrlFetcher(self.key).branch_url(row)
+        host = urlsplit(url).hostname or ""
+        return url if host == self.key or host.endswith("." + self.key) else ""
 
     def quotes(self, text, row=None):
         return [sentence for sentence in parking_sentences(text)
@@ -175,6 +179,10 @@ class VenueFetcher:
         if not found:
             return {}, [], [], ""
 
+        # Negated free parking is not evidence of free parking or availability.
+        found = [s for s in found if not re.search(r"\b(?:no|not)\s+(?:free\s+)?(?:car\s+)?parking|\bparking (?:is )?not available", s, re.I)]
+        if not found:
+            return {}, [], [], ""
         free_match, free_sentence = find(FREE, found)
         # A charge is often written in the sentence after the parking one
         # ("Parking is free for 60 mins. After that you must pay £2.50 per
@@ -182,8 +190,13 @@ class VenueFetcher:
         # after a parking sentence is read, so a price elsewhere on the page
         # is never mistaken for a parking charge.
         charge_match, charge_sentence = None, ""
-        for sentence in _charge_candidates(text, found):
-            match = CHARGE.search(_without_pcn(sentence))
+        # Free is allowed only when the page contains no charge mention.
+        # Ignore penalties and explicit statements that no charge applies.
+        for sentence in sentences(text):
+            charge_text = _without_pcn(sentence)
+            charge_text = re.sub(r"(?:pcn|penalty charge)[^.]*", "", charge_text, flags=re.I)
+            charge_text = re.sub(r"\b(?:no|without)\s+(?:additional\s+)?(?:charge|charges|cost|fee|fees)\b|\bfree of charge\b", "", charge_text, flags=re.I)
+            match = CHARGE.search(charge_text)
             if match:
                 charge_match, charge_sentence = match, sentence
                 break
@@ -193,7 +206,8 @@ class VenueFetcher:
         # car park, so this one reads the whole page.
         stay_match, stay_sentence = find(MAX_STAY, sentences(text))
 
-        if not (free_match or charge_match or spaces_match or stay_match
+        parking_charge = any(CHARGE.search(_without_pcn(sentence)) for sentence in found)
+        if not (free_match or parking_charge or spaces_match or stay_match
                 or available_match):
             return {}, [], [], ""
 
@@ -218,6 +232,12 @@ class VenueFetcher:
             values["Cost Type"] = "Free"
             values["Tariff Type"] = "Free (time limit not published)"
             values["Tariff Detail"] = "Free"
+            period = FREE_PERIOD.search(free_sentence)
+            if period:
+                value = period.group(1) or period.group(3)
+                unit = period.group(2) or period.group(4)
+                values["Tariff Type"] = "Free with time limit"
+                values["Tariff Detail"] = f"Free for up to {_minutes(value, unit)} mins"
             values["Price Status"] = "Published"
             values["Prices Stated"] = "Yes"
         elif charge_match:
@@ -264,4 +284,10 @@ class VenueFetcher:
         if caution_match:
             notes.append(caution_sentence)
 
+        evidence = [quote]
+        for sentence in (charge_sentence, stay_sentence, spaces_sentence):
+            if sentence and sentence not in evidence:
+                evidence.append(sentence)
+        quote = " | ".join(evidence)
+        values["Evidence Detail (what the source shows)"] = quote
         return values, notes, flags, quote

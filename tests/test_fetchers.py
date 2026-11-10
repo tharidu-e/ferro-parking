@@ -70,7 +70,7 @@ def test_an_unresolvable_name_gives_no_url():
 
 
 def test_the_url_is_the_national_rail_station_page():
-    url = station_mod.StationFetcher().branch_url(
+    url = station_mod.StationFetcher(lookup={"brockley": "https://www.nationalrail.co.uk/stations/brockley/"}).branch_url(
         sheet_row(**{"Location Name": "Brockley Station"}))
     assert url == "https://www.nationalrail.co.uk/stations/brockley/"
 
@@ -431,3 +431,99 @@ def test_the_runner_writes_no_change_to_the_database(conn, monkeypatch, tmp_path
     fetch_fill.run(conn, "station", today=TODAY,
                     fetcher=FakeFetcher(values={fill.CAN_PARK: "No"}))
     assert conn.execute("SELECT COUNT(*) AS n FROM changes").fetchone()["n"] == 0
+
+@pytest.mark.parametrize('text', [
+    'There is no free parking at this gym.',
+    'Free parking for customers. A charge applies after two hours.',
+    'Free parking is available. Additional parking costs apply.',
+])
+def test_free_never_ignores_a_denial_or_later_charge(text):
+    values, _, _, _ = venue_mod.VenueFetcher('puregym.com').values(text)
+    assert values.get('Cost Type') != 'Free'
+
+
+def test_zero_station_spaces_is_not_yes():
+    assert station_mod.StationFetcher().values('0 parking spaces')[0].get(fill.CAN_PARK) != 'Yes'
+
+
+@pytest.mark.parametrize('column,value', [('Charges (as published)', '£5'), ('Tariff Detail', 'Free'), ('_mapped_car_park_50m', True)])
+def test_station_denial_with_conflicting_evidence_only_flags(column, value):
+    row = sheet_row(**{column: value})
+    values, _, _ = station_mod.StationFetcher().values(NO_PARKING_PAGE, row)
+    assert fill.CAN_PARK not in values
+    assert values['Review Flag'] == station_mod.CONFLICT_FLAG
+
+
+def test_station_values_state_the_brand():
+    assert station_mod.StationFetcher().values(NO_PARKING_PAGE, sheet_row())[0]['Brand'] == 'National Rail'
+
+
+def test_official_list_lookup_has_no_guessed_row_urls():
+    import json
+    from ferro_parking.sources import station_list
+    text = json.dumps({'data': {'StationList': {'stations': [{'name': 'London Paddington', 'crs': 'PAD'}, {'name': 'Brockley', 'crs': 'BCY'}]}}})
+    lookup = station_list.parse(text)
+    reader = station_mod.StationFetcher(lookup)
+    assert reader.branch_url({'Location Name': 'Brockley Station Car Park'}).endswith('/brockley/')
+    assert reader.branch_url({'Location Name': 'Invented Station'}) == ''
+    assert reader.branch_url({'Location Name': 'Paddington Station'}) == ''
+
+
+def test_ambiguous_names_in_the_list_are_unresolved():
+    import json
+    from ferro_parking.sources import station_list
+    text = json.dumps({'data': {'StationList': {'stations': [{'name': 'Example & Town'}, {'name': 'Example and Town'}]}}})
+    assert station_list.parse(text) == {}
+
+
+def test_station_list_is_fetched_once_then_cached(tmp_path, monkeypatch):
+    import json
+    from ferro_parking.sources import station_list, fetch
+    calls = []
+    text = json.dumps({'data': {'StationList': {'stations': [{'name': 'Brockley'}]}}})
+    def download(*args, **kwargs):
+        calls.append(1)
+        return 200, text, False
+    monkeypatch.setattr(fetch, 'fetch', download)
+    path = tmp_path / 'list.json'
+    assert station_list.load(object(), path) == station_list.load(object(), path)
+    assert len(calls) == 1
+
+
+def test_membership_price_and_generic_caution_do_not_establish_parking():
+    text = 'Membership costs £25 per month. Please check in the car park before you enter the gym.'
+    assert venue_mod.VenueFetcher('puregym.com').values(text)[0] == {}
+
+
+def test_a_free_period_is_preserved_in_the_tariff_without_inventing_a_max_stay():
+    values, _, _, _ = venue_mod.VenueFetcher('puregym.com').values('Free parking for 2 hours.')
+    assert values['Tariff Detail'] == 'Free for up to 120 mins'
+    assert values['Tariff Type'] == 'Free with time limit'
+    assert 'Max Stay (mins)' not in values
+
+
+def test_venue_denial_never_becomes_conditional():
+    assert venue_mod.VenueFetcher('puregym.com').values('No parking available. Membership costs £20.')[0] == {}
+
+
+def test_fetch_plan_records_the_page_url_in_the_row():
+    lines, held = fetch_fill.plan_lines('PP-1', 'station', {'Brand': 'National Rail', 'Decision Reason': 'Route A: page'}, [], [], sheet_row(), 'No parking spaces', 'https://www.nationalrail.co.uk/stations/brockley/', 'Code (page fetch)', TODAY)
+    assert not held
+    assert next(l['new_value'] for l in lines if l['column'] == fill.SOURCE_URLS).endswith('/brockley/')
+
+
+def test_venue_never_treats_an_unrelated_domain_as_its_official_page():
+    assert venue_mod.VenueFetcher('puregym.com').branch_url({'Source URLs (primary first)': 'https://booking.example/puregym'}) == ''
+
+
+def test_a_charge_elsewhere_on_the_page_prevents_free():
+    values, notes, flags, _ = venue_mod.VenueFetcher('puregym.com').values('Free parking is available. Opening times vary. Additional parking costs £2.00.')
+    assert values['Cost Type'] == 'Unknown'
+    assert notes and flags
+
+
+def test_station_denial_allows_only_blank_or_unpublished_tariffs():
+    for tariff in ['', 'Not published']:
+        values, _, _ = station_mod.StationFetcher().values(NO_PARKING_PAGE, {'Tariff Detail': tariff})
+        assert values[fill.CAN_PARK] == 'No'
+        assert values['Brand'] == 'National Rail'

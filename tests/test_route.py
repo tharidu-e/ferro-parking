@@ -209,8 +209,9 @@ def test_a_registered_fetcher_wins_over_default():
     assert stage_of(row, fetchers={"tesco": object()}) == "fetcher:tesco"
 
 
-def test_no_fetcher_is_registered_yet():
-    assert route.FETCHERS == {}
+def test_fetchers_share_the_runner_registry():
+    from ferro_parking.fetch_fill import REGISTRY
+    assert route.FETCHERS is REGISTRY
 
 
 def test_a_customer_venue_with_car_park_evidence_goes_to_default():
@@ -234,7 +235,7 @@ def test_a_station_category_row_goes_to_the_station_stage():
                        "Place Category": "Station", "Location Name": "Bromley South Station"})
     stage, priority, _, reason = classify(row)
     assert (stage, priority) == ("station", "1")
-    assert "station, no fetcher" in reason
+    assert "National Rail station research" in reason
 
 
 def test_a_station_car_park_named_in_the_type_column_counts():
@@ -690,3 +691,28 @@ def test_no_evidence_keys_are_counted(conn, tmp_path):
     report = route.counts(route.route_rows(rows, set(), {}), rows)
     assert report["per_stage"] == {"no_evidence": 2}
     assert report["no_evidence_keys"].most_common() == [("tesco", 2)]
+
+
+@pytest.fixture(autouse=True)
+def no_real_station_list(monkeypatch):
+    from ferro_parking.sources import station_list
+    monkeypatch.setattr(station_list, 'load', lambda *args: None)
+
+
+def test_unresolved_official_station_name_routes_to_grok(monkeypatch):
+    from ferro_parking.sources import station_list
+    monkeypatch.setattr(station_list, 'load', lambda *args: {'brockley': 'https://www.nationalrail.co.uk/stations/brockley/'})
+    row = sheet_row(**{'Place ID': 'PP-1', 'Place Category': 'Station', 'Location Name': 'Invented Station'})
+    result = classify(row)
+    assert result[0] == 'grok'
+    assert 'not National Rail' in result[3]
+
+
+def test_station_denial_with_mapped_car_park_routes_to_grok(monkeypatch):
+    from ferro_parking.sources import station_list, fetch
+    monkeypatch.setattr(station_list, 'load', lambda *args: {'brockley': 'https://www.nationalrail.co.uk/stations/brockley/'})
+    monkeypatch.setattr(fetch, 'cached', lambda *args: (200, 'No parking spaces'))
+    row = sheet_row(**{'Place ID': 'PP-1', 'Place Category': 'Station', 'Location Name': 'Brockley Station'})
+    result = route.classify(row, set(), {}, conn=object(), osm_rows={'PP-1': {'Car Park Distance (m)': '50'}})
+    assert result[0] == 'grok'
+    assert 'confirm' in result[3]

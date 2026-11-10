@@ -17,6 +17,7 @@ A fetcher is any object with these three members:
 A silent page gives no quotes, and therefore no plan line. That is the whole
 point of the interface: it never guesses.
 """
+import json
 import hashlib
 import re
 import ssl
@@ -117,7 +118,7 @@ def cached(conn, url):
     return row["http_status"], path.read_text(encoding="utf-8", errors="replace")
 
 
-def fetch(url, conn, cache_dir=CACHE_DIR, force=False):
+def fetch(url, conn, cache_dir=CACHE_DIR, force=False, payload=None):
     """(status, text, from_cache). One request per second per domain.
 
     status is the HTTP status, or 0 when the request itself failed. The page
@@ -134,6 +135,9 @@ def fetch(url, conn, cache_dir=CACHE_DIR, force=False):
         "Accept": "text/html,application/xhtml+xml",
         "Accept-Language": "en-GB,en;q=0.9",
     })
+    if payload is not None:
+        request.data = json.dumps(payload).encode("utf-8")
+        request.add_header("Content-Type", "application/json")
     status, body = 0, ""
     try:
         with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS, context=_context()) as response:

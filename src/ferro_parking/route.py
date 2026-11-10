@@ -59,7 +59,7 @@ KEY_TRAILING_NOISE = ("car", "park", "parking", "station", "carpark")
 UNBRANDED = "unbranded"
 
 # No fetcher exists yet. Phase 5 registers one key per fetcher here.
-FETCHERS = {}
+from .fetch_fill import REGISTRY as FETCHERS
 
 HEADERS = ["Place ID", "name", "stage", "priority", "source key", "reason"]
 
@@ -156,6 +156,38 @@ def has_parking_gap(row):
 
 # ---------------------------------------------------------------- the decision
 
+def mapped_car_park_50m(osm_row):
+    """None means the fresh match did not cover the row, so absence is unknown."""
+    if osm_row is None:
+        return None
+    try:
+        distance = float(osm_row.get("Car Park Distance (m)", ""))
+        return 0 <= distance <= 50
+    except (ValueError, TypeError):
+        return False
+
+
+def station_override(row, osm_row, conn):
+    from .sources.station import StationFetcher, NO_SPACES, denial_conflict
+    from .sources.station_list import load
+    from .sources.fetch import cached, looks_like_a_challenge
+    lookup = load()
+    if lookup is None:
+        return None
+    url = StationFetcher(lookup).branch_url(row)
+    if not url:
+        return "not National Rail: no exact match in the official station list"
+    if conn is not None:
+        page = cached(conn, url)
+        if page and page[0] == 404:
+            return "not National Rail: official station page did not resolve"
+        if page and page[0] == 200 and not looks_like_a_challenge(page[1]) and NO_SPACES.search(page[1]):
+            mapped = mapped_car_park_50m(osm_row)
+            if denial_conflict({**row, "_mapped_car_park_50m": mapped is not False}):
+                return "Station page says no parking but the row shows a car park: confirm"
+    return None
+
+
 def classify(row, missing, duplicates, fetchers=None, osm_rows=None, conn=None):
     """(stage, priority, source_key, reason) for one row. Exactly one stage."""
     fetchers = FETCHERS if fetchers is None else fetchers
@@ -186,10 +218,13 @@ def classify(row, missing, duplicates, fetchers=None, osm_rows=None, conn=None):
 
     key = source_key(row)
     _, bucket_reason = bucket(row, categories())
-    if key != UNBRANDED and key in fetchers:
+    if key != UNBRANDED and key in fetchers and key != "station":
         return f"fetcher:{key}", priority, key, f"{why}; fetcher for {key}"
     if is_station(row):
-        return "station", priority, key, f"{why}; station, no fetcher ({bucket_reason})"
+        override = station_override(row, osm_rows.get(place_id), conn)
+        if override:
+            return "grok", priority, key, f"{why}; {override}"
+        return "station", priority, key, f"{why}; National Rail station research"
     if is_public_car_park_for_stage(row):
         return "grok", priority, key, f"{why}; public car park, no fetcher ({bucket_reason})"
     evidence, _, _ = car_park_evidence.evidence_for(row, osm_rows.get(place_id), conn)
