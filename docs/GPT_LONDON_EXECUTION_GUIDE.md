@@ -4,6 +4,12 @@ Prepared 10 November 2026. This document is an execution handoff, not a record
 of completed expansion. Preparing it does not authorise database changes.
 The owner can start the work by pasting the prompt below in a new session.
 
+Section order superseded on 10 November 2026. Work the steps in the order set
+by `EXECUTION_CHECKLIST.md` in the repository root. That file resequences this
+guide so the database insert runs before the research work. The content of each
+section below stays correct. The checklist also names the gates it cut and the
+gates that stay.
+
 ## Start the session
 
 Open this repository on `feature/db-router`. Select GPT-6.1 Sol for the main
