@@ -146,6 +146,18 @@ CREATE TABLE IF NOT EXISTS published (
     place_id TEXT NOT NULL, column_name TEXT NOT NULL, value TEXT,
     published_at TEXT, PRIMARY KEY (place_id, column_name)
 );
+CREATE TABLE IF NOT EXISTS created (
+    place_id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL,
+    source TEXT NOT NULL,
+    source_ref TEXT NOT NULL,
+    json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    active INTEGER NOT NULL DEFAULT 1,
+    deactivated_run_id TEXT,
+    deactivated_at TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS created_source_ref ON created(source, source_ref);
 """
 
 
@@ -277,6 +289,33 @@ def owned_changes(conn):
     return {(r["place_id"], r["column_name"]): dict(r) for r in cursor}
 
 
+def created_rows(conn, headers):
+    """Active records the database created itself, oldest first, overlaid with
+    the newest applied change per cell. These have no import: a record created
+    from OpenStreetMap exists only here, so every reader that unions them in
+    keeps working after the next sheet import."""
+    owned = owned_changes(conn)
+    out = []
+    for record in conn.execute(
+            "SELECT place_id, json FROM created WHERE active = 1 ORDER BY rowid"):
+        row = json.loads(record["json"])
+        row = {header: row.get(header, "") for header in headers}
+        for header in headers:
+            change = owned.get((record["place_id"], header))
+            if change is not None:
+                row[header] = change["new_value"]
+        out.append(row)
+    return out
+
+
+def created_source_refs(conn, source):
+    """{source_ref: place_id} for one source, active and inactive. A second
+    create run reads this and proposes nothing it already created, so a
+    repeated or interrupted run adds no duplicate."""
+    return {row["source_ref"]: row["place_id"] for row in conn.execute(
+        "SELECT source_ref, place_id FROM created WHERE source = ?", (source,))}
+
+
 def effective_rows(conn, import_id=None):
     """(headers, rows) as the database now reads: the newest raw row per Place
     ID, in its imported order, overlaid with the newest applied change per
@@ -298,7 +337,7 @@ def effective_rows(conn, import_id=None):
             if change is not None:
                 row[header] = change["new_value"]
         out.append(row)
-    return headers, out
+    return headers, out + created_rows(conn, headers)
 
 
 def missing_place_ids(conn):
@@ -340,7 +379,7 @@ def current_rows(conn):
             if change is not None:
                 row[header] = change["new_value"]
         out.append(row)
-    return headers, out
+    return headers, out + created_rows(conn, headers)
 
 
 def latest_routing(conn):
@@ -362,12 +401,16 @@ def duplicate_of_map(conn):
 
 
 def next_place_id(conn):
-    """The next unused Place ID, from every import ever loaded."""
+    """The next unused Place ID, from every import ever loaded and every record
+    the database created. A deactivated created record still holds its ID, so
+    an undo never frees an ID for reuse."""
     highest = 0
-    for row in conn.execute("SELECT DISTINCT place_id FROM raw"):
-        match = PLACE_ID_RE.match(row["place_id"])
-        if match:
-            highest = max(highest, int(match.group(1)))
+    for sql in ("SELECT DISTINCT place_id FROM raw",
+                "SELECT DISTINCT place_id FROM created"):
+        for row in conn.execute(sql):
+            match = PLACE_ID_RE.match(row["place_id"])
+            if match:
+                highest = max(highest, int(match.group(1)))
     return f"PP-{highest + 1:06d}"
 
 
