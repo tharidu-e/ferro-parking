@@ -101,29 +101,8 @@ def build(conn, proposals, rules=None):
                             "proposed category": category,
                             "reason": f"changed from {proposed!r}: {note}"})
 
-        # validate_rows asks every plan entry for a Decision Reason naming the
-        # route, and it sees only the plan's own columns. A row that already
-        # has one keeps it, restated as context. A row whose existing reason
-        # names no route cannot take ours without replacing real text, so it
-        # waits for a person.
-        existing = (row.get(DECISION_REASON) or "").strip()
-        if not existing:
-            reason_value = REASON_TEXT
-        elif any(dash in existing for dash in DASHES):
-            # The dash is already in the sheet. Restating it would fail the
-            # validator, and rewriting somebody's sentence is not this
-            # command's job, so the row waits with the reason named.
-            hold("the existing Decision Reason holds an en or em dash, "
-                 "which the validator refuses")
-            continue
-        elif "Route" in existing:
-            reason_value = existing
-        else:
-            hold(f"Decision Reason reads {existing[:60]!r}, which names no route")
-            continue
-
         stage = routing.get(place_id, STAGE_FALLBACK)
-        for column, value in ((CATEGORY, category), (DECISION_REASON, reason_value)):
+        for column, value in ((CATEGORY, category),):
             lines.append({
                 "place_id": place_id, "column": column, "new_value": value,
                 "quote": proposal.get("reason", ""), "source_url": "",

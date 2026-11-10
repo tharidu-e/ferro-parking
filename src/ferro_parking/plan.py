@@ -209,6 +209,7 @@ def check_plan(conn, lines):
             "new": {column: line["new_value"] for column, line in lines_by_column.items()},
             "_lines": lines_by_column,
             "_row": row,
+            "old": {column: row.get(column, "") for column in lines_by_column},
         })
 
     for entry in entries:

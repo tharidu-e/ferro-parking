@@ -787,3 +787,28 @@ def test_grok_import_command_writes_the_proposals_file(conn, tmp_path):
         rows = list(csv.DictReader(stream))
     assert len(rows) == 1
     assert list(rows[0]) == plan.PROPOSAL_HEADERS
+
+@pytest.mark.parametrize('reason', ['', 'Existing reason without a route', 'Old reason \u2013 unchanged'])
+def test_category_only_does_not_require_or_change_decision_reason(conn, reason):
+    from ferro_parking import category_plan
+    conn.execute("UPDATE raw SET json = json_set(json, '$.\"Decision Reason\"', ?) WHERE place_id = ?", (reason, BLANK_ROW))
+    conn.commit()
+    lines, review, _ = category_plan.build(conn, [{'Place ID': BLANK_ROW, 'proposed_place_category': 'Restaurant / pub / cafe'}])
+    assert {entry['column'] for entry in lines} == {'Place Category'}
+    assert not review
+    report = plan.apply_plan(conn, lines, 'category-only', apply=True)
+    assert report['rejected'] == []
+    assert report['applied'] == 1
+    assert db.current_rows(conn)[1][-1]['Decision Reason'] == reason
+
+
+def test_category_exception_does_not_allow_a_changed_reason_or_bad_category(conn):
+    assert reasons(conn, [line(column='Place Category', new_value='not a category')])
+    assert reasons(conn, [line(column='Brand', new_value='Pret'), line(column='Decision Reason', new_value='No route')])
+    assert reasons(conn, [line(column='Brand', new_value='Pret'), line(column='Decision Reason', new_value='Route F: bad \u2013 dash')])
+
+
+def test_category_context_can_restate_a_reason_but_not_change_it(conn):
+    conn.execute("UPDATE raw SET json = json_set(json, '$.\"Decision Reason\"', ?) WHERE place_id = ?", ('Old \u2013 reason', BLANK_ROW))
+    conn.commit()
+    assert reasons(conn, [line(column='Brand', new_value='Pret'), line(column='Decision Reason', new_value='Old \u2013 reason')]) == []
