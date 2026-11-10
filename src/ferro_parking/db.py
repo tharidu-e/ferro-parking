@@ -301,6 +301,55 @@ def effective_rows(conn, import_id=None):
     return headers, out
 
 
+def missing_place_ids(conn):
+    """Place IDs an earlier import had and the newest import does not. The
+    rows stay in the database, so the router can skip them by name."""
+    import_id = latest_import_id(conn)
+    if not import_id:
+        return set()
+    current = {row["place_id"] for row in conn.execute(
+        "SELECT place_id FROM raw WHERE import_id = ?", (import_id,))}
+    everything = {row["place_id"] for row in conn.execute("SELECT DISTINCT place_id FROM raw")}
+    return everything - current
+
+
+def current_rows(conn):
+    """(headers, rows) for every Place ID the database has ever imported, each
+    at its newest raw row, overlaid with the newest applied change per cell.
+
+    effective_rows covers one import, which is what db-export needs to stay
+    byte-identical. This covers the whole store, including a Place ID the
+    newest export dropped, which the router has to see so it can skip it."""
+    import_id = latest_import_id(conn)
+    if not import_id:
+        return [], []
+    headers = json.loads(conn.execute(
+        "SELECT header_json FROM imports WHERE import_id = ?", (import_id,)).fetchone()["header_json"])
+    cursor = conn.execute(
+        "SELECT r.place_id, r.import_id, r.row_index, r.json FROM raw r"
+        " JOIN (SELECT place_id, MAX(import_id) AS newest FROM raw GROUP BY place_id) newest"
+        "   ON newest.place_id = r.place_id AND newest.newest = r.import_id")
+    newest = [(r["import_id"], r["row_index"], r["place_id"], json.loads(r["json"])) for r in cursor]
+    newest.sort(key=lambda item: (-item[0], item[1]))
+    owned = owned_changes(conn)
+    out = []
+    for _, _, place_id, row in newest:
+        row = dict(row)
+        for header in headers:
+            change = owned.get((place_id, header))
+            if change is not None:
+                row[header] = change["new_value"]
+        out.append(row)
+    return headers, out
+
+
+def duplicate_of_map(conn):
+    """{place_id: duplicate_of} for every row the database marked a duplicate."""
+    return {row["place_id"]: row["duplicate_of"] for row in conn.execute(
+        "SELECT place_id, duplicate_of FROM places WHERE duplicate_of IS NOT NULL"
+        " AND duplicate_of != ''")}
+
+
 def next_place_id(conn):
     """The next unused Place ID, from every import ever loaded."""
     highest = 0

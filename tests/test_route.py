@@ -1,0 +1,383 @@
+"""Phase 2: every branch of the router's decision order, and the source key."""
+import csv
+from pathlib import Path
+
+import pytest
+
+from ferro_parking import db, route
+
+FIXTURE = Path(__file__).parent / "fixtures" / "db_sheet_sample.csv"
+HEADERS = next(csv.reader(FIXTURE.open(encoding="utf-8-sig")))
+
+
+def sheet_row(**values):
+    row = {header: "" for header in HEADERS}
+    row.update(values)
+    return row
+
+
+def stage_of(row, missing=(), duplicates=None, fetchers=None):
+    return route.classify(row, set(missing), duplicates or {}, fetchers)[0]
+
+
+def classify(row, missing=(), duplicates=None, fetchers=None):
+    return route.classify(row, set(missing), duplicates or {}, fetchers)
+
+
+# ---------------------------------------------------------------- rule 1, skip_named
+
+def test_a_tharidu_row_is_never_touched():
+    row = sheet_row(**{"Place ID": "PP-1", "Verified By": "Tharidu",
+                       "Verification Result": ""})
+    stage, priority, key, reason = classify(row)
+    assert stage == "skip_named"
+    assert priority == ""
+    assert "named person" in reason
+
+
+def test_a_tharidu_row_wins_over_every_later_rule():
+    row = sheet_row(**{"Place ID": "PP-1", "Verified By": "Tharidu (hand check)",
+                       "Place Category": "Council car park",
+                       "Can Park? (Yes/No/Conditional)": "Yes", "Who Can Park": "Unknown"})
+    assert stage_of(row, missing=["PP-1"], duplicates={"PP-1": "PP-2"}) == "skip_named"
+
+
+def test_an_agent_label_is_not_a_named_person():
+    for label in ("PP (validation)", "Policy script", "Grok (discovery)",
+                  "Claude (capture check)", "Category policy script", "OSM script"):
+        row = sheet_row(**{"Place ID": "PP-1", "Verified By": label,
+                           "Verification Result": ""})
+        assert stage_of(row) != "skip_named", label
+
+
+# ---------------------------------------------------------------- rule 2, skip_missing
+
+def test_a_place_id_absent_from_the_newest_import_is_skipped():
+    row = sheet_row(**{"Place ID": "PP-9", "Verification Result": ""})
+    stage, priority, _, reason = classify(row, missing=["PP-9"])
+    assert (stage, priority) == ("skip_missing", "")
+    assert "newest import" in reason
+
+
+def test_skip_missing_wins_over_duplicate_and_blank_result():
+    row = sheet_row(**{"Place ID": "PP-9", "Verification Result": ""})
+    assert stage_of(row, missing=["PP-9"], duplicates={"PP-9": "PP-1"}) == "skip_missing"
+
+
+# ---------------------------------------------------------------- rule 3, skip_duplicate
+
+def test_a_duplicate_row_is_skipped():
+    row = sheet_row(**{"Place ID": "PP-2", "Verification Result": ""})
+    stage, priority, _, reason = classify(row, duplicates={"PP-2": "PP-1"})
+    assert (stage, priority) == ("skip_duplicate", "")
+    assert "PP-1" in reason
+
+
+def test_a_blank_duplicate_of_does_not_skip():
+    row = sheet_row(**{"Place ID": "PP-2", "Verification Result": ""})
+    assert stage_of(row, duplicates={"PP-2": ""}) == "default"
+
+
+def test_skip_duplicate_wins_over_needs_on_site_check():
+    row = sheet_row(**{"Place ID": "PP-2", "Verification Result": "Needs on-site check"})
+    assert stage_of(row, duplicates={"PP-2": "PP-1"}) == "skip_duplicate"
+
+
+# ---------------------------------------------------------------- rule 4, skip_onsite
+
+def test_needs_on_site_check_gets_its_own_stage():
+    row = sheet_row(**{"Place ID": "PP-1", "Verification Result": "Needs on-site check"})
+    stage, priority, _, reason = classify(row)
+    assert (stage, priority) == ("skip_onsite", "")
+    assert "Needs on-site check" in reason
+
+
+def test_skip_onsite_wins_over_the_public_car_park_gap():
+    row = sheet_row(**{"Place ID": "PP-1", "Verification Result": "Needs on-site check",
+                       "Place Category": "Council car park",
+                       "Can Park? (Yes/No/Conditional)": "Yes", "Who Can Park": "Unknown"})
+    assert stage_of(row) == "skip_onsite"
+
+
+# ---------------------------------------------------------------- rule 5, skip_done
+
+def test_a_finished_row_is_skipped():
+    row = sheet_row(**{"Place ID": "PP-1", "Verification Result": "Confirmed",
+                       "Who Can Park": "Customers only", "Cost Type": "Free"})
+    stage, priority, _, reason = classify(row)
+    assert (stage, priority) == ("skip_done", "")
+    assert "Confirmed" in reason
+
+
+def test_a_finished_customer_venue_with_a_gap_is_still_skipped():
+    """Priority 2 is only for public car parks. A shop with an Unknown cost
+    and a filled result stays done."""
+    row = sheet_row(**{"Place ID": "PP-1", "Verification Result": "Confirmed, details not published",
+                       "Place Category": "Supermarket - large format",
+                       "Can Park? (Yes/No/Conditional)": "Conditional", "Cost Type": "Unknown"})
+    assert stage_of(row) == "skip_done"
+
+
+def test_a_finished_public_car_park_with_no_gap_is_skipped():
+    row = sheet_row(**{"Place ID": "PP-1", "Verification Result": "Confirmed",
+                       "Place Category": "Council car park",
+                       "Can Park? (Yes/No/Conditional)": "Yes",
+                       "Who Can Park": "Anyone (paid)", "Cost Type": "Paid"})
+    assert stage_of(row) == "skip_done"
+
+
+# ---------------------------------------------------------------- rule 6, priority 2
+
+def test_a_public_car_park_missing_who_can_park_is_routed():
+    row = sheet_row(**{"Place ID": "PP-1", "Verification Result": "Confirmed",
+                       "Place Category": "Council car park",
+                       "Can Park? (Yes/No/Conditional)": "Yes",
+                       "Who Can Park": "Unknown", "Cost Type": "Paid"})
+    stage, priority, _, reason = classify(row)
+    assert (stage, priority) == ("grok", "2")
+    assert "public car park with no Who Can Park or Cost Type" in reason
+
+
+def test_a_public_car_park_missing_cost_type_is_routed():
+    row = sheet_row(**{"Place ID": "PP-1", "Verification Result": "Confirmed",
+                       "Place Category": "Private / operator car park",
+                       "Can Park? (Yes/No/Conditional)": "Conditional",
+                       "Who Can Park": "Anyone (paid)", "Cost Type": "Unknown"})
+    assert classify(row)[:2] == ("grok", "2")
+
+
+def test_a_car_park_named_only_in_the_type_column_counts():
+    row = sheet_row(**{"Place ID": "PP-1", "Verification Result": "Confirmed",
+                       "Type (as captured)": "Public car park",
+                       "Can Park? (Yes/No/Conditional)": "Yes", "Cost Type": "Unknown"})
+    assert classify(row)[:2] == ("grok", "2")
+
+
+def test_not_published_counts_as_a_gap_like_readiness_says():
+    row = sheet_row(**{"Place ID": "PP-1", "Verification Result": "Confirmed",
+                       "Place Category": "Council car park",
+                       "Can Park? (Yes/No/Conditional)": "Yes",
+                       "Who Can Park": "Not published", "Cost Type": "Paid"})
+    assert classify(row)[1] == "2"
+
+
+def test_can_park_no_is_not_routed_by_priority_2():
+    row = sheet_row(**{"Place ID": "PP-1", "Verification Result": "Confirmed",
+                       "Place Category": "Council car park",
+                       "Can Park? (Yes/No/Conditional)": "No", "Cost Type": "Unknown"})
+    assert stage_of(row) == "skip_done"
+
+
+# ---------------------------------------------------------------- rule 7, priority 1
+
+def test_a_blank_verification_result_is_routed_at_priority_1():
+    row = sheet_row(**{"Place ID": "PP-1", "Verification Result": "",
+                       "Place Category": "Supermarket - large format",
+                       "Location Name": "Tesco Hackney"})
+    stage, priority, _, reason = classify(row)
+    assert (stage, priority) == ("default", "1")
+    assert "Verification Result is blank" in reason
+
+
+def test_a_blank_result_on_a_public_car_park_goes_to_grok():
+    row = sheet_row(**{"Place ID": "PP-1", "Verification Result": "",
+                       "Place Category": "Private / operator car park"})
+    assert classify(row)[:2] == ("grok", "1")
+
+
+def test_whitespace_only_verification_result_counts_as_blank():
+    row = sheet_row(**{"Place ID": "PP-1", "Verification Result": "   "})
+    assert classify(row)[1] == "1"
+
+
+# ---------------------------------------------------------------- stage choice
+
+def test_a_registered_fetcher_wins_over_grok():
+    row = sheet_row(**{"Place ID": "PP-1", "Verification Result": "",
+                       "Place Category": "Council car park",
+                       "Operator": "Bromley Council"})
+    stage, _, key, reason = classify(row, fetchers={"bromley council": object()})
+    assert stage == "fetcher:bromley council"
+    assert key == "bromley council"
+    assert "fetcher for bromley council" in reason
+
+
+def test_a_registered_fetcher_wins_over_default():
+    row = sheet_row(**{"Place ID": "PP-1", "Verification Result": "",
+                       "Location Name": "Tesco Hackney", "Brand": "Tesco"})
+    assert stage_of(row, fetchers={"tesco": object()}) == "fetcher:tesco"
+
+
+def test_no_fetcher_is_registered_yet():
+    assert route.FETCHERS == {}
+
+
+def test_a_customer_venue_goes_to_default():
+    row = sheet_row(**{"Place ID": "PP-1", "Verification Result": "",
+                       "Place Category": "Gym / leisure centre", "Location Name": "PureGym Bow"})
+    assert stage_of(row) == "default"
+
+
+# ---------------------------------------------------------------- source key
+
+def test_the_operator_is_the_first_choice():
+    row = sheet_row(**{"Place ID": "PP-1", "Operator": "Euro Car Parks",
+                       "Source URLs (primary first)": "https://www.tesco.com/x",
+                       "Location Name": "Tesco Hackney"})
+    assert route.source_key(row) == "euro car parks"
+
+
+def test_a_placeholder_operator_is_not_a_key():
+    for value in ("Not published", "Not applicable", "Unknown", "", "   "):
+        row = sheet_row(**{"Place ID": "PP-1", "Operator": value,
+                           "Source URLs (primary first)": "https://ncp.co.uk/car-park"})
+        assert route.source_key(row) == "ncp.co.uk", value
+
+
+def test_the_first_source_url_domain_is_the_second_choice():
+    row = sheet_row(**{"Place ID": "PP-1", "Location Name": "Tesco Hackney",
+                       "Source URLs (primary first)":
+                           "https://www.bromley.gov.uk/parking; https://ncp.co.uk/x"})
+    assert route.source_key(row) == "bromley.gov.uk"
+
+
+def test_a_non_http_source_url_is_ignored():
+    row = sheet_row(**{"Place ID": "PP-1", "Location Name": "Odeon Streatham",
+                       "Source URLs (primary first)": "not a url; https://odeon.co.uk/x"})
+    assert route.source_key(row) == "odeon.co.uk"
+
+
+def test_the_brand_from_the_name_is_the_last_choice():
+    row = sheet_row(**{"Place ID": "PP-1", "Location Name": "Sainsbury's Hornsey",
+                       "Brand": "Sainsbury's"})
+    assert route.source_key(row) == "sainsburys"
+
+
+def test_a_row_with_no_key_at_all_reports_an_empty_key():
+    row = sheet_row(**{"Place ID": "PP-1", "Verification Result": ""})
+    assert classify(row)[2] == ""
+
+
+def test_first_source_domain_drops_the_www_prefix():
+    assert route.first_source_domain("https://www.harrow.gov.uk/parking") == "harrow.gov.uk"
+    assert route.first_source_domain("") == ""
+
+
+# ---------------------------------------------------------------- one stage per row
+
+def test_every_row_gets_exactly_one_stage():
+    rows = [
+        sheet_row(**{"Place ID": "PP-1", "Verified By": "Tharidu"}),
+        sheet_row(**{"Place ID": "PP-2", "Verification Result": ""}),
+        sheet_row(**{"Place ID": "PP-3", "Verification Result": "Needs on-site check"}),
+        sheet_row(**{"Place ID": "PP-4", "Verification Result": "Confirmed"}),
+        sheet_row(**{"Place ID": "PP-5", "Verification Result": ""}),
+    ]
+    records = route.route_rows(rows, {"PP-9"}, {"PP-5": "PP-2"})
+    assert len(records) == len(rows)
+    assert [record["Place ID"] for record in records] == ["PP-1", "PP-2", "PP-3", "PP-4", "PP-5"]
+    assert [record["stage"] for record in records] == [
+        "skip_named", "default", "skip_onsite", "skip_done", "skip_duplicate"]
+
+
+# ---------------------------------------------------------------- counts
+
+def test_counts_cover_stages_priorities_keys_and_stations():
+    rows = [
+        sheet_row(**{"Place ID": "PP-1", "Verification Result": "",
+                     "Place Category": "Council car park", "Operator": "Bromley Council"}),
+        sheet_row(**{"Place ID": "PP-2", "Verification Result": "",
+                     "Place Category": "Council car park", "Operator": "Bromley Council"}),
+        sheet_row(**{"Place ID": "PP-3", "Verification Result": "",
+                     "Place Category": "Station", "Location Name": "Bromley South Station"}),
+        sheet_row(**{"Place ID": "PP-4", "Verification Result": "Confirmed",
+                     "Who Can Park": "Customers only", "Cost Type": "Free"}),
+        sheet_row(**{"Place ID": "PP-5", "Verification Result": ""}),
+    ]
+    report = route.counts(route.route_rows(rows, set(), {}), rows)
+    assert report["per_stage"] == {"grok": 2, "default": 2, "skip_done": 1}
+    assert report["per_priority"] == {"1": 4, "skipped": 1}
+    assert report["grok_keys"].most_common(1) == [("bromley council", 2)]
+    assert report["no_key"] == {"default": 1}
+    assert report["stations_routed"] == 1
+    assert report["routed"] == 4
+
+
+# ---------------------------------------------------------------- end to end
+
+@pytest.fixture
+def conn(tmp_path):
+    connection = db.connect(tmp_path / "test.sqlite")
+    db.import_sheet_csv(connection, FIXTURE)
+    return connection
+
+
+def test_route_writes_the_table_and_the_csv(conn, tmp_path):
+    out = tmp_path / "route_out"
+    assert route.main(["--db", str(tmp_path / "test.sqlite"), "--out", str(out)]) == 0
+    with open(out / "routing.csv", newline="", encoding="utf-8") as stream:
+        records = list(csv.DictReader(stream))
+    assert [record["Place ID"] for record in records] == [
+        "PP-000001", "PP-000002", "PP-000003", "PP-000004"]
+    assert {record["Place ID"]: record["stage"] for record in records} == {
+        "PP-000001": "skip_done",
+        "PP-000002": "skip_onsite",
+        "PP-000003": "skip_named",
+        "PP-000004": "default",
+    }
+    assert list(records[0]) == route.HEADERS
+    stored = {row["place_id"]: row["stage"] for row in
+              conn.execute("SELECT place_id, stage FROM routing")}
+    assert stored == {record["Place ID"]: record["stage"] for record in records}
+
+
+def test_route_skips_a_place_id_the_newest_import_dropped(tmp_path):
+    connection = db.connect(tmp_path / "drop.sqlite")
+    db.import_sheet_csv(connection, FIXTURE)
+    headers, rows = [], []
+    with open(FIXTURE, newline="", encoding="utf-8-sig") as stream:
+        reader = csv.DictReader(stream)
+        headers = list(reader.fieldnames)
+        rows = [row for row in reader if row["Place ID"] != "PP-000004"]
+    variant = tmp_path / "variant.csv"
+    with open(variant, "w", newline="", encoding="utf-8") as stream:
+        writer = csv.DictWriter(stream, fieldnames=headers)
+        writer.writeheader()
+        writer.writerows(rows)
+    db.import_sheet_csv(connection, variant)
+    route.main(["--db", str(tmp_path / "drop.sqlite"), "--out", str(tmp_path / "out")])
+    stored = {row["place_id"]: row["stage"] for row in
+              connection.execute("SELECT place_id, stage FROM routing")}
+    assert stored["PP-000004"] == "skip_missing"
+    assert len(stored) == 4
+
+
+def test_route_marks_a_database_duplicate(tmp_path):
+    connection = db.connect(tmp_path / "dupe.sqlite")
+    db.import_sheet_csv(connection, FIXTURE)
+    connection.execute("UPDATE places SET duplicate_of = 'PP-000001' WHERE place_id = 'PP-000004'")
+    connection.commit()
+    route.main(["--db", str(tmp_path / "dupe.sqlite"), "--out", str(tmp_path / "out")])
+    stored = {row["place_id"]: row["stage"] for row in
+              connection.execute("SELECT place_id, stage FROM routing")}
+    assert stored["PP-000004"] == "skip_duplicate"
+
+
+def test_route_refuses_an_empty_database(tmp_path):
+    with pytest.raises(SystemExit, match="db-import"):
+        route.main(["--db", str(tmp_path / "empty.sqlite"), "--out", str(tmp_path / "out")])
+
+
+def test_route_refuses_to_overwrite_an_output_folder(conn, tmp_path):
+    out = tmp_path / "taken"
+    out.mkdir()
+    with pytest.raises(FileExistsError):
+        route.main(["--db", str(tmp_path / "test.sqlite"), "--out", str(out)])
+
+
+def test_two_route_runs_keep_both_rows_per_place_id(conn, tmp_path):
+    route.main(["--db", str(tmp_path / "test.sqlite"), "--out", str(tmp_path / "one")])
+    route.main(["--db", str(tmp_path / "test.sqlite"), "--out", str(tmp_path / "two")])
+    runs = {row["run_id"] for row in conn.execute("SELECT DISTINCT run_id FROM routing")}
+    assert len(runs) in (1, 2)
+    assert conn.execute("SELECT COUNT(*) AS n FROM routing").fetchone()["n"] == 4 * len(runs)

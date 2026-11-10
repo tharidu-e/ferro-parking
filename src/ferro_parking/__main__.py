@@ -29,6 +29,8 @@ Commands:
   db-import  Load a sheet export into the local SQLite store (no sheet access)
   db-export  Write the store back out as a sheet CSV in sheet column order
   db-rebuild  Recompute the derived places and parking tables from raw
+  route  Give every row one research stage, write the routing table and
+          data/runs/<date>/route/routing.csv (never writes to the sheet)
   tranche1  Read-only: filter and score discovery's tranche 1 missing
           places, ready for review before writing (never writes to the sheet)
   tranche1-write  Dry run: select, de-duplicate and plan the tranche 1
@@ -78,6 +80,9 @@ def main():
     if cmd == "readiness":
         from .readiness import main as readiness_main
         return readiness_main(argv)
+    if cmd == "route":
+        from .route import main as route_main
+        return route_main(argv)
     if cmd == "db-import":
         from .db import import_main
         return import_main(argv)

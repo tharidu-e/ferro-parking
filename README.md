@@ -225,3 +225,37 @@ published.
 
 The `db-import` output also prints the next unused Place ID, which later phases
 use when they append a new place.
+
+## Router (Phase 2 of the db-router work)
+
+```bash
+python -m ferro_parking route
+```
+
+`route` reads the database and gives every Place ID exactly one stage. It writes
+the `routing` table, writes `data/runs/<date>/route/routing.csv`, and prints the
+counts. It never reads or writes the sheet.
+
+Decision order, first match wins:
+
+1. `skip_named`: Verified By starts with "Tharidu". Hand-checked rows are never
+   touched. Agent labels such as "Policy script" or "Grok (discovery)" are not
+   people, so those rows stay routable.
+2. `skip_missing`: the newest import no longer lists this Place ID.
+3. `skip_duplicate`: `duplicate_of` is set.
+4. `skip_onsite`: Verification Result is "Needs on-site check".
+5. `skip_done`: Verification Result is filled, unless rule 6 applies.
+6. Priority 2: a public car park that says you can park, but does not say who
+   can park or what it costs.
+7. Priority 1: Verification Result is blank.
+
+A routed row then gets its stage from its derived source key. The key is the
+Operator, else the domain of the first Source URL, else the brand parsed from
+the name. A key with a registered fetcher gives `fetcher:<key>`. A public car
+park with no fetcher gives `grok`. Everything else gives `default`.
+
+No fetcher is registered yet, so the fetcher stage is empty. The key is still
+computed and reported, because Phase 5 picks its first fetchers from those
+counts. "Known" comes from `readiness.known`, so blank, Unknown and Not
+published all read as not known. The reason text comes from
+`triage_blanks.bucket`.
