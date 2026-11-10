@@ -33,6 +33,13 @@ Commands:
           data/runs/<date>/route/routing.csv (never writes to the sheet)
   db-apply  Apply a JSON lines plan file to the database (dry run unless
           --apply; any refusal blocks the whole plan)
+  osm-places  Read-only: propose new car park records from an OSM extract
+          (identity only, never a parking answer; writes a db-create plan)
+  db-create  Create new records in the database from a db-create plan (dry
+          run unless --apply; a source already created is skipped, not
+          refused, so a repeated run adds no duplicate)
+  db-create-undo  Deactivate the records one db-create run made (dry run
+          unless --apply; never deletes a row, never frees a Place ID)
   db-undo  Undo one run of applied database changes (dry run unless --apply)
   grok-import  Turn an export of the bot's results tab into a plan file
   default-fill  Dry run: the category default (R1, R10) as a plan file, for
@@ -120,6 +127,15 @@ def main():
     if cmd == "db-apply":
         from .plan import apply_main
         return apply_main(argv)
+    if cmd == "osm-places":
+        from .osm_places import main as osm_places_main
+        return osm_places_main(argv)
+    if cmd == "db-create":
+        from .create import main as create_main
+        return create_main(argv)
+    if cmd == "db-create-undo":
+        from .create import undo_main as create_undo_main
+        return create_undo_main(argv)
     if cmd == "db-undo":
         from .plan import undo_main
         return undo_main(argv)
