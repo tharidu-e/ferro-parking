@@ -42,6 +42,9 @@ Commands:
   fetch-fill  Dry run: run one registered fetcher over its routed rows and
           emit a plan file (station, better.org.uk, thegymgroup.com,
           puregym.com; marksandspencer.com caches pages only)
+  publish  Dry run applied database changes for publication; supports pilot filters
+  grok-queue  Export the latest Grok stage locally in the queue tab layout
+  research-report  Summarize research plans, refusals and ten examples per reader
   probe  Fetch a few branch pages for one source key and report whether they
           state parking (one request per second per domain, no sheet access)
   tranche1  Read-only: filter and score discovery's tranche 1 missing
@@ -96,6 +99,9 @@ def main():
     if cmd == "research-report":
         from .research_report import main as research_report_main
         return research_report_main(argv)
+    if cmd == "publish":
+        from .publish import main as publish_main
+        return publish_main(argv)
     if cmd == "grok-queue":
         from .grok_queue import main as queue_main
         return queue_main(argv)

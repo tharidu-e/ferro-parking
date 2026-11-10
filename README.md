@@ -264,7 +264,7 @@ The brand fallback drops trailing car park wording, so "Sainsbury's Car Park"
 keys as `sainsburys` and not as `sainsburys car`. A row left with no usable key
 is grouped as `unbranded`, and `unbranded` never matches a fetcher.
 
-No fetcher is registered yet, so the fetcher stage is empty. The key is still
+The router and fetch-fill share the registered station, Better, Gym Group and PureGym readers. The key is still
 computed and reported, because Phase 5 picks its first fetchers from those
 counts. "Known" comes from `readiness.known`, so blank, Unknown and Not
 published all read as not known. The reason text comes from
@@ -437,16 +437,24 @@ nothing but the page cache. The report counts rows attempted, pages fetched,
 plan lines, silent pages, blocked pages, unresolved names and rows held for a
 person. It also saves ten examples, each with its quote and URL.
 
-The station fetcher resolves the National Rail page from the station name. It
-strips the sheet's own wording, such as "Station", "Car Park" and the entrance
-after a dash. A page that answers 404 is reported as unresolved. Nothing is guessed. A stated number of parking spaces sets Can Park? Yes and puts the count in
-Notes. The exact words "No parking spaces" set Can Park? No with that quote. A
+The station fetcher uses the complete public station list used by National
+Rail's finder. The list is fetched once and cached. It matches a cleaned row
+name exactly to an official list name and uses the finder's own slug rule.
+Ambiguous and unmatched names, and pages that return 404, are labelled
+"not National Rail" and routed to Grok. This is a research label, not proof
+that the location is outside National Rail. A stated number of parking spaces sets Can Park? Yes and puts the count in
+Notes. The exact words "No parking spaces" set Can Park? No only when captured
+charges are blank, Tariff Detail is blank or Not published, and the fresh
+OSM match shows no car park within 50 m. Missing OSM coverage holds the row.
+Conflicts produce a Review Flag and go to Grok without changing the parking
+answer. Zero spaces never produces Yes. National Rail values carry Brand
+National Rail. A
 statement about accessible bays alone writes nothing. Operator is written only
 when the page names it. Tariff, Free and Max Stay are never written from a
 station page.
 
 The venue fetcher serves better.org.uk, thegymgroup.com and puregym.com. It
-sets Can Park? Conditional and Who Can Park Customers only. Cost Type reads Free only for a page that says parking is free. Sometimes the page states a charge this reader cannot
+sets Can Park? Conditional and Who Can Park Customers only. Cost Type reads Free only for a positive free-parking statement with no charge mentioned elsewhere on the page. Negated statements never establish free parking. Sometimes the page states a charge this reader cannot
 write in the tariff template. Cost Type then reads Unknown, the wording goes in
 Notes, and the row gets a Review Flag. Max Stay is written only for a page that states a maximum stay. A free period
 is not a maximum stay, because the driver can pay to stay longer. Operator and the PCN amount come
@@ -458,3 +466,54 @@ gate to read, and no value is ever written from them.
 
 A row the fetcher cannot answer stays unanswered. The next route run sends it
 on by the ordinary rules.
+
+
+## Category metadata, research reports and Grok queue
+
+A plan whose only actual changes are Place Category and/or Brand does not
+need a Decision Reason route label. An unchanged Decision Reason can retain
+its existing typography. Changed text still passes the normal checks.
+category-plan never adds or changes Decision Reason.
+
+```bash
+python -m ferro_parking grok-queue --out NEW_DIRECTORY
+python -m ferro_parking research-report --runs RESEARCH_RUN_DIRECTORY --out NEW_DIRECTORY
+```
+
+The queue is a local CSV in the Grok Queue tab's exact column order. Owner
+payment columns are blank. Row is a reference from the newest import, never
+an update key. Priority is 1 for a name containing car park or a council or
+operator category, and 2 otherwise.
+
+The report runs db-apply checks without applying and reuses the independent
+second reading. It reports each reader's attempts, plan lines, parking and
+cost values, holds and refusals. It includes ten examples per reader and
+category default. A default with no proposal has no invented source quote.
+
+## Phase 7: publish
+
+```bash
+python -m ferro_parking publish --limit 10
+python -m ferro_parking publish --place-ids PP-000001 PP-000002
+# Only after owner approval of the saved plan:
+python -m ferro_parking publish --limit 10 --approved-plan PATH/plan.json --apply
+```
+
+Publish defaults to a dry run. It considers applied database changes only.
+It compares each selected owned cell with the last published value, or its
+imported value before the first publish. Drift blocks the whole publication.
+The pilot filters select Place IDs before checking or publishing their cells.
+
+Every run creates plan.json, dry_run.csv, undo.json and checks.json in a new
+folder. Six controls cover identity, allowed columns, locks, drift, validation
+and the existing independent second reading. Finished rows and reviewers the
+existing writer protects remain refused, including category-only sheet edits.
+The metadata exception never removes the writer's row locks.
+
+Apply requires a previously reviewed plan.json and an exact fresh match of
+its values and undo values. Place IDs are resolved again, so saved row numbers
+are never trusted. The existing guarded writer checks target cells again,
+writes Verification Result last and reads back. An independent full formula
+export compare must show zero mismatches before the published baseline is
+recorded. Failure leaves the undo file and compare report for investigation.
+No insert, append, delete or reorder operation exists in publish.

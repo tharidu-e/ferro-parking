@@ -812,3 +812,8 @@ def test_category_context_can_restate_a_reason_but_not_change_it(conn):
     conn.execute("UPDATE raw SET json = json_set(json, '$.\"Decision Reason\"', ?) WHERE place_id = ?", ('Old \u2013 reason', BLANK_ROW))
     conn.commit()
     assert reasons(conn, [line(column='Brand', new_value='Pret'), line(column='Decision Reason', new_value='Old \u2013 reason')]) == []
+
+
+def test_category_exception_never_exempts_a_parking_change(conn):
+    failures = reasons(conn, [line(column='Brand', new_value='Pret'), line(column='Can Park? (Yes/No/Conditional)', new_value='No')])
+    assert any('Decision Reason' in reason for reason in failures)

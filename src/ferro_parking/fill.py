@@ -532,7 +532,8 @@ def _apply_write(service, headers, plan, undo_by_row, apply):
         sheets.write_cells(service, headers, cells)
     readback = sheets.read_cells(service, [(r, c) for r, c, _ in cells], headers)
     mismatches = [(r, c, v, readback.get((r, c)))
-                  for r, c, v in cells if str(readback.get((r, c))) != str(v)]
+                  for r, c, v in cells
+                  if str(sheets._cell_value(c, readback.get((r, c)))) != str(sheets._cell_value(c, v))]
     print(f"Wrote {len(cells)} cells across {len(to_write)} rows, {len(aborted)} aborted.")
     for r, c, wanted, got in mismatches:
         print(f"Mismatch row {r} column {c!r}: wrote {wanted!r}, read back {got!r}")
@@ -576,7 +577,8 @@ def _apply_undo(service, headers, undo_entries, apply):
         sheets.write_cells(service, headers, cells)
     readback = sheets.read_cells(service, [(r, c) for r, c, _ in cells], headers)
     mismatches = [(r, c, v, readback.get((r, c)))
-                  for r, c, v in cells if str(readback.get((r, c))) != str(v)]
+                  for r, c, v in cells
+                  if str(sheets._cell_value(c, readback.get((r, c)))) != str(sheets._cell_value(c, v))]
     print(f"Restored {len(cells)} cells across {len(to_restore)} rows, {len(aborted)} aborted.")
     for r, c, wanted, got in mismatches:
         print(f"Mismatch row {r} column {c!r}: wrote {wanted!r}, read back {got!r}")
