@@ -32,7 +32,7 @@ from collections import Counter
 from datetime import datetime, timezone
 from urllib.parse import urlsplit
 
-from . import db, discovery, readiness
+from . import car_park_evidence, db, discovery, readiness
 from .discover import source_urls
 from . import fill
 from .fill import CAN_PARK, LOCATION_NAME, PLACE_ID, SOURCE_URLS, VERIFICATION_RESULT, VERIFIED_BY
@@ -43,6 +43,12 @@ from .triage_blanks import bucket
 ON_SITE = "Needs on-site check"
 PUBLIC_CAR_PARK_CATEGORIES = ("Council car park", "Private / operator car park")
 STATION_CATEGORY = "Station"
+
+# A row named "Kings Mall Car Park" or "Westfield London - Car Parks A, B & C"
+# is a car park whatever its Place Category says, and 181 such rows carry a
+# blank category. "car parks" is listed on its own because contains_word
+# matches whole words, and the plural is one.
+CAR_PARK_NAME_WORDS = ("car park", "car parks", "parking")
 
 # brand_key falls back to the first two words of the name, which on a car park
 # row is the car park's own wording rather than a brand: "Beckton Gateway Car
@@ -69,12 +75,37 @@ def categories():
 
 # ---------------------------------------------------------------- row reading
 
+def name_says_car_park(row):
+    """The Location Name itself says this place is a car park."""
+    name = norm(row.get(LOCATION_NAME, ""))
+    return any(contains_word(name, word) for word in CAR_PARK_NAME_WORDS)
+
+
 def is_public_car_park(row):
-    """The row is itself a car park open to the public, by the brief's test:
-    one of the two car park categories, or a Type that says car park."""
+    """The row is itself a car park open to the public: one of the two car park
+    categories, or a Type that says car park. This is the test the priority 2
+    rule uses, and it does not read the name."""
     if (row.get("Place Category") or "").strip() in PUBLIC_CAR_PARK_CATEGORIES:
         return True
     return contains_word(norm(row.get("Type (as captured)", "")), "car park")
+
+
+def is_public_car_park_for_stage(row):
+    """The same test plus the name, used only to choose a stage. A row named
+    "Kings Mall Car Park" belongs with the car parks whatever its category
+    says. The name never decides whether a row is routed at all: a finished
+    row stays finished."""
+    return is_public_car_park(row) or name_says_car_park(row)
+
+
+def car_park_by_name_only(row):
+    """True when only the name says car park. These rows moved to grok when the
+    name test was added, so the report shows examples of them."""
+    if (row.get("Place Category") or "").strip() in PUBLIC_CAR_PARK_CATEGORIES:
+        return False
+    if contains_word(norm(row.get("Type (as captured)", "")), "car park"):
+        return False
+    return name_says_car_park(row)
 
 
 def is_station(row):
@@ -125,9 +156,10 @@ def has_parking_gap(row):
 
 # ---------------------------------------------------------------- the decision
 
-def classify(row, missing, duplicates, fetchers=None):
+def classify(row, missing, duplicates, fetchers=None, osm_rows=None, conn=None):
     """(stage, priority, source_key, reason) for one row. Exactly one stage."""
     fetchers = FETCHERS if fetchers is None else fetchers
+    osm_rows = osm_rows or {}
     place_id = (row.get(PLACE_ID) or "").strip()
     verified_by = (row.get(VERIFIED_BY) or "").strip()
     result = (row.get(VERIFICATION_RESULT) or "").strip()
@@ -141,8 +173,8 @@ def classify(row, missing, duplicates, fetchers=None):
     if result == ON_SITE:
         return "skip_onsite", "", "", "Verification Result is Needs on-site check"
 
-    public = is_public_car_park(row)
-    gap = public and row.get(CAN_PARK) in ("Yes", "Conditional") and has_parking_gap(row)
+    gap = (is_public_car_park(row) and row.get(CAN_PARK) in ("Yes", "Conditional")
+           and has_parking_gap(row))
 
     if result and not gap:
         return "skip_done", "", "", f"Verification Result is {result!r}"
@@ -158,16 +190,22 @@ def classify(row, missing, duplicates, fetchers=None):
         return f"fetcher:{key}", priority, key, f"{why}; fetcher for {key}"
     if is_station(row):
         return "station", priority, key, f"{why}; station, no fetcher ({bucket_reason})"
-    if public:
+    if is_public_car_park_for_stage(row):
         return "grok", priority, key, f"{why}; public car park, no fetcher ({bucket_reason})"
-    return "default", priority, key, f"{why}; customer venue ({bucket_reason})"
+    evidence, _, _ = car_park_evidence.evidence_for(row, osm_rows.get(place_id), conn)
+    if evidence is None:
+        return ("no_evidence", priority, key,
+                f"{why}; no evidence that this venue has a car park, so no category "
+                f"default and no bot queue ({bucket_reason})")
+    return "default", priority, key, f"{why}; customer venue with {evidence} ({bucket_reason})"
 
 
-def route_rows(rows, missing, duplicates, fetchers=None):
+def route_rows(rows, missing, duplicates, fetchers=None, osm_rows=None, conn=None):
     """One routing record per row, in the order given."""
     out = []
     for row in rows:
-        stage, priority, key, reason = classify(row, missing, duplicates, fetchers)
+        stage, priority, key, reason = classify(row, missing, duplicates, fetchers,
+                                                 osm_rows, conn)
         out.append({
             "Place ID": (row.get(PLACE_ID) or "").strip(),
             "name": row.get(LOCATION_NAME, ""),
@@ -192,7 +230,15 @@ def counts(records, rows):
         return Counter(record["source key"] for record in routed
                        if record["stage"] == stage and record["source key"] != UNBRANDED)
 
+    movers = [{"Place ID": record["Place ID"], "name": by_place_id[record["Place ID"]].get(LOCATION_NAME, ""),
+                "stage": record["stage"],
+                "Place Category": by_place_id[record["Place ID"]].get("Place Category", "") or "(blank)",
+                "Type (as captured)": by_place_id[record["Place ID"]].get("Type (as captured)", "") or "(blank)"}
+               for record in routed
+               if car_park_by_name_only(by_place_id[record["Place ID"]])]
     return {
+        "name_only_car_parks": movers,
+        "no_evidence_keys": keys_for("no_evidence"),
         "per_stage": Counter(record["stage"] for record in records),
         "per_priority": Counter(record["priority"] or "skipped" for record in records),
         "grok_keys": keys_for("grok"),
@@ -246,7 +292,7 @@ def print_report(report):
     for priority, count in sorted(report["per_priority"].items()):
         print(f"  {priority}: {count}")
     for title, key in (("station", "station_keys"), ("grok", "grok_keys"),
-                       ("default", "default_keys")):
+                       ("default", "default_keys"), ("no_evidence", "no_evidence_keys")):
         print(f"\nTop 30 source keys within {title}")
         for name, count in report[key].most_common(30):
             print(f"  {name}: {count}")
@@ -260,20 +306,32 @@ def print_report(report):
     print(f"\nRouted rows in the Station category: {report['stations_routed']}")
     print(f"Routed rows on the station stage: {report['station_stage']}")
 
+    movers = report["name_only_car_parks"]
+    print(f"\nRouted rows that are car parks by name alone: {len(movers)}")
+    print("Their Place Category and Type do not say car park, so only the name moves them.")
+    for mover in movers[:20]:
+        print(f"  {mover['Place ID']} -> {mover['stage']}: {mover['name'][:52]!r} "
+              f"(category {mover['Place Category']}, type {mover['Type (as captured)']})")
+    if len(movers) > 20:
+        print(f"  and {len(movers) - 20} more, all in routing.csv")
+
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Assign every row one research stage.")
     parser.add_argument("--db", default=str(db.DB_PATH))
+    parser.add_argument("--osm-results", default=None)
     parser.add_argument("--out", help="Output directory. Defaults to a new run folder.")
     args = parser.parse_args(argv)
 
+    from . import category_default
     conn = db.connect(args.db)
     headers, rows = db.current_rows(conn)
     if not rows:
         raise SystemExit("Nothing imported yet. Run db-import first.")
     missing = db.missing_place_ids(conn)
     duplicates = db.duplicate_of_map(conn)
-    records = route_rows(rows, missing, duplicates)
+    osm_rows, osm_source = category_default.load_osm_rows(args.osm_results)
+    records = route_rows(rows, missing, duplicates, osm_rows=osm_rows, conn=conn)
 
     run_id = "route-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     write_routing(conn, run_id, records)
@@ -288,6 +346,9 @@ def main(argv=None):
         writer.writeheader()
         writer.writerows(proposals)
 
+    print(f"OSM results used: {osm_source or 'none found'}")
+    print(f"Cached pages in the database: "
+          f"{conn.execute('SELECT COUNT(*) AS n FROM pages').fetchone()['n']}\n")
     print_report(counts(records, rows))
     print(f"\n{len(proposals)} rows need a person to look at them: {out_dir / 'proposals.csv'}")
     print(f"Run {run_id}. Output: {out_dir / 'routing.csv'}")

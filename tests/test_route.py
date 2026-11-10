@@ -75,7 +75,7 @@ def test_a_duplicate_row_is_skipped():
 
 def test_a_blank_duplicate_of_does_not_skip():
     row = sheet_row(**{"Place ID": "PP-2", "Verification Result": ""})
-    assert stage_of(row, duplicates={"PP-2": ""}) == "default"
+    assert stage_of(row, duplicates={"PP-2": ""}) == "no_evidence"
 
 
 def test_skip_duplicate_wins_over_needs_on_site_check():
@@ -175,7 +175,8 @@ def test_a_blank_verification_result_is_routed_at_priority_1():
                        "Place Category": "Supermarket - large format",
                        "Location Name": "Tesco Hackney"})
     stage, priority, _, reason = classify(row)
-    assert (stage, priority) == ("default", "1")
+    assert priority == "1"
+    assert stage in ("default", "no_evidence")
     assert "Verification Result is blank" in reason
 
 
@@ -212,10 +213,18 @@ def test_no_fetcher_is_registered_yet():
     assert route.FETCHERS == {}
 
 
-def test_a_customer_venue_goes_to_default():
+def test_a_customer_venue_with_car_park_evidence_goes_to_default():
     row = sheet_row(**{"Place ID": "PP-1", "Verification Result": "",
                        "Place Category": "Gym / leisure centre", "Location Name": "PureGym Bow"})
-    assert stage_of(row) == "default"
+    records = route.route_rows([row], set(), {}, osm_rows={
+        "PP-1": {"Car Park Distance (m)": "15", "OSM Raw Tags": "amenity=parking;access=customers"}})
+    assert records[0]["stage"] == "default"
+
+
+def test_a_customer_venue_without_car_park_evidence_waits():
+    row = sheet_row(**{"Place ID": "PP-1", "Verification Result": "",
+                       "Place Category": "Gym / leisure centre", "Location Name": "PureGym Bow"})
+    assert stage_of(row) == "no_evidence"
 
 
 # ---------------------------------------------------------------- station stage
@@ -237,7 +246,7 @@ def test_a_station_car_park_named_in_the_type_column_counts():
 def test_a_plain_station_type_without_car_park_wording_is_not_the_station_stage():
     row = sheet_row(**{"Place ID": "PP-1", "Verification Result": "",
                        "Type (as captured)": "Railway station", "Location Name": "Some Halt"})
-    assert stage_of(row) == "default"
+    assert stage_of(row) == "no_evidence"
 
 
 def test_the_station_stage_is_checked_before_grok():
@@ -371,7 +380,7 @@ def test_strip_key_noise_leaves_an_ordinary_brand_alone():
 
 def test_unbranded_never_matches_a_fetcher():
     row = sheet_row(**{"Place ID": "PP-1", "Verification Result": ""})
-    assert stage_of(row, fetchers={"unbranded": object()}) == "default"
+    assert stage_of(row, fetchers={"unbranded": object()}) == "no_evidence"
 
 
 def test_unbranded_rows_are_counted_apart_from_real_keys():
@@ -382,8 +391,8 @@ def test_unbranded_rows_are_counted_apart_from_real_keys():
         sheet_row(**{"Place ID": "PP-3", "Verification Result": "", "Location Name": "Tesco Bow"}),
     ]
     report = route.counts(route.route_rows(rows, set(), {}), rows)
-    assert report["no_key"] == {"default": 1, "grok": 1}
-    assert report["default_keys"].most_common() == [("tesco bow", 1)]
+    assert report["no_key"] == {"no_evidence": 1, "grok": 1}
+    assert report["no_evidence_keys"].most_common() == [("tesco bow", 1)]
     assert report["grok_keys"] == {}
 
 
@@ -436,7 +445,7 @@ def test_every_row_gets_exactly_one_stage():
     assert len(records) == len(rows)
     assert [record["Place ID"] for record in records] == ["PP-1", "PP-2", "PP-3", "PP-4", "PP-5"]
     assert [record["stage"] for record in records] == [
-        "skip_named", "default", "skip_onsite", "skip_done", "skip_duplicate"]
+        "skip_named", "no_evidence", "skip_onsite", "skip_done", "skip_duplicate"]
 
 
 # ---------------------------------------------------------------- counts
@@ -454,11 +463,11 @@ def test_counts_cover_stages_priorities_keys_and_stations():
         sheet_row(**{"Place ID": "PP-5", "Verification Result": ""}),
     ]
     report = route.counts(route.route_rows(rows, set(), {}), rows)
-    assert report["per_stage"] == {"grok": 2, "station": 1, "default": 1, "skip_done": 1}
+    assert report["per_stage"] == {"grok": 2, "station": 1, "no_evidence": 1, "skip_done": 1}
     assert report["per_priority"] == {"1": 4, "skipped": 1}
     assert report["grok_keys"].most_common(1) == [("bromley council", 2)]
     assert report["station_keys"].most_common() == [("bromley south", 1)]
-    assert report["no_key"] == {"default": 1}
+    assert report["no_key"] == {"no_evidence": 1}
     assert report["stations_routed"] == 1
     assert report["routed"] == 4
 
@@ -483,7 +492,7 @@ def test_route_writes_the_table_and_the_csv(conn, tmp_path):
         "PP-000001": "skip_done",
         "PP-000002": "skip_onsite",
         "PP-000003": "skip_named",
-        "PP-000004": "default",
+        "PP-000004": "no_evidence",
     }
     assert list(records[0]) == route.HEADERS
     stored = {row["place_id"]: row["stage"] for row in
@@ -541,3 +550,143 @@ def test_two_route_runs_keep_both_rows_per_place_id(conn, tmp_path):
     runs = {row["run_id"] for row in conn.execute("SELECT DISTINCT run_id FROM routing")}
     assert len(runs) in (1, 2)
     assert conn.execute("SELECT COUNT(*) AS n FROM routing").fetchone()["n"] == 4 * len(runs)
+
+
+# ---------------------------------------------------------------- car parks by name
+
+def test_a_name_that_says_car_park_sends_the_row_to_grok():
+    row = sheet_row(**{"Place ID": "PP-1", "Verification Result": "",
+                       "Location Name": "Kings Mall Car Park",
+                       "Type (as captured)": "Retail / Shopping Centre"})
+    assert stage_of(row) == "grok"
+
+
+def test_the_plural_and_the_bare_word_both_count():
+    for name in ("Westfield London - Car Parks A, B & C", "Odeon Streatham Parking",
+                 "Exchange Ilford Car Park"):
+        row = sheet_row(**{"Place ID": "PP-1", "Verification Result": "",
+                           "Location Name": name,
+                           "Type (as captured)": "Retail / Shopping Centre"})
+        assert stage_of(row) == "grok", name
+
+
+def test_a_name_that_merely_contains_park_is_not_a_car_park():
+    for name in ("Finsbury Park Leisure Centre", "Battersea Park Cafe"):
+        row = sheet_row(**{"Place ID": "PP-1", "Verification Result": "",
+                           "Location Name": name, "Type (as captured)": "Leisure Centre"})
+        assert stage_of(row) != "grok", name
+
+
+def test_a_registered_fetcher_still_wins_over_the_name_test():
+    row = sheet_row(**{"Place ID": "PP-1", "Verification Result": "",
+                       "Location Name": "Kings Mall Car Park", "Operator": "NCP"})
+    assert stage_of(row, fetchers={"ncp": object()}) == "fetcher:ncp"
+
+
+def test_a_station_named_car_park_stays_on_the_station_stage():
+    row = sheet_row(**{"Place ID": "PP-1", "Verification Result": "",
+                       "Place Category": "Station", "Location Name": "Ealing Broadway Car Park"})
+    assert stage_of(row) == "station"
+
+
+def test_the_name_test_never_makes_a_finished_row_routed_again():
+    """Ruling 1 is for stage choice only. The priority 2 rule still reads the
+    category and the Type, never the name, so a finished row stays finished."""
+    row = sheet_row(**{"Place ID": "PP-1", "Verification Result": "Confirmed",
+                       "Location Name": "Kings Mall Car Park",
+                       "Can Park? (Yes/No/Conditional)": "Yes", "Who Can Park": "Unknown"})
+    assert stage_of(row) == "skip_done"
+
+
+def test_a_category_car_park_with_a_gap_is_still_priority_2():
+    row = sheet_row(**{"Place ID": "PP-1", "Verification Result": "Confirmed",
+                       "Place Category": "Council car park",
+                       "Can Park? (Yes/No/Conditional)": "Yes", "Who Can Park": "Unknown"})
+    assert classify(row)[:2] == ("grok", "2")
+
+
+def test_car_park_by_name_only_names_just_the_movers():
+    by_name = sheet_row(**{"Place ID": "PP-1", "Location Name": "Kings Mall Car Park",
+                           "Type (as captured)": "Retail / Shopping Centre"})
+    by_category = sheet_row(**{"Place ID": "PP-2", "Place Category": "Council car park",
+                               "Location Name": "Bromley Car Park"})
+    by_type = sheet_row(**{"Place ID": "PP-3", "Type (as captured)": "Car park",
+                           "Location Name": "Some Car Park"})
+    neither = sheet_row(**{"Place ID": "PP-4", "Location Name": "Tesco Bow"})
+    assert route.car_park_by_name_only(by_name) is True
+    assert route.car_park_by_name_only(by_category) is False
+    assert route.car_park_by_name_only(by_type) is False
+    assert route.car_park_by_name_only(neither) is False
+
+
+def test_the_report_lists_the_name_only_movers():
+    rows = [sheet_row(**{"Place ID": f"PP-{n}", "Verification Result": "",
+                         "Location Name": f"Centre {n} Car Park",
+                         "Type (as captured)": "Retail / Shopping Centre"})
+            for n in range(1, 4)]
+    report = route.counts(route.route_rows(rows, set(), {}), rows)
+    assert len(report["name_only_car_parks"]) == 3
+    assert report["name_only_car_parks"][0]["stage"] == "grok"
+
+
+# ---------------------------------------------------------------- the no_evidence stage
+
+VENUE = {"Place ID": "PP-1", "Verification Result": "", "Location Name": "Tesco Bow",
+         "Brand": "Tesco", "Place Category": "Supermarket - large format"}
+
+
+def test_a_venue_with_no_car_park_evidence_gets_the_no_evidence_stage():
+    stage, priority, _, reason = classify(sheet_row(**VENUE))
+    assert stage == "no_evidence"
+    assert priority == "1"
+    assert "no evidence that this venue has a car park" in reason
+
+
+def test_an_osm_customers_car_park_within_50_m_is_evidence():
+    rows = [sheet_row(**VENUE)]
+    records = route.route_rows(rows, set(), {}, osm_rows={
+        "PP-1": {"Car Park Distance (m)": "20", "OSM Raw Tags": "amenity=parking;access=customers"}})
+    assert records[0]["stage"] == "default"
+    assert "customers car park within 50 m" in records[0]["reason"]
+
+
+def test_an_osm_car_park_matching_the_venue_is_evidence():
+    rows = [sheet_row(**VENUE)]
+    records = route.route_rows(rows, set(), {}, osm_rows={
+        "PP-1": {"Car Park Distance (m)": "35", "Car Park Link": "Name/operator matches brand"}})
+    assert records[0]["stage"] == "default"
+
+
+def test_a_car_park_further_than_50_m_is_not_evidence():
+    rows = [sheet_row(**VENUE)]
+    records = route.route_rows(rows, set(), {}, osm_rows={
+        "PP-1": {"Car Park Distance (m)": "80", "Car Park Link": "Name/operator matches brand"}})
+    assert records[0]["stage"] == "no_evidence"
+
+
+def test_a_nearby_car_park_that_is_not_this_places_is_not_evidence():
+    rows = [sheet_row(**VENUE)]
+    records = route.route_rows(rows, set(), {}, osm_rows={
+        "PP-1": {"Car Park Distance (m)": "30", "Car Park Link": "Nearby, not this place's",
+                 "OSM Car Park Name": "Somewhere else"}})
+    assert records[0]["stage"] == "no_evidence"
+
+
+def test_no_evidence_rows_are_not_queued_for_grok():
+    rows = [sheet_row(**VENUE)]
+    records = route.route_rows(rows, set(), {})
+    assert records[0]["stage"] != "grok"
+
+
+def test_a_public_car_park_never_reaches_the_evidence_gate():
+    row = sheet_row(**{"Place ID": "PP-1", "Verification Result": "",
+                       "Place Category": "Council car park"})
+    assert stage_of(row) == "grok"
+
+
+def test_no_evidence_keys_are_counted(conn, tmp_path):
+    rows = [sheet_row(**dict(VENUE, **{"Place ID": "PP-1"})),
+            sheet_row(**dict(VENUE, **{"Place ID": "PP-2"}))]
+    report = route.counts(route.route_rows(rows, set(), {}), rows)
+    assert report["per_stage"] == {"no_evidence": 2}
+    assert report["no_evidence_keys"].most_common() == [("tesco", 2)]

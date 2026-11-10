@@ -356,3 +356,48 @@ example rows per outcome, with each field the plan changes.
 `policy_fill` answers "Map absence is not evidence of no parking" for a small
 venue and for a convenience format. So R10's presumed No never fires from this
 command. The count is reported, and it is 0.
+
+## Car park evidence, and the no_evidence stage
+
+The category default claims that a car park exists. A brand name alone does
+not establish that. So `route` asks for positive evidence first, before it
+sends a customer venue to `default`. Any one of these counts as evidence:
+
+- a cached official page for that place states parking
+- an OpenStreetMap car park lies within 50 m and is either tagged
+  `access=customers` or matches the venue by name, brand or operator
+- Type (as captured) or the Location Name says car park
+
+A routed row with none of the three goes to stage `no_evidence`. It gets no
+plan lines and it is not queued for the bot. The OpenStreetMap part reads the
+newest `osm_results.csv`. A row the match run never covered therefore has no
+OSM evidence. The report names the file it used.
+
+`route` reads the Location Name too. For the stage choice, a name with "car park", "car
+parks" or "parking" in it counts as a public car park. That test
+never decides whether a row is routed at all, so a finished row stays
+finished. The report prints 20 example rows that only the name moves.
+
+## Probes (Phase 5 of the db-router work)
+
+```bash
+python -m ferro_parking probe --key puregym.com --limit 3
+python -m ferro_parking probe --all-keys
+```
+
+`probe` takes a few routed rows for one source key and finds each branch
+page. It fetches the page and reports three things: the HTTP status, whether
+the page states parking for that branch, and the exact quotes. It writes
+`summary.csv` and `pages.csv` in the run folder. It also saves each page as a
+fixture under `tests/fixtures/pages/`. A fetcher built later is then tested
+without the network.
+
+`sources/fetch.py` holds the fetcher interface. A fetcher has three members:
+`key`, `branch_url(row)` and `quotes(text, row)`. A silent page gives no
+quotes, so it gives no plan line. The interface never guesses.
+
+Fetching is one request per second per domain, with a normal browser
+User-Agent and no bot-protection workaround. A 403 is recorded as a 403 and
+nothing retries. A page that answers 200 with a bot challenge is recorded as
+blocked. Page text is cached under `data/cache/pages`. The `pages` table records each
+fetch with its time and status, so a second look costs no request.
