@@ -251,11 +251,26 @@ Decision order, first match wins:
 
 A routed row then gets its stage from its derived source key. The key is the
 Operator, else the domain of the first Source URL, else the brand parsed from
-the name. A key with a registered fetcher gives `fetcher:<key>`. A public car
-park with no fetcher gives `grok`. Everything else gives `default`.
+the name. A key with a registered fetcher gives `fetcher:<key>`. A station row
+gives `station`. A public car park with no fetcher gives `grok`. Everything
+else gives `default`.
+
+A station row is one in the Station category, or one whose Type (as captured)
+says station car park. The station stage is checked before `grok` and
+`default`. A station car park is neither a customer venue nor an ordinary
+public car park, so the category default of Phase 4 never touches it.
+
+The brand fallback drops trailing car park wording, so "Sainsbury's Car Park"
+keys as `sainsburys` and not as `sainsburys car`. A row left with no usable key
+is grouped as `unbranded`, and `unbranded` never matches a fetcher.
 
 No fetcher is registered yet, so the fetcher stage is empty. The key is still
 computed and reported, because Phase 5 picks its first fetchers from those
 counts. "Known" comes from `readiness.known`, so blank, Unknown and Not
 published all read as not known. The reason text comes from
 `triage_blanks.bucket`.
+
+`route` also writes `proposals.csv` in the same run folder. It lists routed
+rows a person has to look at, such as a row with a blank Location Name. Nothing
+in that file is ever written back, because Location Name is a protected
+column.

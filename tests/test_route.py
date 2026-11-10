@@ -218,6 +218,80 @@ def test_a_customer_venue_goes_to_default():
     assert stage_of(row) == "default"
 
 
+# ---------------------------------------------------------------- station stage
+
+def test_a_station_category_row_goes_to_the_station_stage():
+    row = sheet_row(**{"Place ID": "PP-1", "Verification Result": "",
+                       "Place Category": "Station", "Location Name": "Bromley South Station"})
+    stage, priority, _, reason = classify(row)
+    assert (stage, priority) == ("station", "1")
+    assert "station, no fetcher" in reason
+
+
+def test_a_station_car_park_named_in_the_type_column_counts():
+    row = sheet_row(**{"Place ID": "PP-1", "Verification Result": "",
+                       "Type (as captured)": "Station car park"})
+    assert stage_of(row) == "station"
+
+
+def test_a_plain_station_type_without_car_park_wording_is_not_the_station_stage():
+    row = sheet_row(**{"Place ID": "PP-1", "Verification Result": "",
+                       "Type (as captured)": "Railway station", "Location Name": "Some Halt"})
+    assert stage_of(row) == "default"
+
+
+def test_the_station_stage_is_checked_before_grok():
+    """A Station row whose Type also says car park is a station, not a grok row."""
+    row = sheet_row(**{"Place ID": "PP-1", "Verification Result": "",
+                       "Place Category": "Station", "Type (as captured)": "Car park"})
+    assert stage_of(row) == "station"
+
+
+def test_the_station_stage_is_checked_before_default():
+    row = sheet_row(**{"Place ID": "PP-1", "Verification Result": "",
+                       "Place Category": "Station"})
+    assert stage_of(row) == "station"
+
+
+def test_a_registered_fetcher_still_wins_over_the_station_stage():
+    row = sheet_row(**{"Place ID": "PP-1", "Verification Result": "",
+                       "Place Category": "Station",
+                       "Source URLs (primary first)": "https://www.nationalrail.co.uk/stations/brx"})
+    stage, _, key, _ = classify(row, fetchers={"nationalrail.co.uk": object()})
+    assert stage == "fetcher:nationalrail.co.uk"
+    assert key == "nationalrail.co.uk"
+
+
+def test_a_skipped_station_row_stays_skipped():
+    row = sheet_row(**{"Place ID": "PP-1", "Verification Result": "Confirmed",
+                       "Place Category": "Station", "Who Can Park": "Anyone (paid)",
+                       "Cost Type": "Paid"})
+    assert stage_of(row) == "skip_done"
+
+
+def test_a_public_car_park_that_is_not_a_station_still_goes_to_grok():
+    row = sheet_row(**{"Place ID": "PP-1", "Verification Result": "",
+                       "Place Category": "Council car park"})
+    assert stage_of(row) == "grok"
+
+
+def test_station_counts_and_keys_are_reported():
+    rows = [
+        sheet_row(**{"Place ID": "PP-1", "Verification Result": "", "Place Category": "Station",
+                     "Source URLs (primary first)": "https://www.nationalrail.co.uk/a"}),
+        sheet_row(**{"Place ID": "PP-2", "Verification Result": "", "Place Category": "Station",
+                     "Source URLs (primary first)": "https://www.nationalrail.co.uk/b"}),
+        sheet_row(**{"Place ID": "PP-3", "Verification Result": "",
+                     "Place Category": "Council car park", "Operator": "Barnet Council"}),
+    ]
+    report = route.counts(route.route_rows(rows, set(), {}), rows)
+    assert report["per_stage"] == {"station": 2, "grok": 1}
+    assert report["station_stage"] == 2
+    assert report["stations_routed"] == 2
+    assert report["station_keys"].most_common() == [("nationalrail.co.uk", 2)]
+    assert report["grok_keys"].most_common() == [("barnet council", 1)]
+
+
 # ---------------------------------------------------------------- source key
 
 def test_the_operator_is_the_first_choice():
@@ -253,9 +327,94 @@ def test_the_brand_from_the_name_is_the_last_choice():
     assert route.source_key(row) == "sainsburys"
 
 
-def test_a_row_with_no_key_at_all_reports_an_empty_key():
+def test_a_row_with_no_key_at_all_is_grouped_as_unbranded():
     row = sheet_row(**{"Place ID": "PP-1", "Verification Result": ""})
-    assert classify(row)[2] == ""
+    assert classify(row)[2] == "unbranded"
+    assert route.UNBRANDED == "unbranded"
+
+
+def test_trailing_car_park_wording_is_stripped_from_the_fallback_key():
+    cases = {
+        "Sainsbury's Car Park": "sainsburys",
+        "Tesco Car Park": "tesco",
+        "NCP Car Park": "ncp",
+        "Visitor Car Park": "visitor",
+        "Beckton Gateway Car Park": "beckton gateway",
+        "Finsbury Square Car Park": "finsbury square",
+        "Ealing Broadway Station": "ealing broadway",
+        "Odeon Parking": "odeon",
+    }
+    for name, expected in cases.items():
+        row = sheet_row(**{"Place ID": "PP-1", "Location Name": name})
+        assert route.source_key(row) == expected, name
+
+
+def test_a_name_that_is_only_car_park_wording_becomes_unbranded():
+    for name in ("Car Park", "Car park", "Parking", "Station"):
+        row = sheet_row(**{"Place ID": "PP-1", "Location Name": name})
+        assert route.source_key(row) == "unbranded", name
+
+
+def test_the_noise_strip_does_not_touch_an_operator_or_a_domain():
+    row = sheet_row(**{"Place ID": "PP-1", "Operator": "Euro Car Parks"})
+    assert route.source_key(row) == "euro car parks"
+    row = sheet_row(**{"Place ID": "PP-1",
+                       "Source URLs (primary first)": "https://www.carparking.co.uk/x"})
+    assert route.source_key(row) == "carparking.co.uk"
+
+
+def test_strip_key_noise_leaves_an_ordinary_brand_alone():
+    assert route.strip_key_noise("sainsburys") == "sainsburys"
+    assert route.strip_key_noise("beckton gateway") == "beckton gateway"
+    assert route.strip_key_noise("") == ""
+
+
+def test_unbranded_never_matches_a_fetcher():
+    row = sheet_row(**{"Place ID": "PP-1", "Verification Result": ""})
+    assert stage_of(row, fetchers={"unbranded": object()}) == "default"
+
+
+def test_unbranded_rows_are_counted_apart_from_real_keys():
+    rows = [
+        sheet_row(**{"Place ID": "PP-1", "Verification Result": ""}),
+        sheet_row(**{"Place ID": "PP-2", "Verification Result": "",
+                     "Location Name": "Car Park", "Place Category": "Council car park"}),
+        sheet_row(**{"Place ID": "PP-3", "Verification Result": "", "Location Name": "Tesco Bow"}),
+    ]
+    report = route.counts(route.route_rows(rows, set(), {}), rows)
+    assert report["no_key"] == {"default": 1, "grok": 1}
+    assert report["default_keys"].most_common() == [("tesco bow", 1)]
+    assert report["grok_keys"] == {}
+
+
+# ---------------------------------------------------------------- proposals
+
+def test_a_blank_location_name_on_a_routed_row_becomes_a_proposal():
+    rows = [
+        sheet_row(**{"Place ID": "PP-1", "Verification Result": "", "Location Name": ""}),
+        sheet_row(**{"Place ID": "PP-2", "Verification Result": "", "Location Name": "Tesco Bow"}),
+    ]
+    proposals = route.review_proposals(rows, route.route_rows(rows, set(), {}))
+    assert [p["Place ID"] for p in proposals] == ["PP-1"]
+    assert proposals[0]["column"] == "Location Name"
+    assert proposals[0]["current value"] == ""
+
+
+def test_a_skipped_row_with_a_blank_name_is_not_proposed():
+    rows = [sheet_row(**{"Place ID": "PP-1", "Verification Result": "Confirmed",
+                         "Who Can Park": "Customers only", "Cost Type": "Free",
+                         "Location Name": ""})]
+    assert route.review_proposals(rows, route.route_rows(rows, set(), {})) == []
+
+
+def test_route_writes_a_proposals_file(conn, tmp_path):
+    out = tmp_path / "with_proposals"
+    route.main(["--db", str(tmp_path / "test.sqlite"), "--out", str(out)])
+    with open(out / "proposals.csv", newline="", encoding="utf-8") as stream:
+        rows = list(csv.DictReader(stream))
+    assert list(csv.DictReader(open(out / "proposals.csv", encoding="utf-8")).fieldnames
+                or []) == route.PROPOSAL_HEADERS
+    assert rows == []
 
 
 def test_first_source_domain_drops_the_www_prefix():
@@ -295,9 +454,10 @@ def test_counts_cover_stages_priorities_keys_and_stations():
         sheet_row(**{"Place ID": "PP-5", "Verification Result": ""}),
     ]
     report = route.counts(route.route_rows(rows, set(), {}), rows)
-    assert report["per_stage"] == {"grok": 2, "default": 2, "skip_done": 1}
+    assert report["per_stage"] == {"grok": 2, "station": 1, "default": 1, "skip_done": 1}
     assert report["per_priority"] == {"1": 4, "skipped": 1}
     assert report["grok_keys"].most_common(1) == [("bromley council", 2)]
+    assert report["station_keys"].most_common() == [("bromley south", 1)]
     assert report["no_key"] == {"default": 1}
     assert report["stations_routed"] == 1
     assert report["routed"] == 4

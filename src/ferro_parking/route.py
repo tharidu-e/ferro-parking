@@ -46,6 +46,15 @@ NAMED_VERIFIER_PREFIX = "Tharidu"
 
 ON_SITE = "Needs on-site check"
 PUBLIC_CAR_PARK_CATEGORIES = ("Council car park", "Private / operator car park")
+STATION_CATEGORY = "Station"
+
+# brand_key falls back to the first two words of the name, which on a car park
+# row is the car park's own wording rather than a brand: "Beckton Gateway Car
+# Park" gives "beckton gateway", but "Sainsbury's Car Park" gives "sainsburys
+# car" and a bare "Car Park" gives "car park". Trailing words from this list
+# are dropped so the Phase 5 fan-out counts read as brands.
+KEY_TRAILING_NOISE = ("car", "park", "parking", "station", "carpark")
+UNBRANDED = "unbranded"
 
 # No fetcher exists yet. Phase 5 registers one key per fetcher here.
 FETCHERS = {}
@@ -72,6 +81,15 @@ def is_public_car_park(row):
     return contains_word(norm(row.get("Type (as captured)", "")), "car park")
 
 
+def is_station(row):
+    """A station row: the Station category, or a Type that says station car
+    park. Checked before grok and default, because a station car park is
+    neither a customer venue nor an ordinary public car park."""
+    if (row.get("Place Category") or "").strip() == STATION_CATEGORY:
+        return True
+    return contains_word(norm(row.get("Type (as captured)", "")), "station car park")
+
+
 def first_source_domain(value):
     """The host of the first usable Source URL, lower case, without www.
     Order matters here, so this walks the raw field and hands each candidate
@@ -84,16 +102,24 @@ def first_source_domain(value):
     return ""
 
 
+def strip_key_noise(key):
+    """Drop trailing car park wording from a fallback key."""
+    words = key.split()
+    while words and words[-1] in KEY_TRAILING_NOISE:
+        words.pop()
+    return " ".join(words)
+
+
 def source_key(row):
     """Operator first, then the first Source URL's domain, then the brand
-    parsed from the name. Empty when the row gives none of the three."""
+    parsed from the name. "unbranded" when the row gives none of the three."""
     operator = (row.get("Operator") or "").strip()
     if operator and operator not in ("Not published", "Not applicable", "Unknown"):
         return norm(operator)
     domain = first_source_domain(row.get(SOURCE_URLS, ""))
     if domain:
         return domain
-    return brand_key(row)
+    return strip_key_noise(brand_key(row)) or UNBRANDED
 
 
 def has_parking_gap(row):
@@ -131,9 +157,11 @@ def classify(row, missing, duplicates, fetchers=None):
         priority, why = "1", "Verification Result is blank"
 
     key = source_key(row)
-    group, bucket_reason = bucket(row, categories())
-    if key and key in fetchers:
+    _, bucket_reason = bucket(row, categories())
+    if key != UNBRANDED and key in fetchers:
         return f"fetcher:{key}", priority, key, f"{why}; fetcher for {key}"
+    if is_station(row):
+        return "station", priority, key, f"{why}; station, no fetcher ({bucket_reason})"
     if public:
         return "grok", priority, key, f"{why}; public car park, no fetcher ({bucket_reason})"
     return "default", priority, key, f"{why}; customer venue ({bucket_reason})"
@@ -164,17 +192,46 @@ def counts(records, rows):
     routed = [record for record in records if record["priority"]]
     stations = sum(1 for record in routed
                    if discovery.classify_sheet_row(by_place_id[record["Place ID"]], categories()) == "station")
+    def keys_for(stage):
+        return Counter(record["source key"] for record in routed
+                       if record["stage"] == stage and record["source key"] != UNBRANDED)
+
     return {
         "per_stage": Counter(record["stage"] for record in records),
         "per_priority": Counter(record["priority"] or "skipped" for record in records),
-        "grok_keys": Counter(record["source key"] for record in routed
-                             if record["stage"] == "grok" and record["source key"]),
-        "default_keys": Counter(record["source key"] for record in routed
-                                if record["stage"] == "default" and record["source key"]),
-        "no_key": Counter(record["stage"] for record in routed if not record["source key"]),
+        "grok_keys": keys_for("grok"),
+        "default_keys": keys_for("default"),
+        "station_keys": keys_for("station"),
+        "no_key": Counter(record["stage"] for record in routed
+                          if record["source key"] == UNBRANDED),
         "routed": len(routed),
         "stations_routed": stations,
+        "station_stage": sum(1 for record in routed if record["stage"] == "station"),
     }
+
+
+PROPOSAL_HEADERS = ["Place ID", "issue", "column", "current value", "suggestion"]
+
+
+def review_proposals(rows, records):
+    """Routed rows the router cannot identify, for a person to look at. Nothing
+    here is ever written back: Location Name is a protected column, so a fix is
+    always a proposal (hard rule 3 of the db-router brief)."""
+    routed = {record["Place ID"] for record in records if record["priority"]}
+    out = []
+    for row in rows:
+        place_id = (row.get(PLACE_ID) or "").strip()
+        if place_id not in routed:
+            continue
+        if not (row.get(LOCATION_NAME) or "").strip():
+            out.append({
+                "Place ID": place_id,
+                "issue": "blank Location Name, so the row has no brand fallback key",
+                "column": LOCATION_NAME,
+                "current value": "",
+                "suggestion": "name the place by hand, or mark the row a duplicate",
+            })
+    return out
 
 
 def write_routing(conn, run_id, records):
@@ -192,17 +249,20 @@ def print_report(report):
     print("\nPer priority")
     for priority, count in sorted(report["per_priority"].items()):
         print(f"  {priority}: {count}")
-    for title, key in (("grok", "grok_keys"), ("default", "default_keys")):
+    for title, key in (("station", "station_keys"), ("grok", "grok_keys"),
+                       ("default", "default_keys")):
         print(f"\nTop 30 source keys within {title}")
         for name, count in report[key].most_common(30):
             print(f"  {name}: {count}")
-    print("\nRouted rows with no source key")
+        if not report[key]:
+            print("  none")
+    print(f"\nRouted rows with no usable source key, grouped as {UNBRANDED!r}")
     for stage, count in sorted(report["no_key"].items()):
         print(f"  {stage}: {count}")
     if not report["no_key"]:
         print("  none")
     print(f"\nRouted rows in the Station category: {report['stations_routed']}")
-    print("Station has no dedicated stage yet.")
+    print(f"Routed rows on the station stage: {report['station_stage']}")
 
 
 def main(argv=None):
@@ -226,7 +286,13 @@ def main(argv=None):
         writer = csv.DictWriter(stream, fieldnames=HEADERS)
         writer.writeheader()
         writer.writerows(records)
+    proposals = review_proposals(rows, records)
+    with open(out_dir / "proposals.csv", "x", newline="", encoding="utf-8") as stream:
+        writer = csv.DictWriter(stream, fieldnames=PROPOSAL_HEADERS)
+        writer.writeheader()
+        writer.writerows(proposals)
 
     print_report(counts(records, rows))
-    print(f"\nRun {run_id}. Output: {out_dir / 'routing.csv'}")
+    print(f"\n{len(proposals)} rows need a person to look at them: {out_dir / 'proposals.csv'}")
+    print(f"Run {run_id}. Output: {out_dir / 'routing.csv'}")
     return 0
