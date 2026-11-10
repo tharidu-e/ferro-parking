@@ -54,7 +54,9 @@ def test_export_is_byte_identical_to_the_import(conn, tmp_path):
     db.import_sheet_csv(conn, FIXTURE)
     out = tmp_path / "exported.csv"
     db.export_csv(conn, out)
-    assert out.read_text(encoding="utf-8") == FIXTURE.read_text(encoding="utf-8")
+    # Raw bytes, line endings included. .gitattributes keeps the fixture's
+    # CRLF, which is what the csv module writes and what the sheet export has.
+    assert out.read_bytes() == FIXTURE.read_bytes()
 
 
 def test_export_keeps_the_sheet_row_order(conn, tmp_path):
