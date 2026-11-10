@@ -26,6 +26,9 @@ Commands:
   triage-blanks  Read-only: bucket blank parking answers from a local CSV
   readiness  Read-only: count showable and complete rows, by borough and district
   osm-gaps  Read-only: list unmatched public/customer parking from a London PBF
+  db-import  Load a sheet export into the local SQLite store (no sheet access)
+  db-export  Write the store back out as a sheet CSV in sheet column order
+  db-rebuild  Recompute the derived places and parking tables from raw
   tranche1  Read-only: filter and score discovery's tranche 1 missing
           places, ready for review before writing (never writes to the sheet)
   tranche1-write  Dry run: select, de-duplicate and plan the tranche 1
@@ -75,6 +78,15 @@ def main():
     if cmd == "readiness":
         from .readiness import main as readiness_main
         return readiness_main(argv)
+    if cmd == "db-import":
+        from .db import import_main
+        return import_main(argv)
+    if cmd == "db-export":
+        from .db import export_main
+        return export_main(argv)
+    if cmd == "db-rebuild":
+        from .db import rebuild_main
+        return rebuild_main(argv)
     if cmd == "validate":
         from .validation import main as validate_main
         return validate_main(argv)

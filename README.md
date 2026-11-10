@@ -191,3 +191,37 @@ with source name, Place ID and sheet Location Name for manual identity checks.
 Exit code 0 requires the expected listing count and a majority matched for every
 batch. No batch input or full sheet export
 is committed to the repository.
+
+## Local database (Phase 1 of the db-router work)
+
+The database at `data/db/ferro_parking.sqlite` is the single source of truth for
+the parking data. The Google Sheet becomes a published view and an inbox for bot
+results. The file sits under `data/`, so git ignores it.
+
+```bash
+python -m ferro_parking db-import --sheet-csv data/raw/all_london_clean.csv
+python -m ferro_parking db-export --out data/runs/2026-11-10/db/export.csv
+python -m ferro_parking db-rebuild
+```
+
+`db-import` stores each sheet row exactly as read, in the `raw` table. It keeps
+one JSON object per Place ID per import. Nothing is ever lost and no row is ever
+deleted. Each run creates a new `import_id`, so you can re-import a fresh export
+at any time. The command then reports what differs from the previous import: new
+Place IDs, Place IDs now absent, changed cells, and conflicts. A conflict means
+the sheet value matches neither the old nor the new value of a change the
+database owns. That is the signal that somebody edited the sheet by hand.
+
+`db-export` writes the 60 sheet columns in the sheet's own header order and row
+order. So `discover`, `readiness`, `triage-blanks` and the other full-export
+readers work on the result without a change. When the database owns no changes,
+the output is byte-identical to the export it came from.
+
+The typed tables `places` and `parking` are derived from `raw` plus the applied
+rows of the `changes` log. Nothing edits them directly. `db-rebuild` recomputes
+them, and running it twice gives the same tables. The `sheet_owned` table mirrors
+the four columns another owner writes. Those are read-only here and are never
+published.
+
+The `db-import` output also prints the next unused Place ID, which later phases
+use when they append a new place.
