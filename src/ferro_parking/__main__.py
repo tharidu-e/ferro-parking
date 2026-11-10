@@ -93,6 +93,12 @@ def main():
     if cmd == "readiness":
         from .readiness import main as readiness_main
         return readiness_main(argv)
+    if cmd == "research-report":
+        from .research_report import main as research_report_main
+        return research_report_main(argv)
+    if cmd == "grok-queue":
+        from .grok_queue import main as queue_main
+        return queue_main(argv)
     if cmd == "fetch-fill":
         from .fetch_fill import main as fetch_fill_main
         return fetch_fill_main(argv)
