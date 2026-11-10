@@ -333,3 +333,39 @@ def test_db_create_writes_a_rejected_file_and_exits_nonzero(tmp_path, conn, monk
     assert create.main(["--plan", str(plan), "--db", str(tmp_path / "test.sqlite"),
                         "--out", str(out), "--apply"]) == 1
     assert (out / "rejected.csv").is_file()
+
+
+# ---------------------------------------------------------------- publication
+
+def test_a_created_record_is_never_published_without_a_sheet_row(conn):
+    """Publication targets rows with applied changes and matches them against
+    the live sheet by Place ID. A created record has no sheet row, so research
+    on one must block the publication rather than write somewhere else.
+    Appending new rows is step 6 of the checklist and is not built yet."""
+    from ferro_parking import publish
+
+    run(conn, [record()])
+    place_id = conn.execute("SELECT place_id FROM created").fetchone()["place_id"]
+    headers, rows = db.current_rows(conn)
+    live = [row for row in rows if row["Place ID"] != place_id]
+    for index, row in enumerate(live, 2):
+        row["_sheet_row"] = index
+    conn.execute(
+        "INSERT INTO changes (run_id, place_id, column_name, old_value, new_value,"
+        " stage, applied_at) VALUES ('research-1', ?, 'Cost Type', '', 'Paid',"
+        " 'grok', '2026-11-11T00:00:00+00:00')", (place_id,))
+    conn.commit()
+    report = publish.build(conn, headers, live)
+    assert report["plan"] == []
+    assert any(place_id in line for line in report["drift"])
+
+
+def test_a_created_record_is_not_showable_because_its_answers_are_blank(conn):
+    from ferro_parking import readiness
+
+    run(conn, [record()])
+    _, rows = db.current_rows(conn)
+    row = next(r for r in rows if r["Location Name"] == "Hill Street Car Park")
+    showable, complete = readiness.bars(row)
+    assert not showable
+    assert not complete

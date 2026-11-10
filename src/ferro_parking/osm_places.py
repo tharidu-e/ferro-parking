@@ -62,6 +62,12 @@ MIN_AREA_M2 = 500.0
 COUNCIL_PATTERN = re.compile(
     r"\b(council|borough of|city of london corporation|corporation of london)\b", re.I)
 
+# OSM names a borough boundary "London Borough of Barnet". The sheet's own
+# Borough column says "Barnet". Only the City of London keeps its prefix,
+# because that is the sheet's own spelling for it.
+BOROUGH_PREFIXES = ("London Borough of ", "Royal Borough of ", "City of ")
+BOROUGH_KEEP_WHOLE = {"City of London"}
+
 COUNCIL_CATEGORY = "Council car park"
 DEFAULT_CATEGORY = "Private / operator car park"
 GEO_SOURCE = "OpenStreetMap"
@@ -141,12 +147,25 @@ def place_name(tags):
     return "Car park (unnamed)"
 
 
+def borough_name(osm_name):
+    """The sheet's own spelling of a borough, from the OSM boundary name."""
+    name = str(osm_name or "").strip()
+    if name in BOROUGH_KEEP_WHOLE:
+        return name
+    for prefix in BOROUGH_PREFIXES:
+        if name.startswith(prefix):
+            return name[len(prefix):]
+    return name
+
+
 def place_category(tags):
-    """Council only when a tag says so. Otherwise the cautious default."""
-    operator = str(tags.get("operator", ""))
-    if COUNCIL_PATTERN.search(operator):
+    """Council only when a tag says so. Otherwise the cautious default.
+
+    operator:type=public means a public company in OSM, not a public
+    authority, so only government counts here."""
+    if COUNCIL_PATTERN.search(str(tags.get("operator", ""))):
         return COUNCIL_CATEGORY
-    if str(tags.get("operator:type", "")).lower() in {"government", "public"}:
+    if str(tags.get("operator:type", "")).lower() == "government":
         return COUNCIL_CATEGORY
     return DEFAULT_CATEGORY
 
@@ -278,7 +297,7 @@ def propose(pbf_path, today=None):
                 counts["excluded_no_qualifier"] += 1
                 continue
             counts["eligible_qualified_" + qualified_by] += 1
-        borough = borough_of(to_m(point_ll))
+        borough = borough_name(borough_of(to_m(point_ll)))
         if not borough:
             counts["no_borough"] += 1
         row = {

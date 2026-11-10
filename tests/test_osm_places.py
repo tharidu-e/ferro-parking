@@ -198,3 +198,30 @@ def test_write_outputs_writes_three_files(tmp_path):
     line = json.loads(plan_path.read_text(encoding="utf-8").strip())
     assert "_review" not in line
     assert line["source_ref"] == "way/1"
+
+
+# ---------------------------------------------------------------- borough names
+
+def test_a_borough_takes_the_sheets_own_spelling():
+    """OSM calls it "London Borough of Barnet". The sheet's Borough column says
+    "Barnet", and a mismatch splits every per-borough count in two."""
+    assert op.borough_name("London Borough of Barnet") == "Barnet"
+    assert op.borough_name("Royal Borough of Kingston upon Thames") == "Kingston upon Thames"
+    assert op.borough_name("City of Westminster") == "Westminster"
+    assert op.borough_name("London Borough of Barking and Dagenham") == "Barking and Dagenham"
+
+
+def test_the_city_of_london_keeps_its_name():
+    assert op.borough_name("City of London") == "City of London"
+
+
+def test_an_unknown_or_blank_borough_passes_through():
+    assert op.borough_name("") == ""
+    assert op.borough_name(None) == ""
+    assert op.borough_name("Elsewhere") == "Elsewhere"
+
+
+def test_a_public_operator_type_is_not_a_council():
+    """operator:type=public means a public company in OSM, not a council."""
+    assert op.place_category(tags(**{"operator:type": "public"})) == op.DEFAULT_CATEGORY
+    assert op.place_category(tags(**{"operator:type": "government"})) == op.COUNCIL_CATEGORY
