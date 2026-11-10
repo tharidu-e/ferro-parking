@@ -94,7 +94,9 @@ def test_plain_waitrose_is_convenience_not_large():
     # No car park evidence: R10 fix, a convenience format with none falls
     # through to presumed no parking, not needs-research.
     branch, result, reason = pf.classify(row, osm_row(distance=""), RULES)
-    assert branch == "b"
+    assert branch == "c"
+    assert result is None
+    assert "Map absence" in reason
 
 
 def test_waitrose_and_partners_is_convenience():
@@ -118,13 +120,17 @@ def test_convenience_format_with_nearby_car_park_gets_chain_policy():
 def test_convenience_format_without_nearby_car_park_is_presumed_no_parking():
     row = sheet_row(**{"Location Name": "Tesco Express Baker Street"})
     branch, result, reason = pf.classify(row, osm_row(distance=""), RULES)
-    assert branch == "b"
+    assert branch == "c"
+    assert result is None
+    assert "Map absence" in reason
 
 
 def test_convenience_format_car_park_too_far_is_still_presumed_no_parking():
     row = sheet_row(**{"Location Name": "Co-op Food Camden"})
     branch, result, reason = pf.classify(row, osm_row(distance="80"), RULES)
-    assert branch == "b"
+    assert branch == "c"
+    assert result is None
+    assert "Map absence" in reason
 
 
 # ---- branch b: small venue, no nearby OSM car park ------------------------
@@ -132,15 +138,9 @@ def test_small_venue_with_no_nearby_car_park_is_presumed_no_parking():
     row = sheet_row(**{"Location Name": "The Red Lion", "Place Category": "Pub",
                         "Type (as captured)": "Pub"})
     branch, result, reason = pf.classify(row, osm_row(distance=""), RULES)
-    assert branch == "b"
-    fields, notes, flags = result
-    assert fields[pf.CAN_PARK] == "No"
-    assert fields["Evidence Level"] == "Presumed"
-    assert fields["Source Tier"] == "OpenStreetMap"
-    assert fields["Rules Summary"] == "No parking listed (none mapped nearby). Check on arrival."
-    for col in ("Who Can Park", "Cost Type", "Tariff Type", "Tariff Detail", "Max Stay (mins)",
-                "Operator"):
-        assert fields[col] == "Not applicable"
+    assert branch == "c"
+    assert result is None
+    assert "Map absence" in reason
 
 
 def test_small_venue_with_a_nearby_car_park_is_needs_research():
@@ -176,7 +176,9 @@ def test_fast_food_without_drive_thru_is_a_small_venue():
     row = sheet_row(**{"Location Name": "McDonald's Baker Street",
                         "Place Category": "Fast food", "Type (as captured)": "Fast food restaurant"})
     branch, result, reason = pf.classify(row, osm_row(distance=""), RULES)
-    assert branch == "b"
+    assert branch == "c"
+    assert result is None
+    assert "Map absence" in reason
 
 
 def test_fast_food_as_its_own_osm_building_way_needs_research():
@@ -192,7 +194,9 @@ def test_fast_food_as_an_osm_point_stays_a_small_venue():
                         "Place Category": "Fast food", "Type (as captured)": "Fast food restaurant"})
     branch, result, reason = pf.classify(row, osm_row(distance="", place_match=
                                           "https://www.openstreetmap.org/node/123"), RULES)
-    assert branch == "b"
+    assert branch == "c"
+    assert result is None
+    assert "Map absence" in reason
 
 
 def test_fast_food_named_retail_park_needs_research():
@@ -216,7 +220,9 @@ def test_restaurant_kfc_without_drive_thru_is_a_small_venue():
     row = sheet_row(**{"Location Name": "KFC Yiewsley - High Street",
                         "Place Category": "Restaurant (KFC)", "Type (as captured)": "Restaurant (KFC)"})
     branch, result, reason = pf.classify(row, osm_row(distance=""), RULES)
-    assert branch == "b"
+    assert branch == "c"
+    assert result is None
+    assert "Map absence" in reason
 
 
 def test_restaurant_mcdonalds_with_drive_thru_in_name_needs_research():
@@ -241,7 +247,9 @@ def test_restaurant_nandos_without_drive_thru_is_a_small_venue():
                         "Place Category": "Restaurant (Nando's)",
                         "Type (as captured)": "Restaurant (Nando's)"})
     branch, result, reason = pf.classify(row, osm_row(distance=""), RULES)
-    assert branch == "b"
+    assert branch == "c"
+    assert result is None
+    assert "Map absence" in reason
 
 
 def test_cafe_costa_in_a_retail_park_needs_research():
@@ -269,7 +277,9 @@ def test_drive_thru_mentioned_only_in_place_category_is_not_enough():
                         "Place Category": "Fast food (drive-thru)",
                         "Type (as captured)": "Fast food restaurant"})
     branch, result, reason = pf.classify(row, osm_row(distance=""), RULES)
-    assert branch == "b"
+    assert branch == "c"
+    assert result is None
+    assert "Map absence" in reason
 
 
 def test_public_car_park_is_not_misread_as_a_pub():
@@ -427,22 +437,20 @@ def test_presumed_no_parking_fields_never_uses_a_value_as_a_column_name():
     row = sheet_row(**{"Location Name": "The Red Lion", "Place Category": "Pub",
                         "Type (as captured)": "Pub"})
     branch, result, reason = pf.classify(row, osm_row(distance=""), RULES)
-    fields, _, _ = result
-    assert set(fields) <= REAL_COLUMN_NAMES, set(fields) - REAL_COLUMN_NAMES
-    assert fields["Verified By"] == "Policy script"
-    assert "Policy script" not in fields
+    assert branch == "c"
+    assert result is None
+    assert "Map absence" in reason
 
 
 def test_finish_record_presumed_no_parking_passes_consistency_checks():
     row = sheet_row(**{"Location Name": "The Red Lion", "Place Category": "Pub",
                         "Type (as captured)": "Pub"})
     branch, result, reason = pf.classify(row, osm_row(distance=""), RULES)
-    fields, notes, flags = result
-    new, violations = pf.finish_record(row, fields, notes, flags, TODAY)
-    assert violations is None
+    assert branch == "c"
+    assert result is None
+    assert "Map absence" in reason
 
 
-# ---- rule R7: never Free, Anyone, or a max stay ----------------------------
 def test_r7_never_violated_across_every_known_chain():
     chains_to_try = ["Tesco Acton Superstore", "Sainsbury's Superstore Example",
                       "Lidl East Acton", "Aldi Example Store", "Asda Example Superstore",
@@ -462,7 +470,7 @@ def test_r7_small_venue_never_sets_a_risky_value():
     row = sheet_row(**{"Location Name": "Corner Cafe", "Place Category": "Cafe",
                         "Type (as captured)": "Cafe"})
     branch, result, reason = pf.classify(row, osm_row(distance=""), RULES)
-    assert branch == "b"
-    fields, _, _ = result
-    assert fields[pf.CAN_PARK] == "No"
-    assert fields["Cost Type"] == "Not applicable"
+    assert branch == "c"
+    assert result is None
+    assert "Map absence" in reason
+

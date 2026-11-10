@@ -19,6 +19,7 @@ import json
 import re
 from datetime import date
 from pathlib import Path
+from .run_paths import new_run_dir, reserve_output
 
 from . import fill, page_fill, sheets
 from . import rules as rules_mod
@@ -111,21 +112,8 @@ def candidate_rows(sheet_rows, osm_rows, borough):
 # ---------------------------------------------------------------- record validation
 
 def check_tariff_template(tariff_type, detail):
-    templates = {
-        "Free (time limit not published)": lambda d: d == "Free",
-        "Free with time limit": lambda d: bool(re.match(r"^Free for (up to )?\d+\s*(min|mins|hour|hours|hr|hrs)", d, re.I)),
-        "Free period, then hourly": lambda d: "then" in d.lower() and "£" in d,
-        "Hourly rate": lambda d: bool(re.match(r"^£\d+(\.\d{2})? per hour$", d)),
-        "Flat rate per 24 hours": lambda d: bool(re.match(r"^£\d+(\.\d{2})? per (24 hours|day)", d, re.I)),
-        "Flat rate per night": lambda d: bool(re.match(r"^£\d+(\.\d{2})? per night$", d)),
-        "Banded by stay length": lambda d: ";" in d and "£" in d,
-        "Not published": lambda d: d == "Not published",
-        "Not applicable": lambda d: d == "Not applicable",
-    }
-    check = templates.get(tariff_type)
-    if check is None:
-        return [f"tariff_type {tariff_type!r} is not an allowed value"]
-    if not check(detail):
+    from .formats import tariff_valid
+    if not tariff_valid(tariff_type, detail):
         return [f"tariff_detail {detail!r} does not match the template for tariff_type {tariff_type!r}"]
     return []
 
@@ -325,7 +313,7 @@ def main(argv=None):
     by_place_id = {sr[fill.PLACE_ID]: (sr, osm_row) for sr, osm_row in candidates}
     captured_can_park = sync_mod.load_captured_can_park(service)
 
-    out_dir = Path("data/runs") / today.isoformat() / "capture" / args.borough
+    out_dir = new_run_dir(Path("capture") / args.borough)
     extracted_path = Path(args.extracted) if args.extracted else out_dir / "extracted.jsonl"
 
     if not extracted_path.exists():

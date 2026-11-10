@@ -27,6 +27,7 @@ Options:
 OSM data (c) OpenStreetMap contributors, ODbL.
 """
 
+from .run_paths import new_run_dir
 import argparse
 import csv
 import math
@@ -123,6 +124,15 @@ class Collector(osmium.SimpleHandler):
 def norm(s):
     s = (s or "").lower().replace("&", " and ").replace("'", "")
     return re.sub(r"[^a-z0-9]+", " ", s).strip()
+
+
+def contains_word(text, phrase):
+    """Whole-word match: plain substring would read "Public Car Park" as
+    containing "pub". Shared by policy_fill.py and discovery.py so this
+    fix lives in one place."""
+    if not phrase:
+        return False
+    return re.search(r"\b" + re.escape(phrase) + r"\b", text) is not None
 
 
 def toks(s):
@@ -270,33 +280,9 @@ def suggest(tags, ts):
         elif acc in ("private", "no", "permit", "residents"):
             notes.append(f"OSM access={acc}: may not be usable by drivers, check")
 
-    # Cost.
-    if fee == "no":
-        # R7: "Free" costs the driver nothing if right, but a wrong "Free" lets
-        # someone park in a space they will be fined for, so OSM's fee=no only
-        # gives Free on a store's customers-only car park (access=customers or
-        # destination). On a public or untagged car park it stays Unknown.
-        if acc in ("customers", "destination"):
-            s["Cost Type"] = "Free"
-            s["Price Status"] = "Published"
-            # R4: an OSM max stay is never shown alone (it goes to Notes), so the
-            # tariff is "time limit not published" until a sign or the store confirms it
-            s["Tariff Type"] = "Free (time limit not published)"
-            s["Tariff Detail"] = "Free"
-        else:
-            s["Cost Type"] = "Unknown"
-            s["Price Status"] = "Not published"
-            s["Tariff Type"] = "Not published"
-            s["Tariff Detail"] = "Not published"
-            notes.append("OSM fee=no but access is not customers-only: "
-                         "Cost Type Unknown under R7 (Free needs site-specific evidence)")
-    elif fee == "yes":
-        s["Cost Type"] = "Free then paid" if "fee:conditional" in tags else "Paid"
-        s["Price Status"] = "Not published"
-        s["Tariff Type"] = "Not published"
-        s["Tariff Detail"] = "Not published"
-    else:
-        s["Cost Type"] = "Unknown"
+    # Use the same cautious cost rule as fill; raw OSM tags are notes.
+    from .fill import derive_cost
+    s.update(derive_cost(tags, notes))
     if "charge" in tags:
         notes.append(f"OSM charge={tags['charge']}")
     if "fee:conditional" in tags:
@@ -319,7 +305,7 @@ def suggest(tags, ts):
     s["Source Tier"] = "OpenStreetMap"
     s["Specificity"] = "Site-specific"
     s["Rules Stated"] = "Yes" if (acc or maxstay or tags.get("opening_hours")) else "No"
-    s["Prices Stated"] = "Yes" if fee == "no" else "No"
+    s["Prices Stated"] = "No"
     if ts:
         age_days = (datetime.now(timezone.utc) - ts).days
         s["Evidence Age"] = ("Under 12 months" if age_days < 365 else
@@ -467,8 +453,7 @@ def main(argv=None):
     args = ap.parse_args(argv)
     if args.out is None:
         import os, datetime as _dt
-        run_dir = os.path.join("data", "runs", _dt.date.today().isoformat())
-        os.makedirs(run_dir, exist_ok=True)
+        run_dir = str(new_run_dir(""))
         args.out = os.path.join(run_dir, "osm_results.csv")
 
     print("Reading OSM file (a few minutes for London)...", file=sys.stderr)
@@ -495,7 +480,7 @@ def main(argv=None):
         selected = selected[:args.limit]
 
     stats = Counter()
-    with open(args.out, "w", newline="", encoding="utf-8") as f:
+    with open(args.out, "x", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=OUT_COLS)
         w.writeheader()
         for sheet_row, row in selected:

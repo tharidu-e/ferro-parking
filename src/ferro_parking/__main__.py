@@ -19,6 +19,20 @@ Commands:
           for one borough (rule R10, never writes to the sheet)
   clear-unverified  Dry run: plan to blank every unverified parking
           answer (never writes to the sheet)
+  discover  Read-only: fetch official/source candidates, London filter, dedupe and draft
+  validate  Check a plan.json or candidates.csv without network access
+  osm-gaps  Read-only: list unmatched public/customer parking from a London PBF
+  tranche1  Read-only: filter and score discovery's tranche 1 missing
+          places, ready for review before writing (never writes to the sheet)
+  tranche1-write  Dry run: select, de-duplicate and plan the tranche 1
+          append to the sheet (never writes to the sheet)
+  tranche1-write-apply  Append the tranche1-write plan to the sheet's
+          bottom (--apply to actually write; dry run reports the plan
+          otherwise)
+  fill-round2  Dry run: osm fill, capture fill, policy fill and a draft
+          category policy on every blank-Verification-Result row, each
+          pass checked against page_fill's consistency checks (never
+          writes to the sheet)
 """
 import csv
 import sys
@@ -37,8 +51,6 @@ def cmd_export(argv):
         for row in rows:
             w.writerow({h: row.get(h, "") for h in headers})
     print(f"Wrote {len(rows)} rows to {out}")
-    row698 = next((r for r in rows if r["_sheet_row"] == 698), None)
-    print(f"Row 698 Verified By: {row698.get('Verified By', '') if row698 else '(not found)'}")
     return 0
 
 
@@ -47,6 +59,12 @@ def main():
         print(__doc__)
         return 0
     cmd, argv = sys.argv[1], sys.argv[2:]
+    if cmd == "validate":
+        from .validation import main as validate_main
+        return validate_main(argv)
+    if cmd == "osm-gaps":
+        from .gaps import main as gaps_main
+        return gaps_main(argv)
     if cmd == "match":
         from .osm_match import main as match_main
         return match_main(argv)
@@ -85,6 +103,21 @@ def main():
     if cmd == "clear-unverified":
         from .clear_unverified import main as clear_unverified_main
         return clear_unverified_main(argv)
+    if cmd == "discover":
+        from .discover import main as discover_main
+        return discover_main(argv)
+    if cmd == "tranche1":
+        from .tranche1 import main as tranche1_main
+        return tranche1_main(argv)
+    if cmd == "tranche1-write":
+        from .tranche1_write import main as tranche1_write_main
+        return tranche1_write_main(argv)
+    if cmd == "tranche1-write-apply":
+        from .tranche1_write import apply_main as tranche1_write_apply_main
+        return tranche1_write_apply_main(argv)
+    if cmd == "fill-round2":
+        from .fill_round2 import main as fill_round2_main
+        return fill_round2_main(argv)
     print(f"Unknown command: {cmd}\n\n{__doc__}")
     return 2
 

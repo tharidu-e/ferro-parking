@@ -11,10 +11,12 @@ python -m ferro_parking clear-unverified
 Only CLEARED_COLUMNS are touched. Every other column, every row with a
 Verification Result already set, and the "ALL LONDON" tab are left alone.
 """
+import argparse
 import csv
 import json
 from datetime import date
 from pathlib import Path
+from .run_paths import new_run_dir
 
 CLEARED_COLUMNS = [
     "Can Park? (Yes/No/Conditional)", "Who Can Park", "Rules Summary", "Cost Type",
@@ -26,7 +28,7 @@ CLEARED_COLUMNS = [
 
 
 def eligible_rows(sheet_rows):
-    return [r for r in sheet_rows if r.get("Verification Result", "") == ""]
+    return [r for r in sheet_rows if r.get("Verification Result", "") == "" and r.get("Verified By", "") in ("", "PP (validation)")]
 
 
 def build_plan(sheet_rows):
@@ -54,6 +56,12 @@ def build_plan(sheet_rows):
 def main(argv=None):
     from . import sheets
 
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--apply", action="store_true")
+    ap.add_argument("--confirm-wipe", action="store_true")
+    args = ap.parse_args(argv)
+    if args.apply and not args.confirm_wipe:
+        ap.error("--apply requires --confirm-wipe")
     service = sheets.get_service()
     headers, sheet_rows = sheets.read_tab(service)
     plan, undo, dry_run_rows = build_plan(sheet_rows)
@@ -64,8 +72,8 @@ def main(argv=None):
             if value:
                 non_blank_by_column[col] += 1
 
-    out_dir = Path("data/runs") / date.today().isoformat() / "clear_unverified"
-    out_dir.mkdir(parents=True, exist_ok=True)
+    print(f"Rows affected: {len(plan)}")
+    out_dir = new_run_dir("clear_unverified")
     (out_dir / "plan.json").write_text(json.dumps(plan, indent=1))
     (out_dir / "undo.json").write_text(json.dumps(undo, indent=1))
     with open(out_dir / "dry_run.csv", "w", newline="", encoding="utf-8") as f:
@@ -81,4 +89,7 @@ def main(argv=None):
     for col in CLEARED_COLUMNS:
         print(f"  {non_blank_by_column[col]:5d}  {col}")
     print(f"\nOutputs in {out_dir}/. Dry run only, nothing written to the sheet.")
+    if args.apply:
+        from .fill import write_main
+        return write_main([str(out_dir / "plan.json"), "--apply", "--confirm-wipe"])
     return 0

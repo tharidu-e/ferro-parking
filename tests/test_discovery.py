@@ -271,7 +271,7 @@ def test_no_match_beyond_radius():
 # ---- end to end on the fixture file ------------------------------------------
 def test_end_to_end_summary(tmp_path):
     result = d.run(str(FIX / "discovery_sample.osm"), str(FIX / "discovery_sample_rows.csv"),
-                    tmp_path, categories=CATEGORIES)
+                    tmp_path / "results", categories=CATEGORIES)
     by_cat = {r["Category"]: r for r in result["summary_rows"]}
 
     # Lidl, Aldi, M&S Simply Food (named); M&S matches the sheet's
@@ -325,10 +325,10 @@ def test_end_to_end_summary(tmp_path):
 
     for path in ("discovery_summary.csv", "missing_places.csv",
                  "unnamed_features.csv", "sheet_unmatched.csv"):
-        assert (tmp_path / path).exists()
+        assert (tmp_path / "results" / path).exists()
 
 
 def test_other_category_never_counted_as_missing(tmp_path):
     result = d.run(str(FIX / "discovery_sample.osm"), str(FIX / "discovery_sample_rows.csv"),
-                    tmp_path, categories=CATEGORIES)
+                    tmp_path / "results", categories=CATEGORIES)
     assert "other" not in [r["Category"] for r in result["summary_rows"]]

@@ -24,6 +24,8 @@ from datetime import date
 from pathlib import Path
 from urllib.parse import quote
 
+from .settings import setting
+from .run_paths import new_run_dir, reserve_output
 from . import rules as rules_mod
 from . import sheets
 from . import sync as sync_mod
@@ -56,13 +58,15 @@ PROTECTED_COLUMNS = {
     "Ferro Autopay", "Parking Charge (£)", "Total incl. Ferro Fee (£)",
     "Captured By", "Date Captured", "Latitude", "Longitude", "Place ID",
     "Location Name", "Street Address", "Postcode", "Borough", "Location Status",
+    "Geo Source", "Geo Precision", "Charges (as published)", "Enforcement Details",
+    "Confidence", "Free Stay Countdown", "Parking Charge", "Total incl. Ferro Fee",
 }
 PROTECTED_SUFFIXES = ("(as captured)", "Charges (as published)", "Enforcement Details")
 
 
 def assert_not_protected(new_values):
     for col in new_values:
-        if col in PROTECTED_COLUMNS or col.endswith(PROTECTED_SUFFIXES):
+        if col in PROTECTED_COLUMNS or col.casefold().startswith("geo") or col.endswith(PROTECTED_SUFFIXES):
             raise AssertionError(f"fill.py must never write the protected column {col!r}")
 
 
@@ -144,24 +148,24 @@ def derive_who_can_park(tags, sheet_row, rules, notes):
 
 
 def derive_cost(tags, notes):
-    """R7: OSM fee=no only gives Free on a customers-only car park."""
-    acc, fee = tags.get("access", ""), tags.get("fee", "")
-    if fee == "no" and acc in ("customers", "destination"):
-        return {"Cost Type": "Free", "Price Status": "Published",
-                "Tariff Type": "Free (time limit not published)", "Tariff Detail": "Free"}
+    """Rule R7: an OSM tag alone never sets Cost Type Free, on any access
+    value. fill.py never reads the official page or a sign, so it never
+    has the site-specific evidence Free needs; fee=no only ever becomes
+    a note, never a value a reader could mistake for confirmed."""
+    fee = tags.get("fee", "")
     if fee == "yes":
         return {"Cost Type": "Paid", "Price Status": "Not published",
                 "Tariff Type": "Not published", "Tariff Detail": "Not published"}
     if fee == "no":
-        notes.append("OSM fee=no but access is not customers-only: Cost Type "
-                      "Unknown under rule R7 (Free needs site-specific evidence)")
+        notes.append("OSM tags this as free, not confirmed (rule R7)")
     return {"Cost Type": "Unknown", "Price Status": "Not published",
             "Tariff Type": "Not published", "Tariff Detail": "Not published"}
 
 
-def apply_chain_rules(location_name, cost, notes, flags, rules):
+def apply_chain_rules(location_name, cost, notes, rules):
     """R6 chain rules as hints only; R7 blocks a chain from setting Free/Anyone
-    directly, and flags a Paid-chain-vs-free-OSM conflict as Unknown."""
+    directly. derive_cost never returns Free itself (rule R7), so there is no
+    "chain says Paid, OSM says free" conflict left to flag here any more."""
     chain = rules.chain_for(location_name)
     if not chain:
         return None
@@ -173,10 +177,6 @@ def apply_chain_rules(location_name, cost, notes, flags, rules):
     if cost_type in rules.r7_risky_cost_types:
         notes.append(f'Chain rule says Cost Type "{cost_type}" (hint only, needs '
                       "site-specific evidence, rule R7)")
-    elif cost_type and cost_type != cost["Cost Type"] and cost["Cost Type"] == "Free":
-        flags.append(f"Chain rule says {cost_type}, OSM says free: Cost Type Unknown (rule R7)")
-        cost.update({"Cost Type": "Unknown", "Price Status": "Not published",
-                     "Tariff Type": "Not published", "Tariff Detail": "Not published"})
     return chain
 
 
@@ -262,7 +262,7 @@ def decision_reason(osm_row, tags, who_can_park, cost):
     return (f"Route C: OSM car park ({way_id_from_url(osm_row.get('OSM Car Park', ''))}, "
             f"edited {osm_row.get('Car Park Last Edited', '')}) shows \"{shown}\". "
             f"Rules R1, R3, R4 and R7 applied: Who Can Park {who_can_park}, Cost Type {cost['Cost Type']}. "
-            "Confirmed, details not published: max stay and hours are not published, and OSM is a weak source.")
+            "Draft only: max stay and hours are not published, and OSM is a weak source.")
 
 
 def derive_values(sheet_row, osm_row, rules, today, captured_can_park):
@@ -273,7 +273,7 @@ def derive_values(sheet_row, osm_row, rules, today, captured_can_park):
     can_park, change_made = derive_can_park(sheet_row, flags, captured_can_park)
     who_can_park = derive_who_can_park(tags, sheet_row, rules, notes_extra)
     cost = derive_cost(tags, notes_extra)
-    chain = apply_chain_rules(sheet_row.get(LOCATION_NAME, ""), cost, notes_extra, flags, rules)
+    chain = apply_chain_rules(sheet_row.get(LOCATION_NAME, ""), cost, notes_extra, rules)
     operator = derive_operator(tags, rules, chain, notes_extra)
 
     new = {
@@ -301,7 +301,6 @@ def derive_values(sheet_row, osm_row, rules, today, captured_can_park):
         "Decision Reason": decision_reason(osm_row, tags, who_can_park, cost),
         VERIFIED_BY: "OSM script",
         VERIFIED_DATE: today.isoformat(),
-        VERIFICATION_RESULT: "Confirmed, details not published",
     }
     notes = merged_notes(sheet_row, tags, notes_extra)
     if notes is not None:
@@ -310,8 +309,6 @@ def derive_values(sheet_row, osm_row, rules, today, captured_can_park):
     if review_flag is not None:
         new[REVIEW_FLAG] = review_flag
         new[FLAG_STATUS] = "Open"
-    if not sheet_row.get(GEO_PRECISION):
-        new[GEO_PRECISION] = "Building"
     assert_not_protected(new)
     return new
 
@@ -333,7 +330,7 @@ def satellite_url(osm_row):
 
 def sheet_row_link(sheet_row_num):
     return (f"https://docs.google.com/spreadsheets/d/{sheets.SPREADSHEET_ID}/edit"
-            f"#gid=1850000003&range=A{sheet_row_num}")
+            f"#gid={setting('clean_gid')}&range=A{sheet_row_num}")
 
 
 def review_answer(new):
@@ -390,7 +387,7 @@ def latest_osm_results():
 
 def write_csv(path, fieldnames, rows):
     path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w", newline="", encoding="utf-8") as f:
+    with open(path, "x", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=fieldnames)
         w.writeheader()
         for row in rows:
@@ -430,8 +427,7 @@ def main(argv=None):
 
     plan, undo, dry_run_rows, review_rows = build_plan_undo_review(eligible, rules, today, captured_can_park)
 
-    out_dir = Path(args.out) if args.out else Path("data/runs") / today.isoformat() / args.borough
-    out_dir.mkdir(parents=True, exist_ok=True)
+    out_dir = reserve_output(args.out) if args.out else new_run_dir(args.borough)
     (out_dir / "plan.json").write_text(json.dumps(plan, indent=1))
     (out_dir / "undo.json").write_text(json.dumps(undo, indent=1))
     write_csv(out_dir / "dry_run.csv",
@@ -462,9 +458,15 @@ def write_main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("plan_path")
     ap.add_argument("--apply", action="store_true")
+    ap.add_argument("--confirm-wipe", action="store_true")
     args = ap.parse_args(argv)
 
     plan = _load_json(args.plan_path)
+    validate_write_columns(plan)
+    wipe = any(value == "" for entry in plan for value in entry["new"].values())
+    print(f"Rows in plan: {len(plan)}")
+    if args.apply and wipe and not args.confirm_wipe:
+        raise SystemExit("Clearing cells requires --confirm-wipe in addition to --apply")
     undo_path = Path(args.plan_path).parent / "undo.json"
     undo_by_row = {e["sheet_row"]: e for e in _load_json(undo_path)}
 
@@ -474,12 +476,20 @@ def write_main(argv=None):
 
 
 def _apply_write(service, headers, plan, undo_by_row, apply):
+    validate_write_columns(plan)
     to_check = [(e["sheet_row"], col) for e in plan for col in e["new"]]
+    to_check += [(e["sheet_row"], col) for e in plan for col in (PLACE_ID, VERIFIED_BY, VERIFICATION_RESULT)]
     current = sheets.read_cells(service, to_check, headers)
 
     aborted = []
     for entry in plan:
         sheet_row, place_id = entry["sheet_row"], entry["place_id"]
+        if current.get((sheet_row, PLACE_ID)) != place_id:
+            aborted.append((sheet_row, place_id, "Place ID changed; rebuild plan"))
+            continue
+        if current.get((sheet_row, VERIFICATION_RESULT), "") or current.get((sheet_row, VERIFIED_BY), "") not in ("", "PP (validation)"):
+            aborted.append((sheet_row, place_id, "finished or personally verified row"))
+            continue
         undo_entry = undo_by_row.get(sheet_row)
         if undo_entry is None or undo_entry["place_id"] != place_id:
             aborted.append((sheet_row, place_id, "no matching undo entry"))
@@ -561,6 +571,28 @@ def _apply_undo(service, headers, undo_entries, apply):
     for r, c, wanted, got in mismatches:
         print(f"Mismatch row {r} column {c!r}: wrote {wanted!r}, read back {got!r}")
     return 1 if mismatches else 0
+
+# Explicit research schema. Unknown future headers are denied by default.
+RESEARCH_COLUMNS = {
+    CAN_PARK, WHO_CAN_PARK, CHANGE_MADE, NOTES, REVIEW_FLAG, FLAG_STATUS,
+    SOURCE_URLS, VERIFIED_BY, VERIFIED_DATE, VERIFICATION_RESULT,
+    'Brand', 'Place Category', 'Area Type', 'Cost Type', 'Price Status',
+    'Tariff Type', 'Tariff Detail', 'Max Stay (mins)',
+    'Hours (OpenStreetMap opening_hours format)', 'Hours Basis', 'Operator',
+    'Parking Control Type (Cameras / Barrier / Patrol)',
+    'PCN (Penalty Charge Notice) amount (£)', 'Evidence Type',
+    'Evidence Detail (what the source shows)', 'Source Tier', 'Specificity',
+    'Rules Stated', 'Prices Stated', 'Evidence Age', 'Agreeing Sources',
+    'Conflict', 'Rules Summary', 'Decision Reason', 'Evidence Level',
+}
+
+
+def validate_write_columns(plan):
+    for entry in plan:
+        assert_not_protected(entry['new'])
+        unknown = set(entry['new']) - RESEARCH_COLUMNS
+        if unknown:
+            raise ValueError(f'Plan contains columns outside research allowlist: {sorted(unknown)}')
 
 
 if __name__ == "__main__":

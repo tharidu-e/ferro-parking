@@ -19,6 +19,7 @@ import argparse
 import json
 from datetime import date
 from pathlib import Path
+from .run_paths import new_run_dir, reserve_output
 
 from . import fill, sheets
 
@@ -145,9 +146,7 @@ def backfill_main(argv=None):
         return 1
 
     plan, undo, dry_run_rows = build_backfill_plan(sheet_rows)
-    out_dir = (Path(args.out) if args.out
-               else Path("data/runs") / date.today().isoformat() / "evidence_level_backfill")
-    out_dir.mkdir(parents=True, exist_ok=True)
+    out_dir = reserve_output(args.out) if args.out else new_run_dir("evidence_level_backfill")
     (out_dir / "plan.json").write_text(json.dumps(plan, indent=1))
     (out_dir / "undo.json").write_text(json.dumps(undo, indent=1))
     fill.write_csv(out_dir / "dry_run.csv",

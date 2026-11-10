@@ -14,9 +14,12 @@ import csv
 import re
 from datetime import date
 from pathlib import Path
+from .run_paths import new_run_dir, reserve_output
 
-ORIG_TAB = "ALL LONDON"
-CLEAN_TAB = "ALL LONDON (clean)"
+from .settings import setting
+
+ORIG_TAB = setting("original_tab")
+CLEAN_TAB = setting("clean_tab")
 
 # "ALL LONDON"'s own column headers, by clean-tab field name, for every
 # field a direct copy reproduces reliably (checked against all 4773
@@ -222,34 +225,46 @@ def _load_tabs(service):
     return clean_headers, clean_rows, orig_headers, orig_rows
 
 
+def identity_key(row):
+    mapped = map_row(row) if "sheet" in row else row
+    name = normalize_name(mapped.get("Location Name", ""))
+    postcode = normalize_postcode(mapped.get("Postcode", ""))
+    if not name or not postcode:
+        return None
+    return name, postcode
+
+
+def join_tabs(clean_rows, orig_rows):
+    """Prove a unique identity for every existing clean row or abort."""
+    by_id, by_identity = {}, {}
+    for original in orig_rows:
+        pid, key = original.get("Place ID"), identity_key(original)
+        if pid:
+            by_id.setdefault(pid, []).append(original)
+        if key:
+            by_identity.setdefault(key, []).append(original)
+    pairs, used = [], set()
+    for clean in clean_rows:
+        matches = by_id.get(clean.get("Place ID"), [])
+        if not matches:
+            matches = by_identity.get(identity_key(clean), [])
+            if any(row.get("Place ID") and row["Place ID"] != clean.get("Place ID") for row in matches):
+                raise ValueError("WARNING: conflicting Place IDs; alignment cannot be proven")
+        if len(matches) != 1 or id(matches[0]) in used:
+            raise ValueError("WARNING: tab alignment cannot be proven uniquely by Place ID or name+postcode")
+        used.add(id(matches[0]))
+        pairs.append((clean, matches[0]))
+    return pairs
+
+
 def check_alignment(clean_rows, orig_rows):
-    """Compare Location Name (clean) against "sheet" (original) for every
-    row the two tabs should share. Returns (aligned_count, mismatches),
-    where a mismatch is (clean_row, orig_row) whose names differ even
-    after dropping a trailing parenthetical."""
-    n = min(len(clean_rows), len(orig_rows))
-    mismatches = []
-    for i in range(n):
-        c, o = clean_rows[i], orig_rows[i]
-        if normalize_name(c.get("Location Name", "")) != normalize_name(o.get("sheet", "")):
-            mismatches.append((c, o))
-    return n - len(mismatches), mismatches
+    pairs = join_tabs(clean_rows, orig_rows)
+    return len(pairs), []
 
 
 def captured_can_park_by_place_id(clean_rows, orig_rows):
-    """ALL LONDON's own "Can Park? (Yes/No/Conditional)" (Brandon and
-    Grogbot's original rough read), keyed by the clean tab's Place ID.
-    The two tabs stay row for row aligned: the original 4773 rows are
-    aligned by name (see check_alignment), and every row sync_apply has
-    appended since keeps that same order, so position is the join key.
-    A clean row past the end of orig_rows (should not happen) is simply
-    left out."""
-    out = {}
-    for clean_row, orig_row in zip(clean_rows, orig_rows):
-        place_id = clean_row.get("Place ID", "")
-        if place_id:
-            out[place_id] = orig_row.get("Can Park? (Yes/No/Conditional)", "")
-    return out
+    return {clean["Place ID"]: original.get("Can Park? (Yes/No/Conditional)", "")
+            for clean, original in join_tabs(clean_rows, orig_rows) if clean.get("Place ID")}
 
 
 def load_captured_can_park(service):
@@ -283,7 +298,8 @@ def main(argv=None):
         print("More than a handful of mismatches. Stopping before the append plan.")
         return 1
 
-    new_rows = orig_rows[len(clean_rows):]
+    matched_originals = {id(original) for _, original in join_tabs(clean_rows, orig_rows)}
+    new_rows = [row for row in orig_rows if id(row) not in matched_originals]
     print(f"new rows in {ORIG_TAB}: {len(new_rows)}")
 
     duplicates = find_duplicates(new_rows, clean_rows)
@@ -316,8 +332,7 @@ def main(argv=None):
             "Clean name": cr.get("Location Name", ""), "Reason": reason,
         })
 
-    out_dir = Path(args.out) if args.out else Path("data/runs") / date.today().isoformat() / "sync"
-    out_dir.mkdir(parents=True, exist_ok=True)
+    out_dir = reserve_output(args.out) if args.out else new_run_dir("sync")
     with open(out_dir / "append_plan.csv", "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
         w.writeheader()
@@ -475,7 +490,7 @@ def apply_main(argv=None):
     from . import sheets
 
     ap = argparse.ArgumentParser()
-    ap.add_argument("--append-plan", default="data/runs/2026-11-03/sync/append_plan.csv")
+    ap.add_argument("--append-plan", required=True)
     ap.add_argument("--apply", action="store_true")
     args = ap.parse_args(argv)
 

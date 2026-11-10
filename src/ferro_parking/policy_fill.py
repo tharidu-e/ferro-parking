@@ -30,6 +30,7 @@ import csv
 import json
 from datetime import date
 from pathlib import Path
+from .run_paths import new_run_dir, reserve_output
 
 from . import discovery, fill, page_fill, rules as rules_mod, sheets
 from .osm_match import contains_word as _contains_word
@@ -285,8 +286,7 @@ def classify(sheet_row, osm_row, rules):
     # A convenience-format branch with no car park evidence is, under
     # R10, a small venue: presumed no parking, not left for research.
     if fmt == "convenience":
-        fields, extra_notes, extra_flags = presumed_no_parking_fields()
-        return "b", (fields, extra_notes, extra_flags), None
+        return "c", None, "Map absence is not evidence of no parking; official source needed"
 
     gym = gym_chain_for(sheet_row)
     if gym:
@@ -296,8 +296,7 @@ def classify(sheet_row, osm_row, rules):
         return "c", None, f"gym chain ({gym}), no OSM car park within 40 m"
 
     if small_venue_category(sheet_row, osm_row, rules) and not has_nearby_car_park(osm_row, rules):
-        fields, extra_notes, extra_flags = presumed_no_parking_fields()
-        return "b", (fields, extra_notes, extra_flags), None
+        return "c", None, "Map absence is not evidence of no parking; official source needed"
 
     return "c", None, "not a recognised chain format or small venue pattern"
 
@@ -375,14 +374,13 @@ def main(argv=None):
 
     plan, undo, dry_run_rows, counts, needs_research = build_plan(eligible, rules, today)
 
-    out_dir = Path(args.out) if args.out else Path("data/runs") / today.isoformat() / "policy_fill" / args.borough
-    out_dir.mkdir(parents=True, exist_ok=True)
+    out_dir = reserve_output(args.out) if args.out else new_run_dir(Path("policy_fill") / args.borough)
     (out_dir / "plan.json").write_text(json.dumps(plan, indent=1))
     (out_dir / "undo.json").write_text(json.dumps(undo, indent=1))
     fill.write_csv(out_dir / "dry_run.csv",
                     ["Sheet Row", "Place ID", "Location Name", "Column", "Current value", "New value"],
                     dry_run_rows)
-    with open(out_dir / "needs_research.csv", "w", newline="", encoding="utf-8") as f:
+    with open(out_dir / "exceptions.csv", "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
         w.writerow(["Place ID", "Location Name", "Reason"])
         w.writerows(needs_research)

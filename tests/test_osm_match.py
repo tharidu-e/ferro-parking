@@ -88,20 +88,20 @@ def test_osm_max_stay_goes_to_notes_r4():
     s = m.suggest({"access": "customers", "fee": "no", "maxstay": "120"}, None)
     assert s["Max Stay (mins)"] == "Not published"
     assert "120" in s["OSM Notes"]
-    assert s["Tariff Type"] == "Free (time limit not published)"
+    assert s["Tariff Type"] == "Not published"
     assert s["Source Tier"] == "OpenStreetMap"
     assert s["Can Park? (Yes/No/Conditional)"] == "Conditional"   # OSM never gives Yes
 
 
 # ---- suggestions follow rule R7 (Free needs site-specific evidence) --------
-def test_fee_no_on_customers_only_car_park_gives_free_r7():
+def test_fee_no_on_customers_only_car_park_gives_unknown_r7():
     s = m.suggest({"access": "customers", "fee": "no"}, None)
-    assert s["Cost Type"] == "Free"
+    assert s["Cost Type"] == "Unknown"
 
 
-def test_fee_no_on_destination_car_park_gives_free_r7():
+def test_fee_no_on_destination_car_park_gives_unknown_r7():
     s = m.suggest({"access": "destination", "fee": "no"}, None)
-    assert s["Cost Type"] == "Free"
+    assert s["Cost Type"] == "Unknown"
 
 
 def test_fee_no_on_public_car_park_gives_unknown_r7():

@@ -28,6 +28,7 @@ import time
 import tomllib
 from collections import Counter
 from pathlib import Path
+from .run_paths import new_run_dir, reserve_output
 
 import osmium
 import shapely
@@ -500,8 +501,7 @@ def run(pbf_path, csv_path, out_dir, categories=None):
     feature objects this function's CSV rows do not carry."""
     result = collect(pbf_path, csv_path, categories)
 
-    out_dir = Path(out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
+    out_dir = reserve_output(out_dir)
     _write_csv(out_dir / "discovery_summary.csv",
                ["Category", "OSM Count", "Sheet Count", "Matched",
                 "OSM Missing From Sheet", "Sheet Rows With No OSM Match"], result["summary_rows"])
@@ -533,7 +533,8 @@ def main(argv=None):
 
     if args.out is None:
         import datetime as _dt
-        args.out = Path("data") / "runs" / _dt.date.today().isoformat() / "discovery"
+        # run() reserves the final directory.
+        args.out = new_run_dir("discovery") / "results"
 
     categories = load_categories()
     result = run(args.pbf, args.csv_in, args.out, categories)

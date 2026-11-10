@@ -41,23 +41,19 @@ def captured(value="Conditional", place_id="PP-1"):
 
 
 # ---- rule R7: Free and Anyone need site-specific evidence -----------------
-def test_fee_no_on_customers_only_gives_free():
+def test_fee_no_on_customers_only_never_gives_free():
+    """2026-11-04: fee=no used to give Free on a customers-only car park
+    (access=customers/destination). A direct instruction removed that:
+    an OSM tag alone must never set Cost Type Free, on any access value."""
     new = fill.derive_values(sheet_row(), osm_row("access=customers; fee=no"), RULES, TODAY, captured())
-    assert new["Cost Type"] == "Free"
+    assert new["Cost Type"] == "Unknown"
+    assert "OSM tags this as free, not confirmed" in new["Notes"]
 
 
 def test_fee_no_on_untagged_car_park_gives_unknown_not_free():
     new = fill.derive_values(sheet_row(), osm_row("fee=no"), RULES, TODAY, captured())
     assert new["Cost Type"] == "Unknown"
     assert "R7" in new["Notes"]
-
-
-def test_chain_paid_vs_osm_free_gives_unknown_and_flag():
-    new = fill.derive_values(sheet_row(**{"Location Name": "NCP Somewhere"}),
-                              osm_row("access=customers; fee=no"), RULES, TODAY, captured())
-    assert new["Cost Type"] == "Unknown"
-    assert "Review Flag" in new
-    assert "rule R7" in new["Review Flag"]
 
 
 def test_chain_free_hint_never_sets_cost_type_free():
@@ -67,6 +63,15 @@ def test_chain_free_hint_never_sets_cost_type_free():
                               osm_row("access=customers"), RULES, TODAY, captured())
     assert new["Cost Type"] != "Free"
     assert "hint only" in new["Notes"]
+
+
+@pytest.mark.parametrize("access", ["yes", "public", "permissive", "", "no-such-value"])
+def test_who_can_park_never_anyone_from_an_osm_access_tag(access):
+    """An OSM access tag alone must never read as Who Can Park "Anyone" or
+    "Anyone (paid)" (rule R7): the open-access values (yes/public/permissive)
+    stay Unknown until a site-specific source can say more."""
+    new = fill.derive_values(sheet_row(), osm_row(f"access={access}"), RULES, TODAY, captured())
+    assert new["Who Can Park"] not in ("Anyone", "Anyone (paid)")
 
 
 # ---- eligibility filter ------------------------------------------------------
@@ -142,7 +147,7 @@ def test_notes_keeps_existing_text_and_appends_osm():
 
 def test_notes_omitted_when_nothing_to_add():
     new = fill.derive_values(sheet_row(Notes="Existing note."),
-                              osm_row("access=customers; fee=no"), RULES, TODAY, captured())
+                              osm_row("access=customers"), RULES, TODAY, captured())
     assert "Notes" not in new
 
 
@@ -199,7 +204,7 @@ class FakeService:
         return self._spreadsheets
 
 
-HEADERS = ["Place ID", "Verification Result", "Who Can Park"]
+HEADERS = ["Place ID", "Verification Result", "Who Can Park", "Verified By"]
 
 
 def test_write_aborts_row_when_live_cell_differs_from_undo():
@@ -207,7 +212,7 @@ def test_write_aborts_row_when_live_cell_differs_from_undo():
               "new": {"Who Can Park": "Customers only"}}]
     undo_by_row = {5: {"sheet_row": 5, "place_id": "PP-5", "old": {"Who Can Park": "Unknown"}}}
     # Live sheet now has a different value than the undo snapshot recorded.
-    store = {"ALL LONDON (clean)!C5": "Guests only"}
+    store = {"ALL LONDON (clean)!A5": "PP-5", "ALL LONDON (clean)!C5": "Guests only"}
     service = FakeService(store)
     result = fill._apply_write(service, HEADERS, plan, undo_by_row, apply=True)
     assert result == 0
@@ -218,7 +223,7 @@ def test_write_proceeds_when_live_cell_matches_undo():
     plan = [{"sheet_row": 5, "place_id": "PP-5", "name": "X",
               "new": {"Who Can Park": "Customers only"}}]
     undo_by_row = {5: {"sheet_row": 5, "place_id": "PP-5", "old": {"Who Can Park": "Unknown"}}}
-    store = {"ALL LONDON (clean)!C5": "Unknown"}
+    store = {"ALL LONDON (clean)!A5": "PP-5", "ALL LONDON (clean)!C5": "Unknown"}
     service = FakeService(store)
     result = fill._apply_write(service, HEADERS, plan, undo_by_row, apply=True)
     assert result == 0
@@ -233,3 +238,21 @@ def test_undo_aborts_when_place_id_no_longer_matches():
     result = fill._apply_undo(service, HEADERS, undo_entries, apply=True)
     assert result == 0
     assert service._spreadsheets._values.batch_update_calls == []
+
+
+def test_osm_draft_does_not_mark_finished_or_invent_geo():
+    new = fill.derive_values(sheet_row(**{'Geo Precision':''}),
+                             osm_row('access=customers; fee=no'), RULES, TODAY, captured('Yes'))
+    assert 'Verification Result' not in new
+    assert 'Geo Precision' not in new
+
+
+@pytest.mark.parametrize('guard,value', [('A','PP-other'), ('B','Confirmed'), ('D','Tharidu')])
+def test_writer_refuses_changed_identity_finished_or_personal_row(guard,value):
+    plan = [{'sheet_row':5,'place_id':'PP-5','new':{'Who Can Park':'Customers only'}}]
+    undo = {5:{'place_id':'PP-5','old':{'Who Can Park':'Unknown'}}}
+    store = {'ALL LONDON (clean)!A5':'PP-5','ALL LONDON (clean)!C5':'Unknown'}
+    store[f'ALL LONDON (clean)!{guard}5'] = value
+    service = FakeService(store)
+    fill._apply_write(service, HEADERS, plan, undo, True)
+    assert not service._spreadsheets._values.batch_update_calls

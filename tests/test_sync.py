@@ -189,10 +189,10 @@ def test_haversine_m_known_distance():
 
 
 # ---- captured_can_park_by_place_id: ALL LONDON's own Can Park? by row --
-def test_captured_can_park_by_place_id_joins_by_position():
+def test_captured_can_park_by_place_id_joins_by_id():
     clean_rows = [{"Place ID": "PP-1"}, {"Place ID": "PP-2"}]
-    orig_rows = [{"Can Park? (Yes/No/Conditional)": "No"},
-                 {"Can Park? (Yes/No/Conditional)": "Conditional"}]
+    orig_rows = [{"Place ID": "PP-2", "Can Park? (Yes/No/Conditional)": "Conditional"},
+                 {"Place ID": "PP-1", "Can Park? (Yes/No/Conditional)": "No"}]
     out = sync.captured_can_park_by_place_id(clean_rows, orig_rows)
     assert out == {"PP-1": "No", "PP-2": "Conditional"}
 
@@ -201,16 +201,17 @@ def test_captured_can_park_by_place_id_uses_all_london_even_when_clean_is_blank(
     # A cleared or not-yet-researched clean row has no Can Park? of its
     # own; the lookup is keyed by Place ID and reads ALL LONDON only.
     clean_rows = [{"Place ID": "PP-1", "Can Park? (Yes/No/Conditional)": ""}]
-    orig_rows = [{"Can Park? (Yes/No/Conditional)": "No"}]
+    orig_rows = [{"Place ID": "PP-1", "Can Park? (Yes/No/Conditional)": "No"}]
     out = sync.captured_can_park_by_place_id(clean_rows, orig_rows)
     assert out["PP-1"] == "No"
 
 
 def test_captured_can_park_by_place_id_skips_a_row_with_no_place_id():
     clean_rows = [{"Place ID": ""}]
-    orig_rows = [{"Can Park? (Yes/No/Conditional)": "No"}]
-    out = sync.captured_can_park_by_place_id(clean_rows, orig_rows)
-    assert out == {}
+    orig_rows = [{"Place ID": "PP-1", "Can Park? (Yes/No/Conditional)": "No"}]
+    import pytest
+    with pytest.raises(ValueError, match="alignment"):
+        sync.captured_can_park_by_place_id(clean_rows, orig_rows)
 
 
 # ---- applying the plan: formula shifting and row building ------------------

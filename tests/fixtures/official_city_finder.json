@@ -1,0 +1,1 @@
+{"type":"FeatureCollection","features":[{"type":"Feature","properties":{"OBJECTID":1,"CAR_PARKS":"Example council car park","TARIFFS":"£3.00 per hour","SPACES":100},"geometry":{"type":"Point","coordinates":[-0.09,51.515]}}]}

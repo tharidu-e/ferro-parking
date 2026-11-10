@@ -109,8 +109,6 @@ def build_row_values(sheet_row, extracted, today, captured_can_park, verified_by
 
     new[fill.VERIFIED_BY] = verified_by
     new[fill.VERIFIED_DATE] = today.isoformat()
-    if not sheet_row.get(fill.GEO_PRECISION) and "Geo Precision" not in new:
-        new["Geo Precision"] = "Building"
 
     fill.assert_not_protected(new)
     return new
