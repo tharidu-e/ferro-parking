@@ -37,6 +37,11 @@ Commands:
   grok-import  Turn an export of the bot's results tab into a plan file
   default-fill  Dry run: the category default (R1, R10) as a plan file, for
           rows the latest routing run put on stage "default"
+  category-plan  Dry run: plan the blank Place Category fills from a
+          propose-categories output, with the store format guard
+  fetch-fill  Dry run: run one registered fetcher over its routed rows and
+          emit a plan file (station, better.org.uk, thegymgroup.com,
+          puregym.com; marksandspencer.com caches pages only)
   probe  Fetch a few branch pages for one source key and report whether they
           state parking (one request per second per domain, no sheet access)
   tranche1  Read-only: filter and score discovery's tranche 1 missing
@@ -88,6 +93,12 @@ def main():
     if cmd == "readiness":
         from .readiness import main as readiness_main
         return readiness_main(argv)
+    if cmd == "fetch-fill":
+        from .fetch_fill import main as fetch_fill_main
+        return fetch_fill_main(argv)
+    if cmd == "category-plan":
+        from .category_plan import main as category_plan_main
+        return category_plan_main(argv)
     if cmd == "probe":
         from .probe import main as probe_main
         return probe_main(argv)

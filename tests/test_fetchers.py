@@ -1,0 +1,433 @@
+"""Fetchers A to E, read on saved fixtures. No test touches the network."""
+import csv
+from datetime import date
+from pathlib import Path
+
+import pytest
+
+from ferro_parking import db, fetch_fill, fill, plan
+from ferro_parking.sources import station as station_mod
+from ferro_parking.sources import venue as venue_mod
+
+FIXTURE = Path(__file__).parent / "fixtures" / "db_sheet_sample.csv"
+PAGES = Path(__file__).parent / "fixtures" / "pages"
+HEADERS = next(csv.reader(FIXTURE.open(encoding="utf-8-sig")))
+TODAY = date(2026, 11, 10)
+
+STATION_PAGE = """Station parking
+250 parking spaces
+12 accessible parking spaces
+The car park is managed by APCOA Parking."""
+
+NO_PARKING_PAGE = """Station parking
+No parking spaces
+No accessible parking spaces"""
+
+ACCESSIBLE_ONLY_PAGE = """Station parking
+4 accessible parking spaces"""
+
+SILENT_PAGE = "Live departures. Buy tickets. Plan your journey."
+
+
+def sheet_row(**values):
+    row = {header: "" for header in HEADERS}
+    row.update(values)
+    return row
+
+
+def saved(key):
+    folder = PAGES / key
+    if not folder.is_dir():
+        pytest.skip(f"no saved pages for {key}")
+    return [path.read_text(encoding="utf-8") for path in sorted(folder.glob("*.txt"))]
+
+
+# ---------------------------------------------------------------- A, the slug
+
+@pytest.mark.parametrize("name,slug", [
+    ("Brockley Station", "brockley"),
+    ("Brockley Station – via Coulgate Street", "brockley"),
+    ("Hampton Court Station Car Park", "hampton-court"),
+    ("Barking Station Car Parks", "barking"),
+    ("Watford Junction Station (NCP)", "watford-junction"),
+    ("East Croydon Station - Car Park", "east-croydon"),
+    ("Harrow-on-the-Hill Station – via Station Approach", "harrow-on-the-hill"),
+    ("Highams Park Station – via Hale End Road north east end", "highams-park"),
+    ("Drayton Park Station Parking", "drayton-park"),
+])
+def test_the_station_slug_drops_the_sheets_own_wording(name, slug):
+    assert station_mod.station_slug(name) == slug
+
+
+def test_a_name_that_is_only_wording_resolves_to_nothing():
+    assert station_mod.station_slug("Station Car Park") == ""
+    assert station_mod.station_slug("") == ""
+
+
+def test_an_unresolvable_name_gives_no_url():
+    assert station_mod.StationFetcher().branch_url(
+        sheet_row(**{"Location Name": "Car Park"})) == ""
+
+
+def test_the_url_is_the_national_rail_station_page():
+    url = station_mod.StationFetcher().branch_url(
+        sheet_row(**{"Location Name": "Brockley Station"}))
+    assert url == "https://www.nationalrail.co.uk/stations/brockley/"
+
+
+# ---------------------------------------------------------------- A, the rules
+
+def test_a_stated_space_count_sets_can_park_yes_and_notes_the_count():
+    values, notes, quote = station_mod.StationFetcher().values(STATION_PAGE)
+    assert values[fill.CAN_PARK] == "Yes"
+    assert quote == "250 parking spaces"
+    assert any("250 parking spaces" in note for note in notes)
+    assert values["Evidence Detail (what the source shows)"] == "250 parking spaces"
+
+
+def test_no_parking_spaces_sets_can_park_no_with_that_quote():
+    values, _, quote = station_mod.StationFetcher().values(NO_PARKING_PAGE)
+    assert values[fill.CAN_PARK] == "No"
+    assert quote == "No parking spaces"
+    assert values["Evidence Detail (what the source shows)"] == "No parking spaces"
+
+
+def test_can_park_no_marks_every_parking_detail_not_applicable():
+    from ferro_parking import page_fill
+    values, _, _ = station_mod.StationFetcher().values(NO_PARKING_PAGE)
+    for column in page_fill.NOT_APPLICABLE_IF_NO_PARKING:
+        assert values[column] == "Not applicable", column
+
+
+def test_accessible_spaces_alone_write_nothing():
+    values, notes, quote = station_mod.StationFetcher().values(ACCESSIBLE_ONLY_PAGE)
+    assert values == {}
+    assert notes == []
+    assert quote == ""
+
+
+def test_a_page_with_no_parking_statement_writes_nothing():
+    assert station_mod.StationFetcher().values(SILENT_PAGE)[0] == {}
+
+
+def test_the_operator_is_written_only_when_the_page_names_it():
+    with_operator, _, _ = station_mod.StationFetcher().values(STATION_PAGE)
+    assert with_operator["Operator"] == "APCOA Parking"
+    without, _, _ = station_mod.StationFetcher().values("Station parking\n250 parking spaces")
+    assert "Operator" not in without
+
+
+def test_the_station_fetcher_never_writes_a_tariff_free_or_a_max_stay():
+    page = STATION_PAGE + "\nParking costs £5.00 per day and the max stay is 24 hours."
+    values, _, _ = station_mod.StationFetcher().values(page)
+    for column in ("Cost Type", "Tariff Type", "Tariff Detail", "Max Stay (mins)",
+                    "Price Status"):
+        assert column not in values, column
+
+
+def test_the_saved_station_pages_all_read_as_no_parking_spaces():
+    fetcher = station_mod.StationFetcher()
+    for text in saved("nationalrail.co.uk"):
+        values, _, quote = fetcher.values(text)
+        assert values.get(fill.CAN_PARK) == "No"
+        assert quote == "No parking spaces"
+
+
+# ---------------------------------------------------------------- B, C, D
+
+def test_a_free_parking_line_sets_cost_type_free():
+    values, _, _, quote = venue_mod.VenueFetcher("thegymgroup.com").values(
+        "Opening hours vary. Free parking is available at this gym.")
+    assert values["Cost Type"] == "Free"
+    assert values["Tariff Type"] == "Free (time limit not published)"
+    assert values["Tariff Detail"] == "Free"
+    assert values[fill.CAN_PARK] == "Conditional"
+    assert values["Who Can Park"] == "Customers only"
+    assert "Free parking is available" in quote
+
+
+def test_a_parking_type_free_facility_line_counts():
+    text = ("By car Car parking available 40 total spaces available "
+            "2 disabled spaces available Parking type: Free")
+    values, notes, _, _ = venue_mod.VenueFetcher("better.org.uk").values(text)
+    assert values["Cost Type"] == "Free"
+    assert any("40 parking spaces" in note for note in notes)
+
+
+def test_a_stated_charge_with_no_template_leaves_cost_type_unknown():
+    text = ("There are 155 car parking spaces available for customers. "
+            "If you plan to stay beyond the free four hour period, customers must pay "
+            "for additional time using the parking app.")
+    values, notes, flags, _ = venue_mod.VenueFetcher("better.org.uk").values(text)
+    assert values["Cost Type"] == "Unknown"
+    assert "Tariff Detail" not in values
+    assert any("Charges stated but not in a template" in note for note in notes)
+    assert flags
+
+
+def test_a_free_period_with_an_hourly_rate_becomes_the_template():
+    text = ("Parking is free for 60 mins. After that customers must pay £2.50 per hour.")
+    values, _, _, _ = venue_mod.VenueFetcher("better.org.uk").values(text)
+    assert values["Cost Type"] == "Free then paid"
+    assert values["Tariff Type"] == "Free period, then hourly"
+    assert values["Tariff Detail"] == "Free for 60 mins, then £2.50 per hour"
+
+
+def test_a_free_period_is_never_read_as_a_max_stay():
+    """Four hours free then pay lets a driver stay longer, so Max Stay stays
+    empty. Writing 240 there would send them away early."""
+    text = ("Customers are entitled to up to four hours free car parking. "
+            "Beyond that you must pay for additional time.")
+    values, _, _, _ = venue_mod.VenueFetcher("better.org.uk").values(text)
+    assert "Max Stay (mins)" not in values
+
+
+def test_a_stated_maximum_stay_is_written():
+    text = "Free parking is available. The maximum stay is 3 hours."
+    values, notes, _, _ = venue_mod.VenueFetcher("puregym.com").values(text)
+    assert values["Max Stay (mins)"] == "180"
+    assert any("Max stay from the branch page" in note for note in notes)
+
+
+def test_a_parking_charge_notice_is_not_read_as_a_tariff():
+    text = ("Free parking is available for members. Vehicles parked in these bays may "
+            "receive a Parking Charge Notice (PCN).")
+    values, _, _, _ = venue_mod.VenueFetcher("better.org.uk").values(text)
+    assert values["Cost Type"] == "Free"
+
+
+def test_the_operator_and_the_pcn_amount_come_only_from_the_page():
+    text = ("Free parking is available. The car park is managed by Parking Eye. "
+            "A PCN of £100 applies.")
+    values, _, _, _ = venue_mod.VenueFetcher("better.org.uk").values(text)
+    assert values["Operator"] == "Parking Eye"
+    assert values["PCN (Penalty Charge Notice) amount (£)"] == "100"
+    plain, _, _, _ = venue_mod.VenueFetcher("better.org.uk").values("Free parking is available.")
+    assert "Operator" not in plain
+    assert "PCN (Penalty Charge Notice) amount (£)" not in plain
+
+
+def test_a_caution_about_the_signs_goes_in_notes():
+    text = ("Free Parking. Parking restrictions may apply. Please check in the car park "
+            "before you enter the gym.")
+    _, notes, _, _ = venue_mod.VenueFetcher("puregym.com").values(text)
+    assert any("check in the car park" in note for note in notes)
+
+
+def test_a_silent_venue_page_writes_nothing():
+    values, notes, flags, quote = venue_mod.VenueFetcher("kfc.co.uk").values(
+        "Order now. Our menu. Find a restaurant.")
+    assert (values, notes, flags, quote) == ({}, [], [], "")
+
+
+def test_a_page_that_only_mentions_parking_in_passing_writes_nothing():
+    values, _, _, _ = venue_mod.VenueFetcher("puregym.com").values(
+        "The gym is near the station car park and the bus stop.")
+    assert values == {}
+
+
+def test_every_value_carries_an_official_site_specific_source():
+    values, _, _, _ = venue_mod.VenueFetcher("puregym.com").values("Free parking is available.")
+    assert values["Source Tier"] == "Official site - text"
+    assert values["Specificity"] == "Site-specific"
+    assert "Route B" in values["Decision Reason"]
+
+
+@pytest.mark.parametrize("key", ["better.org.uk", "thegymgroup.com", "puregym.com"])
+def test_the_saved_pages_for_each_key_still_give_values(key):
+    fetcher = venue_mod.VenueFetcher(key)
+    results = [fetcher.values(text)[0] for text in saved(key)]
+    assert any(values for values in results)
+    for values in results:
+        if values:
+            assert values[fill.CAN_PARK] == "Conditional"
+            assert values["Who Can Park"] == "Customers only"
+            assert values["Cost Type"] in ("Free", "Paid", "Free then paid", "Unknown")
+
+
+def test_the_saved_marks_and_spencer_pages_are_cache_only():
+    assert "marksandspencer.com" in fetch_fill.CACHE_ONLY
+    assert "marksandspencer.com" not in fetch_fill.REGISTRY
+
+
+def test_the_registry_holds_only_the_four_approved_fetchers():
+    assert set(fetch_fill.REGISTRY) == {"station", "better.org.uk", "thegymgroup.com",
+                                        "puregym.com"}
+
+
+# ---------------------------------------------------------------- the runner
+
+@pytest.fixture
+def conn(tmp_path):
+    connection = db.connect(tmp_path / "test.sqlite")
+    db.import_sheet_csv(connection, FIXTURE)
+    connection.executemany(
+        "INSERT OR REPLACE INTO routing (run_id, place_id, stage, reason)"
+        " VALUES ('route-1', ?, ?, 'test')",
+        [("PP-000001", "default"), ("PP-000002", "station"),
+         ("PP-000003", "station"), ("PP-000004", "grok")])
+    connection.commit()
+    return connection
+
+
+class FakeFetcher:
+    key = "fake"
+    verified_by = "Code (page fetch)"
+
+    def __init__(self, url="https://example.org/branch", values=None, notes=None, flags=None):
+        self._url, self._values = url, values or {}
+        self._notes, self._flags = notes or [], flags or []
+
+    def branch_url(self, row):
+        return self._url
+
+    def values(self, text, row=None):
+        return dict(self._values), list(self._notes), list(self._flags), "the quote"
+
+
+def fake_fetch(pages):
+    def inner(url, conn, *args, **kwargs):
+        return (*pages.get(url, (404, "")), False)
+    return inner
+
+
+def test_the_station_fetcher_reads_only_station_rows(conn):
+    rows, run_id = fetch_fill.rows_for(conn, "station")
+    assert sorted(row[0]["Place ID"] for row in rows) == ["PP-000002"]
+    assert run_id == "route-1"
+
+
+def test_a_skipped_row_is_never_read(conn):
+    conn.executemany(
+        "INSERT OR REPLACE INTO routing (run_id, place_id, stage, reason)"
+        " VALUES ('route-2', ?, ?, 'test')",
+        [("PP-000001", "skip_done"), ("PP-000002", "skip_onsite")])
+    conn.commit()
+    rows, _ = fetch_fill.rows_for(conn, "station")
+    assert rows == []
+
+
+def test_a_key_fetcher_reads_rows_by_source_key(conn):
+    rows, _ = fetch_fill.rows_for(conn, "horizon parking")
+    assert [row[0]["Place ID"] for row in rows] == ["PP-000001"]
+
+
+def test_an_unregistered_key_is_refused(conn):
+    with pytest.raises(SystemExit, match="No fetcher registered"):
+        fetch_fill.run(conn, "nosuchkey.example")
+
+
+def test_the_runner_counts_every_outcome(conn, monkeypatch):
+    monkeypatch.setattr(fetch_fill, "fetch", fake_fetch(
+        {"https://example.org/branch": (200, "Free parking is available.")}))
+    lines, report = fetch_fill.run(
+        conn, "station", today=TODAY,
+        fetcher=FakeFetcher(values={fill.CAN_PARK: "No", "Source Tier": "Official site - text",
+                                     "Specificity": "Site-specific",
+                                     "Decision Reason": "Route A: test"}))
+    assert report["counts"]["rows attempted"] == 1
+    assert report["counts"]["pages fetched"] == 1
+    assert report["counts"]["rows with values"] == 1
+    assert lines
+
+
+def test_a_silent_page_is_counted_and_plans_nothing(conn, monkeypatch):
+    monkeypatch.setattr(fetch_fill, "fetch", fake_fetch(
+        {"https://example.org/branch": (200, "nothing here")}))
+    lines, report = fetch_fill.run(conn, "station", today=TODAY, fetcher=FakeFetcher())
+    assert report["counts"]["silent pages"] == 1
+    assert lines == []
+
+
+def test_a_blocked_page_is_counted_and_plans_nothing(conn, monkeypatch):
+    monkeypatch.setattr(fetch_fill, "fetch", fake_fetch(
+        {"https://example.org/branch": (403, "Forbidden")}))
+    lines, report = fetch_fill.run(conn, "station", today=TODAY, fetcher=FakeFetcher())
+    assert report["counts"]["blocked pages"] == 1
+    assert lines == []
+
+
+def test_a_404_is_reported_as_an_unresolved_name(conn, monkeypatch):
+    monkeypatch.setattr(fetch_fill, "fetch", fake_fetch({}))
+    _, report = fetch_fill.run(conn, "station", today=TODAY, fetcher=FakeFetcher())
+    assert report["counts"]["unresolved names"] == 1
+    assert "404" in report["unresolved"][0]["reason"]
+
+
+def test_a_name_that_resolves_to_no_url_is_reported(conn, monkeypatch):
+    def explode(*args, **kwargs):
+        raise AssertionError("no url, so no request")
+
+    monkeypatch.setattr(fetch_fill, "fetch", explode)
+    _, report = fetch_fill.run(conn, "station", today=TODAY, fetcher=FakeFetcher(url=""))
+    assert report["counts"]["unresolved names"] == 1
+
+
+def test_a_row_without_brand_or_category_is_held(conn, monkeypatch):
+    monkeypatch.setattr(fetch_fill, "fetch", fake_fetch(
+        {"https://example.org/branch": (200, "Free parking is available.")}))
+    lines, report = fetch_fill.run(
+        conn, "station", today=TODAY,
+        fetcher=FakeFetcher(values={fill.CAN_PARK: "Conditional"}))
+    assert report["counts"]["rows held for a person"] == 1
+    assert lines == []
+    assert "no Brand" in report["held"][0]["reason"]
+
+
+def test_a_cache_only_key_plans_nothing(conn, monkeypatch):
+    conn.execute("UPDATE raw SET json = json_set(json_set(json, '$.Operator', ''),"
+                 " '$.\"Source URLs (primary first)\"',"
+                 " 'https://www.marksandspencer.com/stores/bow-1234')"
+                 " WHERE place_id = 'PP-000001'")
+    conn.executemany(
+        "INSERT OR REPLACE INTO routing (run_id, place_id, stage, reason)"
+        " VALUES ('route-3', ?, 'default', 'test')", [("PP-000001",)])
+    conn.commit()
+    monkeypatch.setattr(fetch_fill, "fetch", fake_fetch(
+        {"https://www.tesco.com/store-locator/hackney": (200, "Car parking")}))
+    lines, report = fetch_fill.run(conn, "marksandspencer.com", today=TODAY,
+                                    fetcher=FakeFetcher(
+                                        url="https://www.tesco.com/store-locator/hackney"))
+    assert lines == []
+    assert report["counts"]["pages fetched"] == 1
+
+
+def test_an_existing_notes_dash_leaves_the_notes_line_out(conn, monkeypatch):
+    """PP-000002's Notes already holds a newline and plain text. A dash in the
+    sheet's own Notes must not drag the plan into a validator failure."""
+    conn.execute("UPDATE raw SET json = json_set(json, '$.Notes', 'Old note – see sign')"
+                 " WHERE place_id = 'PP-000002'")
+    conn.commit()
+    monkeypatch.setattr(fetch_fill, "fetch", fake_fetch(
+        {"https://example.org/branch": (200, "x")}))
+    lines, _ = fetch_fill.run(
+        conn, "station", today=TODAY,
+        fetcher=FakeFetcher(values={fill.CAN_PARK: "No"}, notes=["a new note"]))
+    assert "Notes" not in {line["column"] for line in lines}
+
+
+def test_the_plan_a_fetcher_writes_passes_db_apply(conn, monkeypatch):
+    monkeypatch.setattr(fetch_fill, "fetch", fake_fetch(
+        {"https://example.org/branch": (200, "Free parking is available.")}))
+    from ferro_parking import page_fill
+    values = {fill.CAN_PARK: "No", "Source Tier": "Operator / council site",
+              "Specificity": "Site-specific", "Evidence Level": "Verified",
+              "Evidence Type": "Official site: clear answer",
+              "Evidence Detail (what the source shows)": "No parking spaces",
+              "Rules Stated": "Yes", "Prices Stated": "No",
+              "Decision Reason": "Route A: National Rail station page, visible text"}
+    values.update({column: "Not applicable"
+                   for column in page_fill.NOT_APPLICABLE_IF_NO_PARKING})
+    lines, _ = fetch_fill.run(conn, "station", today=TODAY,
+                               fetcher=FakeFetcher(values=values))
+    assert lines
+    report = plan.apply_plan(conn, lines, "run-fetch", apply=False)
+    assert report["rejected"] == [], report["rejected"]
+
+
+def test_the_runner_writes_no_change_to_the_database(conn, monkeypatch, tmp_path):
+    monkeypatch.setattr(fetch_fill, "fetch", fake_fetch(
+        {"https://example.org/branch": (200, "Free parking is available.")}))
+    fetch_fill.run(conn, "station", today=TODAY,
+                    fetcher=FakeFetcher(values={fill.CAN_PARK: "No"}))
+    assert conn.execute("SELECT COUNT(*) AS n FROM changes").fetchone()["n"] == 0

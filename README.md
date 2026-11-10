@@ -401,3 +401,60 @@ User-Agent and no bot-protection workaround. A 403 is recorded as a 403 and
 nothing retries. A page that answers 200 with a bot challenge is recorded as
 blocked. Page text is cached under `data/cache/pages`. The `pages` table records each
 fetch with its time and status, so a second look costs no request.
+
+## Category fills (the propose-categories plan)
+
+```bash
+python -m ferro_parking propose-categories --sheet-csv EXPORT.csv
+python -m ferro_parking category-plan --proposals PROPOSE_CATEGORIES.csv
+```
+
+`category-plan` turns the proposals into a plan. It fills blank Place Category
+cells only. A proposal that disagrees with a value already on the row is
+rejected, and the existing value stays.
+
+One guard sits over the supermarket proposals. The R10 rules read the store
+format from the name and not from the category. So a proposal of "Supermarket
+- large format" is kept only when `rules.format_for` reads the name as
+large. A name that reads as convenience is proposed as "Supermarket -
+convenience" instead. A name the rules cannot read is dropped.
+
+Every dropped, reshaped or held row lands in `category_review.csv` with its
+reason. A row verified by a named person is never touched.
+
+## Fetchers (Phase 5, the built ones)
+
+```bash
+python -m ferro_parking fetch-fill --key station
+python -m ferro_parking fetch-fill --key better.org.uk
+python -m ferro_parking fetch-fill --key thegymgroup.com
+python -m ferro_parking fetch-fill --key puregym.com
+python -m ferro_parking fetch-fill --key marksandspencer.com
+```
+
+`fetch-fill` is a dry run. It fetches pages, writes a plan file, and changes
+nothing but the page cache. The report counts rows attempted, pages fetched,
+plan lines, silent pages, blocked pages, unresolved names and rows held for a
+person. It also saves ten examples, each with its quote and URL.
+
+The station fetcher resolves the National Rail page from the station name. It
+strips the sheet's own wording, such as "Station", "Car Park" and the entrance
+after a dash. A page that answers 404 is reported as unresolved. Nothing is guessed. A stated number of parking spaces sets Can Park? Yes and puts the count in
+Notes. The exact words "No parking spaces" set Can Park? No with that quote. A
+statement about accessible bays alone writes nothing. Operator is written only
+when the page names it. Tariff, Free and Max Stay are never written from a
+station page.
+
+The venue fetcher serves better.org.uk, thegymgroup.com and puregym.com. It
+sets Can Park? Conditional and Who Can Park Customers only. Cost Type reads Free only for a page that says parking is free. Sometimes the page states a charge this reader cannot
+write in the tariff template. Cost Type then reads Unknown, the wording goes in
+Notes, and the row gets a Review Flag. Max Stay is written only for a page that states a maximum stay. A free period
+is not a maximum stay, because the driver can pay to stay longer. Operator and the PCN amount come
+only from the page. A caution such as "check the signs in the car park" goes in
+Notes.
+
+`marksandspencer.com` is cache only. Its pages are fetched for the evidence
+gate to read, and no value is ever written from them.
+
+A row the fetcher cannot answer stays unanswered. The next route run sends it
+on by the ordinary rules.

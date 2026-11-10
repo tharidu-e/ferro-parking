@@ -43,10 +43,12 @@ def load_osm_rows(path=None):
     An empty dict means no OSM run is available, and every row then reads as
     having no mapped car park nearby."""
     if path is None:
-        candidates = sorted(Path("data/runs").glob("*/osm_results.csv"))
+        # Newest by modification time, not by name: a run folder named
+        # 2026-11-10_12 sorts before 2026-11-10_9 as text.
+        candidates = list(Path("data/runs").rglob("osm_results.csv"))
         if not candidates:
             return {}, None
-        path = candidates[-1]
+        path = max(candidates, key=lambda item: item.stat().st_mtime)
     with open(path, newline="", encoding="utf-8-sig") as stream:
         rows = {row["Place ID"]: row for row in csv.DictReader(stream) if row.get("Place ID")}
     return rows, str(path)
