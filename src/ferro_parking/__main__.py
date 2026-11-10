@@ -35,6 +35,8 @@ Commands:
           --apply; any refusal blocks the whole plan)
   db-undo  Undo one run of applied database changes (dry run unless --apply)
   grok-import  Turn an export of the bot's results tab into a plan file
+  default-fill  Dry run: the category default (R1, R10) as a plan file, for
+          rows the latest routing run put on stage "default"
   tranche1  Read-only: filter and score discovery's tranche 1 missing
           places, ready for review before writing (never writes to the sheet)
   tranche1-write  Dry run: select, de-duplicate and plan the tranche 1
@@ -84,6 +86,9 @@ def main():
     if cmd == "readiness":
         from .readiness import main as readiness_main
         return readiness_main(argv)
+    if cmd == "default-fill":
+        from .category_default import main as default_fill_main
+        return default_fill_main(argv)
     if cmd == "db-apply":
         from .plan import apply_main
         return apply_main(argv)

@@ -17,9 +17,12 @@ refusals are:
 - an unknown Place ID, or an unknown column
 - a column another owner writes (hard rule 2), any other protected column,
   or a column outside fill.RESEARCH_COLUMNS
-- a row whose Verified By starts with "Tharidu"
+- a row whose Verified By starts with "Tharidu" (fill.is_named_person)
+- a row the latest routing run put on a different stage than the plan's own
 - replacing a value that is already there, unless the plan's own Source Tier
-  is strong and its Specificity is Site-specific
+  is strong and its Specificity is Site-specific. A placeholder is not an
+  answer: "", "Unknown" and "Not yet checked" never count as a value, and
+  "Not published" counts only once Verification Result is filled
 - anything validation.validate_rows refuses on the plan entry
 
 Nothing is deleted, ever. An applied change is a new row in the changes table,
@@ -37,7 +40,6 @@ from .run_paths import new_run_dir, reserve_output
 
 PLACE_ID = fill.PLACE_ID
 VERIFICATION_RESULT = fill.VERIFICATION_RESULT
-NAMED_VERIFIER_PREFIX = "Tharidu"
 
 # Hard rule 2 of the db-router brief: another owner writes these four. They are
 # imported as a read-only mirror and are never proposed or published.
@@ -111,6 +113,23 @@ def column_refusal(column, headers):
     return None
 
 
+# A placeholder is not an answer, so writing over it replaces nothing.
+ALWAYS_PLACEHOLDER = {"", "Unknown", "Not yet checked"}
+# "Not published" is a placeholder only while the row is unfinished. Once
+# Verification Result is filled, somebody decided that nothing is published,
+# and that is an answer.
+UNFINISHED_PLACEHOLDER = {"Not published"}
+
+
+def is_placeholder(value, row):
+    value = (value or "").strip()
+    if value in ALWAYS_PLACEHOLDER:
+        return True
+    if value in UNFINISHED_PLACEHOLDER:
+        return not (row.get(VERIFICATION_RESULT) or "").strip()
+    return False
+
+
 def replacement_refusal(lines_by_column, row, column):
     """Why this line may not overwrite a value that is already there, or None.
 
@@ -118,7 +137,7 @@ def replacement_refusal(lines_by_column, row, column):
     Tier and Specificity belong to the value being replaced, so they cannot
     vouch for the new one."""
     current = (row.get(column, "") or "").strip()
-    if not current:
+    if is_placeholder(current, row):
         return None
     if str(lines_by_column[column]["new_value"]).strip() == current:
         return None  # the same value again changes nothing, so it replaces nothing
@@ -137,6 +156,7 @@ def check_plan(conn, lines):
     headers, rows = db.current_rows(conn)
     by_place_id = {(row.get(PLACE_ID) or "").strip(): row for row in rows}
     header_set = set(headers)
+    routing_run, routing = db.latest_routing(conn)
 
     rejected, grouped = [], {}
     for line in lines:
@@ -151,11 +171,19 @@ def check_plan(conn, lines):
         if row is None:
             refuse(f"unknown Place ID {place_id!r}")
             continue
+        if routing_run is None:
+            refuse("no routing run in the database: run route first")
+            continue
+        stage = routing.get(place_id)
+        if stage != line["stage"]:
+            refuse(f"routing run {routing_run} put this row on stage {stage!r}, "
+                   f"not the plan's {line['stage']!r}")
+            continue
         reason = column_refusal(column, header_set)
         if reason:
             refuse(reason)
             continue
-        if (row.get(fill.VERIFIED_BY) or "").startswith(NAMED_VERIFIER_PREFIX):
+        if fill.is_named_person(row.get(fill.VERIFIED_BY)):
             refuse(f"Verified By is {row.get(fill.VERIFIED_BY)!r}, a named person")
             continue
         if column in grouped.get(place_id, {}):
@@ -340,7 +368,38 @@ def grok_results_to_plan(conn, results_csv, stage="grok", today=None):
                 "verified_by": new.get(fill.VERIFIED_BY, ""),
             })
     result["dropped_columns"] = dropped
+    result["proposals"] = closed_proposals(result["plan"], dropped)
     return lines, result
+
+
+CLOSED_STATUSES = ("Closed", "Temporarily closed")
+PROPOSAL_HEADERS = ["Place ID", "issue", "column", "current value", "proposed value",
+                    "quote", "source url"]
+
+
+def closed_proposals(plan_entries, dropped):
+    """Location Status is protected, so a bot report that a place is closed can
+    never be applied. It matters too much to lose, so a dropped Closed or
+    Temporarily closed value becomes a proposal, with its quote and source."""
+    by_place_id = {entry["place_id"]: entry["new"] for entry in plan_entries}
+    out = []
+    for row in dropped:
+        if row["column"] != "Location Status":
+            continue
+        value = str(row["new value"]).strip()
+        if value not in CLOSED_STATUSES:
+            continue
+        new = by_place_id.get(row["Place ID"], {})
+        out.append({
+            "Place ID": row["Place ID"],
+            "issue": f"the bot reports this place {value.lower()}",
+            "column": "Location Status",
+            "current value": "",
+            "proposed value": value,
+            "quote": new.get("Evidence Detail (what the source shows)", ""),
+            "source url": new.get("Source URLs (primary first)", ""),
+        })
+    return out
 
 
 # ---------------------------------------------------------------- commands
@@ -444,12 +503,15 @@ def grok_import_main(argv=None):
                  "reason": "; ".join(row["Reasons"])} for row in result["rejects"]],
                ["Place ID", "Location Name", "reason"])
     _write_csv(out_dir / "dropped_columns.csv", result["dropped_columns"], REJECT_HEADERS)
+    _write_csv(out_dir / "proposals.csv", result["proposals"], PROPOSAL_HEADERS)
 
     report = result["report"]
     print(f"{report['source_rows']} result rows: {report['accepted']} accepted, "
           f"{report['skipped']} skipped, {report['rejected']} rejected")
     print(f"{len(result['dropped_columns'])} columns dropped as unwritable or blank: "
           f"{out_dir / 'dropped_columns.csv'}")
+    print(f"{len(result['proposals'])} places the bot reports closed, for your review: "
+          f"{out_dir / 'proposals.csv'}")
     print(f"{len(lines)} plan lines written to {out_dir / 'plan.jsonl'}")
     print("Check it with db-apply, which is a dry run unless you add --apply.")
     return 0

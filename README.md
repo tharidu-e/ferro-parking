@@ -322,3 +322,37 @@ mapping, the validation and the second reading are unchanged. It writes
 dropped file lists columns `db-apply` can never write, such as Location
 Status, and columns the bot left blank. Dropping them keeps the plan usable
 instead of blocked.
+
+## Category default (Phase 4 of the db-router work)
+
+```bash
+python -m ferro_parking default-fill
+```
+
+`default-fill` is a dry run and writes nothing to the database or the sheet.
+It reads the Place IDs the latest routing run put on stage `default`. It runs
+the existing R1 and R10 rules from `policy_fill` on each one. It then writes a
+plan file for `db-apply`.
+
+Station rows, grok rows, fetcher rows and every skip row are out of scope. The
+routing table alone decides that. A station car park is not a customer venue,
+so the category default never touches one.
+
+The rules are `policy_fill.classify`, `chain_policy_fields` and
+`presumed_no_parking_fields`, used unchanged with `config/rules.toml`. Rule R7
+therefore holds. No Free, no Anyone and no max stay without site-specific
+evidence. A chain policy row sets Can Park? Conditional and Who Can Park per R1. It also sets Cost Type Unknown or Paid, and Max Stay
+Not published. Verification Result becomes "Confirmed, details not published",
+and Evidence Level becomes "Chain policy".
+
+Each plan also carries the row's Brand and Place Category. They usually change
+nothing, but `validation.validate_rows` sees only the plan's own columns and
+asks for both whenever Can Park? is Yes or Conditional. A row with neither on it gets no plan and waits for a person.
+
+The run folder holds three files. `plan.jsonl` is the plan. `summary.csv`
+holds the counts by outcome and by Place Category. `examples.csv` holds five
+example rows per outcome, with each field the plan changes.
+
+`policy_fill` answers "Map absence is not evidence of no parking" for a small
+venue and for a convenience format. So R10's presumed No never fires from this
+command. The count is reported, and it is 0.

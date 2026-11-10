@@ -343,6 +343,17 @@ def current_rows(conn):
     return headers, out
 
 
+def latest_routing(conn):
+    """(run_id, {place_id: stage}) for the newest route run, or (None, {})."""
+    row = conn.execute(
+        "SELECT run_id FROM routing ORDER BY rowid DESC LIMIT 1").fetchone()
+    if row is None:
+        return None, {}
+    run_id = row["run_id"]
+    return run_id, {r["place_id"]: r["stage"] for r in conn.execute(
+        "SELECT place_id, stage FROM routing WHERE run_id = ?", (run_id,))}
+
+
 def duplicate_of_map(conn):
     """{place_id: duplicate_of} for every row the database marked a duplicate."""
     return {row["place_id"]: row["duplicate_of"] for row in conn.execute(

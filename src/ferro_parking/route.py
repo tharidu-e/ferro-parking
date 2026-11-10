@@ -34,15 +34,11 @@ from urllib.parse import urlsplit
 
 from . import db, discovery, readiness
 from .discover import source_urls
+from . import fill
 from .fill import CAN_PARK, LOCATION_NAME, PLACE_ID, SOURCE_URLS, VERIFICATION_RESULT, VERIFIED_BY
 from .osm_match import brand_key, contains_word, norm
 from .run_paths import new_run_dir, reserve_output
 from .triage_blanks import bucket
-
-# The only named person on the sheet. Agent labels such as "PP (validation)",
-# "Policy script", "Grok (discovery)" and "Claude (capture check)" are not
-# people, so their rows stay routable.
-NAMED_VERIFIER_PREFIX = "Tharidu"
 
 ON_SITE = "Needs on-site check"
 PUBLIC_CAR_PARK_CATEGORIES = ("Council car park", "Private / operator car park")
@@ -136,7 +132,7 @@ def classify(row, missing, duplicates, fetchers=None):
     verified_by = (row.get(VERIFIED_BY) or "").strip()
     result = (row.get(VERIFICATION_RESULT) or "").strip()
 
-    if verified_by.startswith(NAMED_VERIFIER_PREFIX):
+    if fill.is_named_person(verified_by):
         return "skip_named", "", "", f"Verified By is {verified_by!r}, a named person"
     if place_id in missing:
         return "skip_missing", "", "", "missing from the newest import"

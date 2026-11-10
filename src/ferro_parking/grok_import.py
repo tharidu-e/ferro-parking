@@ -338,7 +338,8 @@ def build_plan(headers, rows, result_headers, results, config=None, today=None, 
             out_of_scope.append(record)
             continue
         finished = bool(str(target.get("Verification Result", "")).strip())
-        human = target.get("Verified By", "") not in config["reviewers"]["automation"]
+        # One named-person test, shared with db-apply (fill.is_named_person).
+        human = fill.is_named_person(target.get("Verified By", ""))
         if finished or human:
             skipped.append({**base, "Reasons": [r for r, yes in (
                 ("finished", finished), ("person or unrecognised reviewer", human)) if yes]})

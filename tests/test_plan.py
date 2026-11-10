@@ -45,10 +45,23 @@ def full_row_lines(place_id=BLANK_ROW, **overrides):
             for column, value in values.items()]
 
 
+def seed_routing(connection, stage="default", run_id="route-test"):
+    """Every plan line names a stage, and db-apply refuses a row the latest
+    routing run put somewhere else. Most tests here are about something other
+    than routing, so they start from a run that puts every row on one stage."""
+    _, rows = db.current_rows(connection)
+    connection.executemany(
+        "INSERT OR REPLACE INTO routing (run_id, place_id, stage, reason)"
+        " VALUES (?, ?, ?, 'test')",
+        [(run_id, row["Place ID"], stage) for row in rows])
+    connection.commit()
+
+
 @pytest.fixture
 def conn(tmp_path):
     connection = db.connect(tmp_path / "test.sqlite")
     db.import_sheet_csv(connection, FIXTURE)
+    seed_routing(connection)
     return connection
 
 
@@ -536,6 +549,7 @@ def test_grok_import_skips_a_tharidu_row(conn, tmp_path):
 
 def test_a_grok_import_plan_passes_db_apply(conn, tmp_path):
     lines, _ = plan.grok_results_to_plan(conn, grok_results_csv(tmp_path))
+    seed_routing(conn, stage="grok", run_id="route-grok")
     report = plan.apply_plan(conn, lines, "run-grok", apply=False)
     assert report["rejected"] == []
     assert report["places"] == 1
@@ -592,3 +606,184 @@ def test_no_applied_change_ever_names_an_owner_column(conn):
         report = plan.apply_plan(conn, [line(column=column, new_value="1")], "run-1", apply=True)
         assert report["applied"] == 0
     assert conn.execute("SELECT COUNT(*) AS n FROM changes").fetchone()["n"] == 0
+
+
+# ---------------------------------------------------------------- the routing gate
+
+def test_a_line_whose_stage_is_not_the_routed_stage_is_refused(conn):
+    got = reasons(conn, [line(stage="grok")])
+    assert any("put this row on stage 'default', not the plan's 'grok'" in reason
+               for reason in got)
+
+
+def test_a_line_on_a_skipped_row_is_refused(conn):
+    seed_routing(conn, stage="skip_done", run_id="route-later")
+    got = reasons(conn, full_row_lines())
+    assert any("stage 'skip_done'" in reason for reason in got)
+
+
+def test_only_the_latest_routing_run_counts(conn):
+    seed_routing(conn, stage="station", run_id="route-later")
+    assert any("stage 'station'" in reason for reason in reasons(conn, [line()]))
+
+
+def test_a_row_the_latest_routing_run_never_saw_is_refused(tmp_path):
+    connection = db.connect(tmp_path / "part.sqlite")
+    db.import_sheet_csv(connection, FIXTURE)
+    connection.execute(
+        "INSERT INTO routing (run_id, place_id, stage, reason)"
+        " VALUES ('route-1', 'PP-000001', 'default', 'test')")
+    connection.commit()
+    got = [reject["reason"] for reject in plan.check_plan(connection, [line()])[1]]
+    assert any("stage None" in reason for reason in got)
+
+
+def test_a_plan_is_refused_when_no_routing_run_exists(tmp_path):
+    connection = db.connect(tmp_path / "noroute.sqlite")
+    db.import_sheet_csv(connection, FIXTURE)
+    got = [reject["reason"] for reject in plan.check_plan(connection, [line()])[1]]
+    assert got == ["no routing run in the database: run route first"]
+
+
+# ---------------------------------------------------------------- placeholders
+
+def set_cell(conn, place_id, column, value):
+    conn.execute("UPDATE raw SET json = json_set(json, '$.\"' || ? || '\"', ?)"
+                 " WHERE place_id = ?", (column, value, place_id))
+    conn.commit()
+
+
+def replacement_reasons(conn, place_id, column, new_value):
+    return [reason for reason in
+            reasons(conn, [line(place_id=place_id, column=column, new_value=new_value)])
+            if "without strong site-specific evidence" in reason]
+
+
+def test_an_empty_value_is_a_placeholder(conn):
+    set_cell(conn, FILLED_ROW, "Operator", "")
+    assert replacement_reasons(conn, FILLED_ROW, "Operator", "NCP") == []
+
+
+def test_unknown_is_a_placeholder_in_every_column(conn):
+    for column, value in (("Operator", "NCP"), ("Hours Basis", "Store hours"),
+                           ("Price Status", "Published")):
+        set_cell(conn, FILLED_ROW, column, "Unknown")
+        assert replacement_reasons(conn, FILLED_ROW, column, value) == [], column
+
+
+def test_not_yet_checked_is_a_placeholder_in_every_column(conn):
+    set_cell(conn, FILLED_ROW, "Evidence Level", "Not yet checked")
+    assert replacement_reasons(conn, FILLED_ROW, "Evidence Level", "Chain policy") == []
+
+
+def test_not_published_is_a_placeholder_while_the_row_is_unfinished(conn):
+    set_cell(conn, FILLED_ROW, "Verification Result", "")
+    set_cell(conn, FILLED_ROW, "Operator", "Not published")
+    assert replacement_reasons(conn, FILLED_ROW, "Operator", "NCP") == []
+
+
+def test_not_published_is_an_answer_once_the_row_is_finished(conn):
+    set_cell(conn, FILLED_ROW, "Verification Result", "Confirmed")
+    set_cell(conn, FILLED_ROW, "Operator", "Not published")
+    assert replacement_reasons(conn, FILLED_ROW, "Operator", "NCP")
+
+
+def test_a_real_value_is_never_a_placeholder(conn):
+    set_cell(conn, FILLED_ROW, "Operator", "Horizon Parking")
+    assert replacement_reasons(conn, FILLED_ROW, "Operator", "NCP")
+
+
+def test_is_placeholder_reads_the_rows_verification_result():
+    unfinished = {"Verification Result": ""}
+    finished = {"Verification Result": "Confirmed"}
+    assert plan.is_placeholder("", finished) is True
+    assert plan.is_placeholder("Unknown", finished) is True
+    assert plan.is_placeholder("Not yet checked", finished) is True
+    assert plan.is_placeholder("Not published", unfinished) is True
+    assert plan.is_placeholder("Not published", finished) is False
+    assert plan.is_placeholder("Customers only", unfinished) is False
+
+
+def test_r7_still_refuses_free_over_a_placeholder(conn):
+    """A placeholder makes the replacement rule stand aside. It does not make
+    rule R7 stand aside: Free still needs strong site-specific evidence."""
+    set_cell(conn, BLANK_ROW, "Cost Type", "Unknown")
+    lines = full_row_lines(**{"Cost Type": "Free", "Tariff Type": "Free with time limit",
+                              "Max Stay (mins)": "60"})
+    got = reasons(conn, lines)
+    assert any("Free, public access and a max stay require quoted strong" in reason
+               for reason in got), got
+
+
+def test_r7_still_refuses_anyone_over_a_placeholder(conn):
+    set_cell(conn, BLANK_ROW, "Who Can Park", "Unknown")
+    got = reasons(conn, full_row_lines(**{"Who Can Park": "Anyone"}))
+    assert any("Free, public access and a max stay require quoted strong" in reason
+               for reason in got), got
+
+
+# ---------------------------------------------------------------- one named-person list
+
+def test_db_apply_and_grok_import_share_one_named_person_list():
+    from ferro_parking import fill, grok_import
+    import inspect
+    assert fill.is_named_person("Tharidu")
+    assert fill.is_named_person("Tharidu (hand check)")
+    assert not fill.is_named_person("Grok (discovery)")
+    assert not fill.is_named_person("")
+    # grok_import no longer keeps its own reviewer exception.
+    source = inspect.getsource(grok_import.build_plan)
+    assert "fill.is_named_person" in source
+    assert "reviewers" not in source
+
+
+def test_grok_import_accepts_an_agent_verified_row(conn, tmp_path):
+    """An agent label is not a person, so the bot's answer is imported."""
+    conn.execute("UPDATE raw SET json = json_set(json, '$.\"Verified By\"', 'Grok (discovery)')"
+                 " WHERE place_id = ?", (BLANK_ROW,))
+    conn.commit()
+    lines, result = plan.grok_results_to_plan(conn, grok_results_csv(tmp_path))
+    assert result["report"]["skipped"] == 0
+    assert lines
+
+
+# ---------------------------------------------------------------- closed proposals
+
+def test_a_closed_place_the_bot_reports_becomes_a_proposal(conn, tmp_path):
+    results = grok_results_csv(tmp_path, **{"Location Status": "Closed"})
+    _, result = plan.grok_results_to_plan(conn, results)
+    assert [(p["Place ID"], p["proposed value"]) for p in result["proposals"]] == [
+        (BLANK_ROW, "Closed")]
+    proposal = result["proposals"][0]
+    assert "no car park at this shop" in proposal["quote"]
+    assert proposal["source url"].startswith("https://www.pret.co.uk/")
+    assert proposal["column"] == "Location Status"
+
+
+def test_a_temporarily_closed_place_also_becomes_a_proposal(conn, tmp_path):
+    results = grok_results_csv(tmp_path, **{"Location Status": "Temporarily closed"})
+    _, result = plan.grok_results_to_plan(conn, results)
+    assert [p["proposed value"] for p in result["proposals"]] == ["Temporarily closed"]
+
+
+def test_an_open_place_is_not_proposed(conn, tmp_path):
+    _, result = plan.grok_results_to_plan(conn, grok_results_csv(tmp_path))
+    assert result["proposals"] == []
+    assert any(row["column"] == "Location Status" for row in result["dropped_columns"])
+
+
+def test_a_closed_proposal_is_never_a_plan_line(conn, tmp_path):
+    results = grok_results_csv(tmp_path, **{"Location Status": "Closed"})
+    lines, _ = plan.grok_results_to_plan(conn, results)
+    assert "Location Status" not in {entry["column"] for entry in lines}
+
+
+def test_grok_import_command_writes_the_proposals_file(conn, tmp_path):
+    results = grok_results_csv(tmp_path, **{"Location Status": "Closed"})
+    out = tmp_path / "grok_out"
+    plan.grok_import_main(["--results-csv", str(results),
+                            "--db", str(tmp_path / "test.sqlite"), "--out", str(out)])
+    with open(out / "proposals.csv", newline="", encoding="utf-8") as stream:
+        rows = list(csv.DictReader(stream))
+    assert len(rows) == 1
+    assert list(rows[0]) == plan.PROPOSAL_HEADERS

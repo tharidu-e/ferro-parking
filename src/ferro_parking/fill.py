@@ -64,6 +64,16 @@ PROTECTED_COLUMNS = {
 PROTECTED_SUFFIXES = ("(as captured)", "Charges (as published)", "Enforcement Details")
 
 
+# The one named-person test, shared by every caller. A row hand-checked by a
+# person is never touched. Agent labels ("PP (validation)", "Policy script",
+# "Grok (discovery)", "Claude (capture check)") are not people.
+NAMED_VERIFIER_PREFIX = "Tharidu"
+
+
+def is_named_person(verified_by):
+    return str(verified_by or "").startswith(NAMED_VERIFIER_PREFIX)
+
+
 def assert_not_protected(new_values):
     for col in new_values:
         if col in PROTECTED_COLUMNS or col.casefold().startswith("geo") or col.endswith(PROTECTED_SUFFIXES):
