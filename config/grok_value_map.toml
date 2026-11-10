@@ -64,4 +64,4 @@ free_bands = '^Free for up to (\d+) mins, then (.+)$'
 
 [reviewers]
 # Unknown values are treated as a person's name, not assumed to be automation.
-automation = ["", "PP (validation)", "OSM script", "Policy script", "Claude (capture check)", "Claude (page check)", "Grok (detail pass)", "Code (page fetch)"]
+automation = ["", "PP (validation)", "PP", "OSM script", "OSM script (pilot)", "Policy script", "Category policy script", "Claude (capture check)", "Claude (page check)", "Grok (discovery)", "Grok (detail pass)", "Code (page fetch)"]

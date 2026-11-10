@@ -31,6 +31,10 @@ Commands:
   db-rebuild  Recompute the derived places and parking tables from raw
   route  Give every row one research stage, write the routing table and
           data/runs/<date>/route/routing.csv (never writes to the sheet)
+  db-apply  Apply a JSON lines plan file to the database (dry run unless
+          --apply; any refusal blocks the whole plan)
+  db-undo  Undo one run of applied database changes (dry run unless --apply)
+  grok-import  Turn an export of the bot's results tab into a plan file
   tranche1  Read-only: filter and score discovery's tranche 1 missing
           places, ready for review before writing (never writes to the sheet)
   tranche1-write  Dry run: select, de-duplicate and plan the tranche 1
@@ -80,6 +84,15 @@ def main():
     if cmd == "readiness":
         from .readiness import main as readiness_main
         return readiness_main(argv)
+    if cmd == "db-apply":
+        from .plan import apply_main
+        return apply_main(argv)
+    if cmd == "db-undo":
+        from .plan import undo_main
+        return undo_main(argv)
+    if cmd == "grok-import":
+        from .plan import grok_import_main
+        return grok_import_main(argv)
     if cmd == "route":
         from .route import main as route_main
         return route_main(argv)

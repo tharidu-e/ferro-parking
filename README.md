@@ -274,3 +274,51 @@ published all read as not known. The reason text comes from
 rows a person has to look at, such as a row with a blank Location Name. Nothing
 in that file is ever written back, because Location Name is a protected
 column.
+
+## Plan files (Phase 3 of the db-router work)
+
+```bash
+python -m ferro_parking grok-import --results-csv RESULTS.csv
+python -m ferro_parking db-apply --plan PLAN.jsonl
+python -m ferro_parking db-apply --plan PLAN.jsonl --apply
+python -m ferro_parking db-undo --run RUN_ID
+python -m ferro_parking db-undo --run RUN_ID --apply
+```
+
+A plan file is JSON lines. Each line is one change. The keys are `place_id`,
+`column`, `new_value`, `quote`, `source_url`, `stage` and `verified_by`. The
+column is the exact sheet header text.
+
+`db-apply` is a dry run unless you add `--apply`. One refusal blocks the whole
+plan, and `rejected.csv` lists every refused line with its reason. These lines
+are refused:
+
+- an unknown Place ID, or an unknown column
+- a column another owner writes, or any other protected column
+- a column outside `fill.RESEARCH_COLUMNS`
+- a row whose Verified By starts with "Tharidu"
+- anything `validation.validate_rows` refuses
+
+A line that replaces a value already in the row needs strong evidence. The
+plan's own Source Tier must be in `page_fill.STRONG_SOURCE_TIERS` and its
+Specificity must be Site-specific. The row's existing Source Tier belongs to
+the value being replaced, so it cannot vouch for the new one. A line that
+restates the value already there changes nothing. It stays in the plan as
+context for the validator, which sees only the plan's own columns. The change
+log skips it.
+
+Verification Result is recorded last, so a row is never finished before its
+other values are in place. Every applied change is one row in the `changes`
+table, under a single run id. A line with a quote or a source URL also adds an
+`evidence` row.
+
+`db-undo --run RUN_ID` appends the reverse of that run, under the run id
+`undo-RUN_ID`. Nothing is deleted. A second undo of the same run does
+nothing.
+
+`grok-import` wraps the existing `grok_import.build_plan`, so the value
+mapping, the validation and the second reading are unchanged. It writes
+`plan.jsonl`, plus `skipped.csv`, `rejects.csv` and `dropped_columns.csv`. The
+dropped file lists columns `db-apply` can never write, such as Location
+Status, and columns the bot left blank. Dropping them keeps the plan usable
+instead of blocked.
