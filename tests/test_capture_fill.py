@@ -191,6 +191,19 @@ def test_finish_record_builds_a_valid_new_dict():
     assert new["Verified Date"] == "2026-11-03"
 
 
+def test_finish_record_appends_notes_append_without_replacing_existing_notes():
+    # capture_extract's hotel branch uses this to carry a valet detail or a
+    # trailing condition that does not fit any of the eleven fields: it
+    # must land in Notes alongside whatever Notes already said, not replace it.
+    rec = full_record()
+    rec["notes_append"] = ["Valet only."]
+    row = sheet_row()
+    row["Notes"] = "Existing note."
+    new, violations = cf.finish_record(row, osm_row(), rec, TODAY, captured())
+    assert violations is None
+    assert new["Notes"] == "Existing note. | Valet only."
+
+
 def test_finish_record_rejects_on_shared_consistency_check():
     # Can Park? No means every other parking column must be Not applicable;
     # validate_record does not check this, page_fill.consistency_checks does.

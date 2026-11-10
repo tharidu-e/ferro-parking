@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<osm version="0.6" generator="test">
+ <!-- a clean, brand-tagged supermarket: kept, High confidence -->
+ <node id="1000" version="1" timestamp="2026-05-01T00:00:00Z" lat="51.4810" lon="-0.1470">
+  <tag k="shop" v="supermarket"/><tag k="name" v="Tesco Express Battersea"/><tag k="brand" v="Tesco"/></node>
+
+ <!-- supermarket junk: name says it is really a vape shop -->
+ <node id="1001" version="1" timestamp="2026-05-01T00:00:00Z" lat="51.4820" lon="-0.1480">
+  <tag k="shop" v="supermarket"/><tag k="name" v="Vape Corner"/></node>
+
+ <!-- a hospital site with a department mapped as its own point inside it -->
+ <node id="1010" version="1" timestamp="2026-01-01T00:00:00Z" lat="51.4900" lon="-0.1600"/>
+ <node id="1011" version="1" timestamp="2026-01-01T00:00:00Z" lat="51.4900" lon="-0.1580"/>
+ <node id="1012" version="1" timestamp="2026-01-01T00:00:00Z" lat="51.4920" lon="-0.1580"/>
+ <node id="1013" version="1" timestamp="2026-01-01T00:00:00Z" lat="51.4920" lon="-0.1600"/>
+ <way id="10" version="1" timestamp="2026-01-01T00:00:00Z">
+  <nd ref="1010"/><nd ref="1011"/><nd ref="1012"/><nd ref="1013"/><nd ref="1010"/>
+  <tag k="amenity" v="hospital"/><tag k="name" v="Royal Free Hospital"/></way>
+ <node id="1020" version="1" timestamp="2026-05-01T00:00:00Z" lat="51.4910" lon="-0.1590">
+  <tag k="amenity" v="hospital"/><tag k="name" v="Oncology Unit"/></node>
+
+ <!-- a duplicate station pair: keep the railway=station one -->
+ <node id="1030" version="1" timestamp="2026-05-01T00:00:00Z" lat="51.4860" lon="-0.1240">
+  <tag k="railway" v="station"/><tag k="name" v="Vauxhall"/></node>
+ <node id="1031" version="1" timestamp="2026-05-01T00:00:00Z" lat="51.4861" lon="-0.1241">
+  <tag k="public_transport" v="station"/><tag k="station" v="train"/><tag k="name" v="Vauxhall"/></node>
+
+ <!-- station junk: a river pier with no rail signal -->
+ <node id="1032" version="1" timestamp="2026-05-01T00:00:00Z" lat="51.4900" lon="-0.1200">
+  <tag k="amenity" v="ferry_terminal"/><tag k="public_transport" v="station"/><tag k="name" v="River Bus Pier"/></node>
+
+ <!-- a hotel and its own car park, close enough to be flagged as a hotel site -->
+ <node id="1040" version="1" timestamp="2026-05-01T00:00:00Z" lat="51.4750" lon="-0.1550">
+  <tag k="tourism" v="hotel"/><tag k="name" v="Premier Inn"/></node>
+ <node id="1041" version="1" timestamp="2026-05-01T00:00:00Z" lat="51.47504" lon="-0.15504">
+  <tag k="amenity" v="parking"/><tag k="name" v="Premier Inn Car Park"/></node>
+</osm>

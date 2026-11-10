@@ -14,6 +14,7 @@ import re
 from pathlib import Path
 
 from . import capture_fill
+from . import rules as rules_mod
 
 NOT_APPLICABLE = {
     "who_can_park": "Not applicable", "cost_type": "Not applicable",
@@ -85,9 +86,13 @@ def parse_max_stay_minutes(text):
     return n * 60 if match.group(2).lower().startswith("h") else n
 
 
-def record(place_id, fields=None, leave_for_grok=False, reason=""):
+def record(place_id, fields=None, leave_for_grok=False, reason="", notes_append=None, flags=None):
+    """notes_append holds sentences capture_fill appends to the row's Notes
+    (never replaces it) via page_fill's existing "_notes" hook. flags holds
+    Review Flag text the same way, via page_fill's "_flags" hook, which
+    also sets Flag Status to Open."""
     return {"place_id": place_id, "leave_for_grok": leave_for_grok, "reason": reason,
-            "fields": fields or {}}
+            "fields": fields or {}, "notes_append": notes_append or [], "flags": flags or []}
 
 
 def field(value, scope, quote):
@@ -252,6 +257,362 @@ def customer_car_park_record(place_id, notes):
     return record(place_id, fields)
 
 
+HOTEL_WHO_CAN_PARK = rules_mod.load_rules().r1_category_defaults["hotel"]
+
+HOTEL_TYPE_RE = re.compile(r"hotel", re.I)
+PRICE_RE = re.compile(r"(?:£|GBP\s?)(\d+(?:\.\d{1,2})?)")
+# Written as codepoints: no file in this project carries an en or em dash.
+EN_DASH, EM_DASH = chr(0x2013), chr(0x2014)
+DASHES_RE = re.compile(f"[{EN_DASH}{EM_DASH}]")
+
+# "free for hotel guests", "Free for Travelodge guests only", "Limited free
+# hotel parking", and a bare "Free" in Charges whose Notes say "Free parking
+# available" all state the same fact. A bare "Free" on its own does not: it
+# needs the "guests" or "parking" word within the same clause, which is what
+# the gap limit here requires.
+HOTEL_FREE_RE = re.compile(r"\bfree\b[^.;]{0,30}?\b(guests?|parking)\b", re.I)
+
+# "No free parking; any paid parking not stated" (the Best Western rows)
+# carries the literal "free parking" and states the opposite of it. "2 EV
+# charging points ... free to use (daily parking charge applies)" (Park
+# Plaza Westminster Bridge) is the same trap from the other direction: the
+# free thing nearby is the EV charging, not the parking, and the same
+# sentence says a parking charge applies.
+NO_FREE_RE = re.compile(r"\bno\s+free\b|\bnot\s+free\b|\bcharge applies\b|\bcharges apply\b", re.I)
+
+# A confirmed charge, whatever the figure. "any paid parking not stated" is
+# not one: it reports the absence of a tariff, not that parking costs money.
+HOTEL_CHARGEABLE_RE = re.compile(
+    r"\bchargeable\b|\bparking is charged\b|\bthere is a charge\b|\bprice varies\b", re.I)
+
+NON_GUEST_RE = re.compile(r"non-?residents?|non-?guests?", re.I)
+VALET_RE = re.compile(r"\bvalet\b", re.I)
+
+# "night" sits inside "overnight stay" and both mean the same tariff, so the
+# earliest hit wins and no separate ordering is needed between them.
+STAY_UNITS = (("overnight stay", "night"), ("night", "night"), ("24 hours", "24 hours"),
+              ("24 hrs", "24 hours"), ("day", "day"))
+UNIT_BEFORE_PRICE_RE = re.compile(r"\b(daily|nightly)\b", re.I)
+
+HOUR_WORD = r"h(?:ours?|rs?)?"
+_MONEY = r"(?:£|GBP\s?)(\d+(?:\.\d{1,2})?)"
+# "4-5h GBP 16.50": an explicit lower AND upper bound. Distinct from a bare
+# "4h"/"up to 4h"/"for 4 hours" shape, which only ever states the upper
+# bound, because only a stated lower bound can ever disagree with where the
+# previous band actually left off, which is the one thing worth flagging.
+EXPLICIT_RANGE_RE = re.compile(rf"(\d+)\s*[-{EN_DASH}{EM_DASH}]\s*(\d+)\s*{HOUR_WORD}\s*{_MONEY}", re.I)
+UP_TO_HOURS_RE = re.compile(rf"up to\s*(\d+)\s*{HOUR_WORD}\s*{_MONEY}", re.I)
+DAILY_BAND_RE = re.compile(rf"\bdaily\b\s*{_MONEY}", re.I)
+FOR_N_HOURS_RE = re.compile(rf"{_MONEY}\s*for\s*(\d+)\s*{HOUR_WORD}", re.I)
+PER_N_HOURS_RE = re.compile(rf"{_MONEY}\s*(?:per\s*\w+\s*)?per\s*(\d+)\s*{HOUR_WORD}", re.I)
+PER_HOUR_UP_TO_RE = re.compile(rf"{_MONEY}\s*per\s*hour\s*up to\s*(\d+)\s*{HOUR_WORD}", re.I)
+# "£5.00/hr", the slash-shorthand a non-resident clause states its own rate
+# in, distinct from the "per"/"for" connector price_per_unit looks for.
+SLASH_RATE_RE = re.compile(rf"{_MONEY}\s*/\s*(hr|hour|day|night)\b", re.I)
+SLASH_UNIT_TO_TARIFF = {"hr": "Hourly rate", "hour": "Hourly rate",
+                         "day": "Flat rate per 24 hours", "night": "Flat rate per night"}
+SLASH_UNIT_WORD = {"hr": "hour", "hour": "hour", "day": "day", "night": "night"}
+
+
+def _band_from_clause(clause):
+    """(hours, price, lower_bound_or_None) for one clause naming a single
+    duration band, or None if the clause names no duration at all. Only
+    EXPLICIT_RANGE_RE's own lower bound is ever returned non-None: a bare
+    "4h" / "up to 4h" / "for 4 hours" / "Daily" clause never claims where
+    its own band starts, only where it ends."""
+    m = EXPLICIT_RANGE_RE.search(clause)
+    if m:
+        return int(m.group(2)), float(m.group(3)), int(m.group(1))
+    m = UP_TO_HOURS_RE.search(clause)
+    if m:
+        return int(m.group(1)), float(m.group(2)), None
+    m = DAILY_BAND_RE.search(clause)
+    if m:
+        return 24, float(m.group(1)), None
+    m = FOR_N_HOURS_RE.search(clause)
+    if m:
+        return int(m.group(2)), float(m.group(1)), None
+    m = PER_N_HOURS_RE.search(clause)
+    if m:
+        return int(m.group(2)), float(m.group(1)), None
+    return None
+
+
+def hotel_bands(text):
+    """(bands, leftover, gap_flags): bands is a [(lo, hi, price), ...] list
+    ready for format_hotel_bands, ascending by hi. lo is the band's own
+    stated lower bound if it had one, else wherever the previous band left
+    off, so a real gap still shows in the displayed string, not just in
+    gap_flags. leftover is the clauses that named no duration at all (a
+    weekly rate, a motorcycle rate, a parenthetical qualifier) and so can
+    never be a duration band. gap_flags names a real gap in the source's
+    own numbers: an explicit "N-Mh" clause whose stated N does not match
+    where the previous band actually ended. A bare "4h" or "for 4 hours"
+    clause never triggers this, since it never claims a lower bound of its
+    own."""
+    raw, leftover = [], []
+    # A "." splits clauses, but not a decimal point: "13.20" must survive.
+    for clause in re.split(r";|(?<!\d)\.(?!\d)", text):
+        clause = clause.strip()
+        if not clause:
+            continue
+        expand = PER_HOUR_UP_TO_RE.search(clause)
+        if expand:
+            rate, cap = float(expand.group(1)), int(expand.group(2))
+            raw.extend((h, round(rate * h, 2), None) for h in range(1, cap + 1))
+            continue
+        # A parenthetical qualifier ("(before pre-book discount)") can sit
+        # right next to a band's own numbers in the same clause: pull it
+        # out first, so the clause underneath it can still be read as a band.
+        paren = re.search(r"\(([^)]+)\)", clause)
+        qualifier = paren.group(1).strip() if paren else None
+        clause_core = (clause[:paren.start()] + clause[paren.end():]).strip() if paren else clause
+        band = _band_from_clause(clause_core)
+        if band:
+            raw.append(band)
+            if qualifier:
+                leftover.append(qualifier)
+        else:
+            leftover.append(clause)
+    bands_sorted = sorted(set(raw), key=lambda t: t[0])
+    # Two different clauses naming the same hour cap ("discount of £10 per
+    # 24 hours" next to "prices start from £20 per 24 hours") are two
+    # different products at the one duration, never two duration bands of
+    # the same product: real bands always end at strictly increasing hours.
+    hours_seen = [h for h, _, _ in bands_sorted]
+    if len(set(hours_seen)) != len(hours_seen):
+        return [], leftover, []
+    bands, gap_flags, prev, seen_gaps = [], [], 0, set()
+    for hours, price, lo in bands_sorted:
+        if lo is not None and lo != prev and (prev, lo) not in seen_gaps:
+            gap_flags.append(f"Source tariff has no {prev}-{lo} hr band")
+            seen_gaps.add((prev, lo))
+        # A band with its own stated lower bound keeps it in the display
+        # even across a gap ("4-24 hrs", not "3-24 hrs" bridging the gap
+        # the flag above already names); a bare upper-bound-only band still
+        # reads as continuing from wherever the previous one left off.
+        bands.append((lo if lo is not None else prev, hours, price))
+        prev = hours
+    return bands, leftover, gap_flags
+
+
+def format_hotel_bands(bands):
+    return "; ".join(f"{lo}-{hi} hrs £{price:.2f}" for lo, hi, price in bands)
+
+
+def plain_dashes(text):
+    """No en dash or em dash reaches a cell. Prose keeps a plain hyphen."""
+    return DASHES_RE.sub("-", text or "")
+
+
+def restate_leftover(text):
+    """A band clause's leftover qualifier, restated for Notes. A dangling
+    "before pre-book discount" (pulled out of its own parenthetical) reads
+    as a sentence fragment on its own, so it gets a subject put back."""
+    out = restate(text)
+    if re.match(r"before\b", out, re.I):
+        out = f"Prices {out}"
+    return out
+
+
+def restate(text):
+    """A captured rate or band string rewritten for a cell: GBP to £, every
+    price to two decimals, "2h" to "2 hours", "/day" to " per day", "&" to
+    "and", and a dash range to "4 to 5 hours". Only rate strings go through
+    this, where a dash always joins the two ends of a range. Prose keeps its
+    dash as a hyphen via plain_dashes instead."""
+    out = re.sub(r"^\s*valet\b[:,]?\s*", "", text.strip(), flags=re.I)
+    out = re.sub(r"/\s*hr\b", " per hour", out, flags=re.I)
+    out = re.sub(r"/\s*day\b", " per day", out, flags=re.I)
+    out = re.sub(r"/\s*night\b", " per night", out, flags=re.I)
+    out = PRICE_RE.sub(lambda m: f"£{float(m.group(1)):.2f}", out)
+    out = re.sub(r"(\d)\s*h\b", r"\1 hours", out)
+    out = re.sub(r"\bhrs?\b", "hours", out, flags=re.I)
+    out = DASHES_RE.sub(" to ", out)
+    return re.sub(r"\s{2,}", " ", out.replace("&", "and")).strip()
+
+
+def price_per_unit(text):
+    """(price, unit) for one single stated rate, or None.
+
+    A £ or GBP price counts when a stay unit follows it within 40 characters
+    and a "per" or "for" joins the two: "£15 per night", "£65 per vehicle
+    per night", "£18.00 per overnight stay per car", "£20 for 24 hours". The
+    connector requirement is what stops a bare price in prose being read as
+    a rate. A unit named just before the price counts too ("Daily fee of
+    £45"), which is the only shape where no connector exists to find.
+
+    Callers must try the banded branch first: the last band of a banded
+    tariff often reads "Daily GBP 33.00", which this would otherwise return
+    as one flat daily rate for the whole car park."""
+    matches = list(PRICE_RE.finditer(text or ""))
+    for i, match in enumerate(matches):
+        # Never read past the next price: "GBP 6 per hour; GBP 16 per
+        # night" must not let the 6 borrow the 16's "night" unit just
+        # because it falls inside an unbounded 40-character window.
+        window_end = matches[i + 1].start() if i + 1 < len(matches) else match.end() + 40
+        window = text[match.end():min(window_end, match.end() + 40)].lower()
+        unit_at = None
+        for phrase, unit in STAY_UNITS:
+            idx = window.find(phrase)
+            if idx != -1 and (unit_at is None or idx < unit_at[0]):
+                unit_at = (idx, unit)
+        if unit_at and re.search(r"\b(per|for)\b", window[:unit_at[0]]):
+            return float(match.group(1)), unit_at[1]
+        before = UNIT_BEFORE_PRICE_RE.search(text[max(0, match.start() - 25):match.start()])
+        if before:
+            return float(match.group(1)), "day" if before.group(1).lower() == "daily" else "night"
+    return None
+
+
+def valet_note(charges):
+    """A valet detail belongs in Notes, never in Tariff Detail. A charges
+    string that opens with "Valet" prices the valet service itself, so that
+    is the only way to park there."""
+    if re.match(r"\s*valet\b", charges, re.I):
+        return "Valet only."
+    parenthetical = re.search(r"\(([^)]*\bvalet\b[^)]*)\)", charges, re.I)
+    if parenthetical:
+        rest = ", ".join(p.strip() for p in parenthetical.group(1).split(",")
+                          if "valet" not in p.lower())
+        return f"Valet parking ({rest})." if rest else "Valet parking."
+    return "Valet parking."
+
+
+def _lower_first(text):
+    return text[:1].lower() + text[1:] if text else text
+
+
+def non_guest_record(place_id, charges):
+    """A hotel row open to non-residents (anyone, paid) as well as guests,
+    on two separate rate structures. The non-resident clause's own first
+    rate is the real, usable tariff (Who Can Park is open to anyone, so
+    this is the rate an actual non-guest driver pays); everything else in
+    the charges string, the resident rate and any other non-resident band,
+    is restated in Notes rather than lost."""
+    clauses = [c.strip() for c in charges.split(";")]
+    target_i = next((i for i, c in enumerate(clauses) if NON_GUEST_RE.search(c)), 0)
+    target = clauses[target_i]
+    sub_clauses = [s.strip() for s in target.split(",")]
+    rate = SLASH_RATE_RE.search(sub_clauses[0]) or SLASH_RATE_RE.search(target)
+    if not rate:
+        return hotel_record(place_id, charges, "Paid", "Not published", "Not published",
+                             can_park="Yes", who_can_park="Anyone (paid)",
+                             notes_append=[sentence(restate(charges))])
+    price, unit = float(rate.group(1)), rate.group(2).lower()
+    tariff_type = SLASH_UNIT_TO_TARIFF[unit]
+    detail = f"£{price:.2f} per {SLASH_UNIT_WORD[unit]}"
+    leftover = sub_clauses[1:] + [c for i, c in enumerate(clauses) if i != target_i]
+    notes = [_lower_first(restate(c)) if i > 0 else restate(c) for i, c in enumerate(leftover)]
+    return hotel_record(place_id, charges, "Paid", tariff_type, detail,
+                         can_park="Yes", who_can_park="Anyone (paid)",
+                         notes_append=[sentence("; ".join(notes))] if notes else [])
+
+
+def hotel_record(place_id, quote, cost_type, tariff_type, tariff_detail,
+                  can_park="Conditional", who_can_park=HOTEL_WHO_CAN_PARK, notes_append=None,
+                  flags=None):
+    """A hotel car park is for the hotel's own guests under rule R1 and is
+    Conditional on being one, unless the row's own text opens it to anyone.
+    Nothing in a hotel row's captured text has ever given hours, a max stay,
+    an operator or a PCN amount, so those stay Not published."""
+    evidence = plain_dashes(quote)[:200]
+    fields = {
+        "can_park": field(can_park, "site", evidence),
+        "who_can_park": field(who_can_park, "site", evidence),
+        "cost_type": field(cost_type, "site", evidence),
+        "tariff_type": field(tariff_type, "site", evidence),
+        "tariff_detail": field(tariff_detail, "site", evidence),
+    }
+    for name in ("max_stay_mins", "hours_osm_format", "hours_basis", "control_type",
+                 "operator", "pcn_gbp"):
+        fields[name] = field("Not published", "site", evidence)
+    return record(place_id, fields, notes_append=notes_append, flags=flags)
+
+
+def sentence(text):
+    return f"{plain_dashes(text).strip().rstrip('.')}."
+
+
+def hotel_charges_record(place_id, charges, notes):
+    """One hotel row's Charges (as published) and Notes as a record, or None
+    to leave the row for Grok. None is the answer whenever the text states
+    both free and chargeable, says "unclear", or names no parking fact at
+    all: a guess about a price or about who may park costs a driver money."""
+    text = f"{charges} {notes}"
+    is_free = bool(HOTEL_FREE_RE.search(text)) and not NO_FREE_RE.search(text)
+    is_chargeable = bool(HOTEL_CHARGEABLE_RE.search(text))
+
+    # Premier Inn London Docklands: the page states free parking and a
+    # charge for the same car park. Neither half can be trusted over the other.
+    if is_free and is_chargeable:
+        return None
+    # "Chargeable - amount UNCLEAR (... no tariff)" confirms the charge and
+    # only withholds the figure, unlike a row whose own page contradicts
+    # itself, so this is checked before the blanket "unclear" skip below.
+    if is_chargeable and "unclear" in charges.lower():
+        return hotel_record(place_id, charges, "Paid", "Not published", "Not published",
+                             notes_append=[sentence(charges)])
+    if "unclear" in charges.lower():
+        return None
+
+    if is_free:
+        # "Limited" is a capacity note and a permit is an access condition.
+        # Neither withholds Free, and neither fits one of the eleven fields.
+        condition = [sentence(charges)] if "(" in charges else []
+        return hotel_record(place_id, charges, "Free", "Free (time limit not published)",
+                             "Free", notes_append=condition)
+
+    # Novotel London West: two populations on two rate structures. The
+    # non-resident (anyone, paid) rate is the real, usable tariff; the
+    # resident (hotel guest) rate and any off-peak variant are restated in
+    # Notes rather than lost, since neither population's full structure
+    # fits one of the eleven fields.
+    if NON_GUEST_RE.search(text):
+        return non_guest_record(place_id, charges)
+
+    valet = [valet_note(charges)] if VALET_RE.search(charges) else None
+    # A second "Weekend:" schedule is parsed as its own independent set of
+    # bands (its own hours start at 0 again), kept out of Tariff Detail
+    # (which only ever carries one schedule) and restated in Notes instead.
+    weekday_text, weekend_text = re.split(r"(?i)\bweekend\s*:", charges, maxsplit=1) \
+        if re.search(r"(?i)\bweekend\s*:", charges) else (charges, "")
+    bands, leftover, gap_flags = hotel_bands(weekday_text)
+    if len(bands) >= 2:
+        detail = format_hotel_bands(bands)
+        notes = (valet or []) + [restate_leftover(c) for c in leftover]
+        if weekend_text:
+            weekend_bands, weekend_leftover, weekend_gap_flags = hotel_bands(weekend_text)
+            if len(weekend_bands) >= 2:
+                notes.append("Weekend: " + format_hotel_bands(weekend_bands))
+            notes += [restate_leftover(c) for c in weekend_leftover]
+            gap_flags = list(dict.fromkeys(gap_flags + weekend_gap_flags))
+        return hotel_record(place_id, charges, "Paid", "Banded by stay length", detail,
+                             notes_append=notes, flags=gap_flags)
+
+    rate = price_per_unit(charges)
+    if rate:
+        price, unit = rate
+        tariff_type = "Flat rate per night" if unit == "night" else "Flat rate per 24 hours"
+        # A second clause next to the rate carries a condition the flat-rate
+        # template drops ("payable at lobby car park stations"), so it is
+        # restated in Notes rather than lost.
+        conditions = [sentence(charges)] if ";" in charges else []
+        return hotel_record(place_id, charges, "Paid", tariff_type,
+                             f"£{price:.2f} per {'24 hours' if unit == 'day' else unit}", notes_append=(valet or []) + conditions)
+
+    # The May Fair: Charges says nothing, and Notes is the only column that
+    # shows a car park exists at all. Valet existing is not evidence it
+    # costs money, so Cost Type stays Unknown rather than becoming Paid.
+    if VALET_RE.search(notes) and not PRICE_RE.search(charges):
+        return hotel_record(place_id, notes, "Unknown", "Not published", "Not published")
+
+    if is_chargeable:
+        return hotel_record(place_id, charges, "Paid", "Not published", "Not published",
+                             notes_append=[sentence(charges)])
+    return None
+
+
 def classify(sr, osm_row):
     place_id = sr["Place ID"]
     captured = {c: strip_cross_references(sr.get(c, "")) for c in capture_fill.CAPTURE_COLS}
@@ -325,6 +686,11 @@ def classify(sr, osm_row):
             "pcn_gbp": field("Not published", "site", enforcement[:150]),
         }
         return record(place_id, fields)
+
+    if HOTEL_TYPE_RE.search(type_text):
+        hotel = hotel_charges_record(place_id, charges, notes)
+        if hotel:
+            return hotel
 
     return record(place_id, leave_for_grok=True,
                    reason="Captured text has no site-specific parking fact beyond NO OFFICIAL INFO / N/A")

@@ -131,6 +131,38 @@ python -m ferro_parking triage-blanks --sheet-csv data/raw/all_london_clean.csv 
 python -m ferro_parking readiness --sheet-csv data/raw/all_london_clean.csv
 ```
 
+Two more commands prepare category and postcode review CSVs:
+
+```bash
+python -m ferro_parking propose-categories --sheet-csv data/raw/all_london_clean.csv
+python -m ferro_parking propose-categories --sheet-csv data/raw/all_london_clean.csv --pbf data/raw/greater-london-latest.osm.pbf
+python -m ferro_parking fill-postcodes --sheet-csv data/raw/all_london_clean.csv --postcodes-csv PATH_TO_CENTROIDS.csv
+```
+
+`propose-categories` uses an ordered captured-type table and the exact Place
+Category dropdown. It writes `propose_categories.csv`, `unclassified.csv` and
+`conflicts.csv`. Blank categories receive proposals; existing matching categories
+are omitted, and disagreements or invalid existing values become conflicts.
+Unknown types stay unclassified unless the existing discovery classifier gives
+one unambiguous dropdown value. Optional OSM tags are observations only. The
+command never proposes Brand or infers Station from a venue name alone.
+
+`fill-postcodes` only considers blank postcodes with usable pins and excludes
+Postcode centroid pins. Its required local directory accepts postcode/Postcode/pcds,
+lat/latitude and lon/longitude headers. Coordinates must be WGS84 decimal degrees.
+Postcodes are normalised to uppercase with one space before the inward code.
+It writes `fill_postcodes.csv` and `skipped.csv`. Haversine distance chooses the
+nearest centroid; the default maximum distance is 250 m, adjustable with
+`--max-distance-m`. Equidistant different postcodes are skipped. A nearest-centroid
+proposal needs human review: it is not proof of the exact site's postcode.
+An empty directory produces explicit skips rather than guessed postcodes.
+
+Both commands only write review CSVs to fresh run directories. `--out` must name
+a directory that does not exist. Inputs, captured fields, coordinates, protected
+column rules and the live sheet remain unchanged. No network or Google auth is
+used. The centroid fixture in tests is synthetic and must not be used as a real
+postcode directory.
+
 `triage-blanks` writes `triage_blanks.csv` in a fresh run directory. Its buckets
 are research queues, not parking answers. It includes every blank Can Park? row;
 `--pbf` optionally attaches nearby raw OSM tags. Both commands read local files

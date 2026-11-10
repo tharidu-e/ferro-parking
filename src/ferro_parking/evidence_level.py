@@ -4,7 +4,7 @@ Two one-time, interactive steps, each dry run by default:
 
 python -m ferro_parking evidence-level-column [--apply]
     Appends the header "Evidence Level" after the sheet's last column,
-    with a Verified / Chain policy / Presumed dropdown. Never inserts a
+    with a Verified / Chain policy / Presumed / Reported dropdown. Never inserts a
     column in the middle. Without --apply, only reports where it would go.
 
 python -m ferro_parking evidence-level-backfill [--apply]
@@ -24,7 +24,7 @@ from .run_paths import new_run_dir, reserve_output
 from . import fill, sheets
 
 COLUMN = "Evidence Level"
-VALUES = ["Verified", "Chain policy", "Presumed"]
+VALUES = ["Verified", "Chain policy", "Presumed", "Reported"]
 
 
 def plan_add_column(headers):

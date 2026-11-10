@@ -117,7 +117,9 @@ def test_entrypoint_wires_read_only_commands(tmp_path,monkeypatch):
     source=tmp_path/'sheet.csv'
     source.write_text(CAN_PARK+',Location Name\n,Example hotel\n')
     monkeypatch.setattr(fill.sheets,'get_service',lambda:pytest.fail('Read-only commands must not authenticate'))
-    for command,extra in [('readiness',[]),('triage-blanks',['--out',str(tmp_path/'triage')])]:
+    for command,extra in [('readiness',[]),('triage-blanks',['--out',str(tmp_path/'triage')]),
+                          ('propose-categories',['--out',str(tmp_path/'categories')]),
+                          ('fill-postcodes',['--postcodes-csv',str(Path(__file__).parent/'fixtures'/'postcode_centroids.csv'),'--out',str(tmp_path/'postcodes')])]:
         monkeypatch.setattr(sys,'argv',['ferro_parking',command,'--sheet-csv',str(source),*extra])
         assert __main__.main()==0
 

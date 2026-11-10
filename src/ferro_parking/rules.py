@@ -19,7 +19,6 @@ class Rules:
     r1_category_defaults: dict
     r3_own_brand_names: set
     r6_chains: dict                  # normalised chain key -> {who_can_park?, cost_type?, operator?}
-    r7_free_requires_access: set
     r7_risky_cost_types: set
     r7_risky_who_can_park: set
     r9_explicit_no_parking_phrases: list
@@ -62,7 +61,6 @@ def load_rules(path=DEFAULT_PATH):
         r1_category_defaults=data["r1_category_defaults"],
         r3_own_brand_names={norm_chain_key(n) for n in data["r3_own_brand_operators"]["names"]},
         r6_chains=chains,
-        r7_free_requires_access=set(data["r7"]["free_requires_access"]),
         r7_risky_cost_types=set(data["r7"]["risky_cost_types"]),
         r7_risky_who_can_park=set(data["r7"]["risky_who_can_park"]),
         r9_explicit_no_parking_phrases=[p.lower() for p in data["r9"]["explicit_no_parking_phrases"]],

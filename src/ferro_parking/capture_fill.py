@@ -258,6 +258,11 @@ def record_to_new(sheet_row, osm_row, record, today, captured_can_park):
     extracted["Decision Reason"] = decision_reason(record, source_tier)
     extracted["Verification Result"] = decide_verification_result(extracted, source_tier)
 
+    if record.get("notes_append"):
+        extracted["_notes"] = list(record["notes_append"])
+    if record.get("flags"):
+        extracted["_flags"] = list(record["flags"])
+
     autopay_price_text = record["fields"]["tariff_detail"]["value"]
     flag = page_fill.autopay_price_flag(sheet_row, autopay_price_text)
     if flag:

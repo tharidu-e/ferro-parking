@@ -28,12 +28,12 @@ satisfy.
 import argparse
 import csv
 import json
-import re
 from datetime import date
 from pathlib import Path
 from .run_paths import new_run_dir, reserve_output
 
-from . import fill, page_fill, rules as rules_mod, sheets
+from . import discovery, fill, page_fill, rules as rules_mod, sheets
+from .osm_match import contains_word as _contains_word
 
 PLACE_ID = fill.PLACE_ID
 LOCATION_NAME = fill.LOCATION_NAME
@@ -58,6 +58,22 @@ GYM_CHAIN_NAMES = ("puregym", "the gym group", "virgin active", "nuffield health
                     "better", "everyone active")
 
 CUSTOMER_CAR_PARK_NAME_HINTS = ("customer car park", "customer parking")
+
+_discovery_categories = None
+
+
+def is_car_park_row(sheet_row):
+    """A row that is itself a car park (Place Category "Council car
+    park" / "Private / operator car park", or a "car park" / "parking"
+    keyword with no category set) never gets the chain or small-venue
+    logic below: that logic reads the row's own name against R10's
+    retail brand and venue-category lists, and a car park named after
+    the brand next to it ("Waitrose Car Park", "McDonald's car park")
+    is not a shop needing a nearby-parking check."""
+    global _discovery_categories
+    if _discovery_categories is None:
+        _discovery_categories = discovery.load_categories()
+    return discovery.classify_sheet_row(sheet_row, _discovery_categories) == "car_park"
 
 # Fast-food and casual chain brands: Type often reads "Restaurant (KFC)"
 # or "Cafe (Costa)" rather than "Fast food", so the drive-thru/own-site
@@ -93,9 +109,6 @@ def has_nearby_car_park(osm_row, rules):
     except (TypeError, ValueError):
         return False
     return distance <= rules.r10_nearby_car_park_radius_m
-
-
-from .osm_match import contains_word as _contains_word
 
 
 def name_confirms_car_park(sheet_row):
@@ -241,6 +254,9 @@ def presumed_no_parking_fields():
 def classify(sheet_row, osm_row, rules):
     """Returns ("a" | "b" | "c", fields_dict | None, reason | None).
     fields_dict is None for "c" (needs research)."""
+    if is_car_park_row(sheet_row):
+        return "c", None, "row is itself a car park, not a shop or small venue"
+
     location_name = sheet_row.get(LOCATION_NAME, "")
     fmt = rules.format_for(location_name)
     chain_key_words = rules_mod.norm_chain_key(location_name).split()

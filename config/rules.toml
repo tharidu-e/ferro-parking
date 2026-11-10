@@ -9,9 +9,13 @@ hospital = "Patients and visitors"
 
 [r3_own_brand_operators]
 # OSM operator tag equal to the store itself = landowner, not the parking company.
+# Also the brand list tranche1_write.py uses to attach a store-named car park
+# to its existing sheet row instead of adding it as a new place (one list,
+# not two): a DIY/furniture retailer's own car park is the same case as a
+# supermarket's.
 names = ["morrisons", "asda", "m&s", "marks & spencer", "mcdonald's", "currys",
          "currys pc world", "lidl", "aldi", "tesco", "sainsbury's", "waitrose",
-         "iceland", "co-op"]
+         "iceland", "co-op", "b&q", "ikea"]
 
 [r4]
 # OSM max stay never goes into Max Stay on its own: Notes only, until confirmed.
@@ -76,9 +80,12 @@ cost_type = "Paid"
 [r7]
 # A wrong cautious value (Customers only, Guests only, Paid, Unknown) costs little.
 # A wrong Free or Anyone value costs the driver money or a fine, so it needs
-# stronger, site-specific evidence. A chain rule or category default alone
-# never sets Cost Type = Free or Who Can Park = Anyone / Anyone (paid).
-free_requires_access = ["customers", "destination"]  # OSM fee=no only gives Free on these
+# stronger, site-specific evidence. An OSM tag alone (fill.py) and a chain
+# rule or category default alone (policy_fill.py, the category policy)
+# never set Cost Type = Free or Who Can Park = Anyone / Anyone (paid); OSM
+# fee=no becomes a Notes line, never a value (2026-11-04: this used to be
+# allowed on a customers-only car park, access=customers/destination; no
+# longer, after a direct instruction that fee=no must never become Free).
 risky_cost_types = ["Free"]
 risky_who_can_park = ["Anyone", "Anyone (paid)"]
 cautious_cost_types = ["Paid", "Free then paid", "Unknown"]
@@ -143,6 +150,37 @@ small_venue_categories = ["cafe", "pub", "restaurant", "convenience shop",
                            "fast food"]
 # A drive-thru fast food branch is excluded: it has its own parking.
 fast_food_drive_thru_excluded = true
+
+# DRAFT category policies (2026-11-04), proposed for discovery's hospital and
+# petrol_station categories. NOT wired into fill.py, policy_fill.py or the
+# Rules dataclass: only fill_round2.py's category-policy step reads this
+# section, so switching it on anywhere else is a separate, deliberate choice.
+#
+# Two corrections from how this was first asked for, both against the sheet's
+# real dropdown values (checked in the live export): "Price Status = Paid" for
+# hospital names a Cost Type value, not a Price Status one (Price Status's own
+# values are Not published / Published / Chain policy (not store-specific) /
+# Not applicable), so this reads as Cost Type = Paid, Price Status = Chain
+# policy (not store-specific), the pairing every existing Evidence Level =
+# Chain policy row already uses. "Who Can Park = Customers" for petrol
+# station is read as the sheet's real value, "Customers only". Rule R7 still
+# applies: a category policy never sets Free, Anyone, or a max stay, so
+# max_stay_mins is always "Not published".
+[category_policies.hospital]
+who_can_park = "Patients and visitors"
+cost_type = "Paid"
+price_status = "Chain policy (not store-specific)"
+max_stay_mins = "Not published"
+rules_summary = "Hospital parking, usually paid, check signs on arrival"
+evidence_level = "Chain policy"
+
+[category_policies.petrol_station]
+who_can_park = "Customers only"
+cost_type = "Unknown"
+price_status = "Chain policy (not store-specific)"
+max_stay_mins = "Not published"
+rules_summary = "Customer parking while fuelling or shopping, check signs"
+evidence_level = "Chain policy"
 
 # Exact sheet dropdown values used by the standalone validator.
 [dropdowns]

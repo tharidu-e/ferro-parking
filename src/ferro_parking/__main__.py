@@ -21,9 +21,22 @@ Commands:
           --apply and --confirm-wipe
   discover  Read-only: fetch official/source candidates, London filter, dedupe and draft
   validate  Check a plan.json or candidates.csv without network access
+  propose-categories  Read-only: propose category values from captured types
+  fill-postcodes  Read-only: propose postcodes from a local centroid directory
   triage-blanks  Read-only: bucket blank parking answers from a local CSV
   readiness  Read-only: count showable and complete rows, by borough and district
   osm-gaps  Read-only: list unmatched public/customer parking from a London PBF
+  tranche1  Read-only: filter and score discovery's tranche 1 missing
+          places, ready for review before writing (never writes to the sheet)
+  tranche1-write  Dry run: select, de-duplicate and plan the tranche 1
+          append to the sheet (never writes to the sheet)
+  tranche1-write-apply  Append the tranche1-write plan to the sheet's
+          bottom (--apply to actually write; dry run reports the plan
+          otherwise)
+  fill-round2  Dry run: osm fill, capture fill, policy fill and a draft
+          category policy on every blank-Verification-Result row, each
+          pass checked against page_fill's consistency checks (never
+          writes to the sheet)
 """
 import csv
 import sys
@@ -50,6 +63,12 @@ def main():
         print(__doc__)
         return 0
     cmd, argv = sys.argv[1], sys.argv[2:]
+    if cmd == "propose-categories":
+        from .propose_categories import main as propose_main
+        return propose_main(argv)
+    if cmd == "fill-postcodes":
+        from .fill_postcodes import main as postcodes_main
+        return postcodes_main(argv)
     if cmd == "triage-blanks":
         from .triage_blanks import main as triage_main
         return triage_main(argv)
@@ -103,6 +122,18 @@ def main():
     if cmd == "discover":
         from .discover import main as discover_main
         return discover_main(argv)
+    if cmd == "tranche1":
+        from .tranche1 import main as tranche1_main
+        return tranche1_main(argv)
+    if cmd == "tranche1-write":
+        from .tranche1_write import main as tranche1_write_main
+        return tranche1_write_main(argv)
+    if cmd == "tranche1-write-apply":
+        from .tranche1_write import apply_main as tranche1_write_apply_main
+        return tranche1_write_apply_main(argv)
+    if cmd == "fill-round2":
+        from .fill_round2 import main as fill_round2_main
+        return fill_round2_main(argv)
     print(f"Unknown command: {cmd}\n\n{__doc__}")
     return 2
 

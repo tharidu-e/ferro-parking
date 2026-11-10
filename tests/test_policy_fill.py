@@ -345,6 +345,62 @@ def test_unrecognised_store_is_needs_research():
     assert "not a recognised chain format" in reason
 
 
+# ---- a row that is itself a car park never gets shop/small-venue logic ----
+# Regression for the 2026-11-05 Grok pre-fill: 13 car-park rows whose name
+# contained a retail brand word were misread as that brand's shop, three
+# of them (these three) wrongly landing on Can Park? No.
+def test_waitrose_car_park_is_not_presumed_no_parking():
+    row = sheet_row(**{"Location Name": "Waitrose Car Park", "Place Category": "Private / operator car park",
+                        "Type (as captured)": "Car park", "Place ID": "PP-007014"})
+    branch, result, reason = pf.classify(row, osm_row(distance=""), RULES)
+    assert branch == "c"
+    assert "itself a car park" in reason
+
+
+def test_mcdonalds_car_park_is_not_a_fast_food_small_venue():
+    row = sheet_row(**{"Location Name": "McDonald's car park", "Place Category": "Private / operator car park",
+                        "Type (as captured)": "Car park", "Place ID": "PP-007140"})
+    branch, result, reason = pf.classify(row, osm_row(distance=""), RULES)
+    assert branch == "c"
+    assert "itself a car park" in reason
+
+
+def test_waitrose_sheen_car_park_is_not_presumed_no_parking():
+    row = sheet_row(**{"Location Name": "Waitrose Sheen Car Park", "Place Category": "Council car park",
+                        "Type (as captured)": "Car park", "Place ID": "PP-007151"})
+    branch, result, reason = pf.classify(row, osm_row(distance=""), RULES)
+    assert branch == "c"
+    assert "itself a car park" in reason
+
+
+def test_car_park_named_after_a_large_format_chain_is_not_chain_policy():
+    """Without the guard this would match "large format" (fmt == "large")
+    and return branch "a", not "c": a car park is not the shop itself."""
+    row = sheet_row(**{"Location Name": "Morrisons Car Park", "Place Category": "Private / operator car park",
+                        "Type (as captured)": "Car park"})
+    branch, result, reason = pf.classify(row, osm_row(distance=""), RULES)
+    assert branch == "c"
+
+
+def test_car_park_matched_only_by_keyword_is_also_not_a_small_venue():
+    """Place Category blank, Type (as captured) carries the "car park"
+    keyword instead; discovery.classify_sheet_row's keyword fallback must
+    still catch this as a car park, not a shop."""
+    row = sheet_row(**{"Location Name": "Aldi Car Park", "Place Category": "",
+                        "Type (as captured)": "Car park (Aldi)"})
+    branch, result, reason = pf.classify(row, osm_row(distance=""), RULES)
+    assert branch == "c"
+
+
+def test_actual_aldi_shop_is_unaffected_by_the_car_park_guard():
+    """A shop named "Aldi", not a car park, keeps going through the
+    normal convenience/large-format logic."""
+    row = sheet_row(**{"Location Name": "Aldi Ealing", "Place Category": "Supermarket - large format",
+                        "Type (as captured)": "Retail - Supermarket"})
+    branch, result, reason = pf.classify(row, osm_row(distance=""), RULES)
+    assert branch == "a"
+
+
 # ---- finish_record passes the shared validator ----------------------------
 def test_finish_record_chain_policy_passes_consistency_checks():
     branch, result, reason = pf.classify(sheet_row(), osm_row(), RULES)
@@ -417,3 +473,4 @@ def test_r7_small_venue_never_sets_a_risky_value():
     assert branch == "c"
     assert result is None
     assert "Map absence" in reason
+

@@ -1,0 +1,67 @@
+# Only explicit mappings are allowed. Unknown values are rejected.
+[direct."Source Tier"]
+"Operator site" = "Operator / council site"
+"Official site - PDF" = "Official site - text"
+"Council TRO / legal order" = "Official site - text"
+"Forum / social" = "Google search / third-party"
+[direct."Cost Type"]
+"Mixed (free then paid)" = "Free then paid"
+[direct."Tariff Type"]
+"Banded" = "Banded by stay length"
+[direct."Location Status"]
+"Unclear" = "Unknown"
+"Permanently closed" = "Closed"
+[direct."Rules Stated"]
+"Partial" = "Yes"
+[direct."Prices Stated"]
+"Partial" = "Yes"
+[direct."Evidence Age"]
+"12-24 months" = "1-2 years"
+[direct."Hours Basis"]
+"Signed hours" = "Car park hours"
+[direct."Specificity"]
+"Chain-wide only" = "Chain-wide"
+[direct."Evidence Type"]
+"No sources found" = "No info found"
+
+[conditional]
+other_source = "Other"
+flat_rate = "Flat rate"
+free_period = "Free period then paid"
+payment_controls = ["Pay by phone", "Pay on exit", "Mixed"]
+unclear_specificity = "Unclear"
+conflicting_evidence = "Conflicting sources"
+forum_evidence = "Local forum / community"
+third_party_sources = ["Google search / third-party", "Parkopedia", "Google Maps - reviews"]
+
+[normalization]
+free_text_columns = ["Notes", "Review Flag", "Rules Summary", "Evidence Detail", "Decision Reason"]
+
+[tariff_patterns]
+daily = '^£(\d+(?:\.\d{1,2})?) per day$'
+free_hourly = '^Free for up to (\d+) mins, then (£\d+\.\d{2} per hour)$'
+free_bands = '^Free for up to (\d+) mins, then (.+)$'
+
+[dropdowns]
+"Can Park? (Yes/No/Conditional)" = ["Yes", "No", "Conditional", "Unknown"]
+"Who Can Park" = ["Anyone", "Anyone (paid)", "Customers only", "Guests only", "Patients and visitors", "Permit holders", "Not applicable", "Unknown"]
+"Location Status" = ["Open", "Temporarily closed", "Closed", "Unknown"]
+"Cost Type" = ["Free", "Free then paid", "Paid", "Not applicable", "Unknown"]
+"Price Status" = ["Published", "Not published", "Chain policy (not store-specific)", "Not applicable"]
+"Tariff Type" = ["Free (time limit not published)", "Free with time limit", "Free period, then hourly", "Hourly rate", "Flat rate per 24 hours", "Flat rate per night", "Banded by stay length", "Not published", "Not applicable"]
+"Hours Basis" = ["Car park hours", "Store hours", "Site hours", "Not published", "Not applicable"]
+"Parking Control Type (Cameras / Barrier / Patrol)" = ["ANPR (Automatic Number Plate Recognition) camera", "Pay and display", "Barrier", "Patrol", "Not published", "Not applicable"]
+"Evidence Type" = ["Official site: clear answer", "Official site: partial info", "Google Maps only", "OpenStreetMap only", "No info found", "Third-party only"]
+"Source Tier" = ["Official site - text", "Operator / council site", "Official site - logo or icon", "Google Maps - tariff photo", "Google Maps - About", "OpenStreetMap", "Parkopedia", "Google Maps - reviews", "Google search / third-party", "Gemini only", "None found"]
+"Specificity" = ["Site-specific", "Chain-wide", "Area only"]
+"Rules Stated" = ["Yes", "No"]
+"Prices Stated" = ["Yes", "No"]
+"Evidence Age" = ["Under 12 months", "1-2 years", "Older or undated"]
+"Conflict" = ["Yes", "No"]
+"Evidence Level" = ["Verified", "Chain policy", "Presumed", "Reported"]
+"Verification Result" = ["Confirmed", "Confirmed, details not published", "Needs on-site check", "No evidence"]
+"Flag Status" = ["Open", "Resolved", "Won't fix"]
+
+[reviewers]
+# Unknown values are treated as a person's name, not assumed to be automation.
+automation = ["", "PP (validation)", "OSM script", "Policy script", "Claude (capture check)", "Claude (page check)", "Grok (detail pass)", "Code (page fetch)"]

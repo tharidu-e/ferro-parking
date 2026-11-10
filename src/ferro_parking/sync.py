@@ -457,6 +457,34 @@ def verify_append(service, headers, append_plan_rows, pre_write_rows, first_row,
     return mismatches
 
 
+def compare_updates(headers, before_rows, after_headers, after_rows, plan):
+    """Independent full-export update comparison, including unchanged formulas.
+
+    Caller exports with FORMULA rendering so calculated confidence changes do
+    not disguise formula edits or create false mismatches on derived values.
+    """
+    from . import sheets
+    mismatches = []
+    if headers != after_headers:
+        mismatches.append("Headers changed")
+    before_ids = [r.get("Place ID", "") for r in before_rows]
+    after_ids = [r.get("Place ID", "") for r in after_rows]
+    if before_ids != after_ids or len(set(before_ids)) != len(before_ids):
+        mismatches.append("Place IDs duplicated, added, removed or reordered")
+    after = {r.get("Place ID", ""): r for r in after_rows}
+    changes = {e["place_id"]: e["new"] for e in plan}
+    for row in before_rows:
+        pid = row.get("Place ID", "")
+        live = after.get(pid, {})
+        for column in headers:
+            expected = changes.get(pid, {}).get(column, row.get(column, ""))
+            if column in changes.get(pid, {}):
+                expected = sheets._cell_value(column, expected)
+            if str(expected) != str(live.get(column, "")):
+                mismatches.append(f"{pid}: {column} differs")
+    return mismatches
+
+
 def apply_main(argv=None):
     import argparse
     from . import sheets
