@@ -116,7 +116,7 @@ def test_discover_outputs_and_finished_rows(tmp_path):
         def classify(self, data):
             return [(row, 'South East' if row['postcode']=='O' else 'London') for row in data]
     summary = discover.run(rows, sheet, tmp_path, Filter())
-    assert (summary['listed'],summary['new'],summary['matched'],summary['exceptions']) == (5,1,1,3)
+    assert (summary['listed'],summary['new'],summary['matched'],summary['exceptions']) == (5,2,1,2)
     with (tmp_path/'matches.csv').open() as stream:
         assert json.loads(next(csv.DictReader(stream))['improvements']) == {}
     assert validation.main([str(tmp_path/'candidates.csv')]) == 0
@@ -132,7 +132,7 @@ def clean_candidate():
     ({'Max Stay (mins)':'1.5'},'minutes'),
     ({discover.HOURS:'Tomorrow'},'hours'),
     ({'Verification Result':'Confirmed'},'confirmed'),
-    ({fill.CAN_PARK:'Yes','Verification Result':'Needs on-site check'},'identity'),
+    ({fill.CAN_PARK:'Yes','Verification Result':'Needs on-site check','Identity resolved':'No'},'identity'),
     ({'Location Status':'Closed'},'closed'),
     ({'Operator':''},'blank'),
     ({'Notes':chr(0x2014)},'dashes'),
@@ -219,8 +219,9 @@ def test_london_terminated_postcode_without_coordinates(tmp_path):
 
 
 def test_generic_claims_are_sent_for_review():
-    with pytest.raises(ValueError, match='evidence review'):
-        discover.draft({'name':'Test', 'tariff':'Free', 'official':False})
+    draft = discover.draft({'name':'Test', 'tariff':'Free', 'official':False})
+    assert draft['Tariff Detail'] == 'Not published'
+    assert json.loads(draft['flags'])['tariff_unverified'] is True
 
 
 def test_write_allowlist_accepts_research():
@@ -277,11 +278,15 @@ def test_gaps_excludes_neighbouring_council_boundaries():
         gaps.find_gaps([], [{'name':'Surrey district','geom':box(-100,-100,500,100)}], [])
 
 
-def test_discovery_routes_inconsistent_draft_to_exceptions(tmp_path):
+def test_discovery_keeps_inconsistent_tariff_as_flagged_draft(tmp_path):
     source = {'name':'Free period only','official':True,'tariff':'Free for up to 2 hrs'}
     class Filter:
         def classify(self, rows):
             return [(row,'London') for row in rows]
     result = discover.run([source], [], tmp_path, Filter())
-    assert result['new'] == 0
-    assert result['exceptions'] == 1
+    assert result['new'] == 1
+    assert result['exceptions'] == 0
+    with (tmp_path / 'candidates.csv').open() as stream:
+        row = next(csv.DictReader(stream))
+    assert row['Tariff Detail'] == 'Not published'
+    assert json.loads(row['flags'])['tariff_inconsistent'] is True

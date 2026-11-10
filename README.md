@@ -97,3 +97,97 @@ directories and validation reports must be new. Sheet settings live in
 `FERRO_ORIGINAL_TAB` and `FERRO_CLEAN_GID`. `sync-apply` requires an explicit
 `--append-plan` path. Tab joins require unique Place IDs or name plus postcode;
 ambiguous identities abort without producing an append plan.
+
+## PP matching and review tools
+
+`discover` now tries exact Place ID, then any listed Source URL, before postcode,
+name plus street, nearby pin and brand. Generic CSV/JSON accepts either `place_id`
+or `Place ID`. Shared Source URLs, postcodes, pins and other non-ID stages use a unique exact
+normalised name or a clear score leader. Fuzzy winners require score >= 0.40 and
+a margin >= 0.08; conflicting terminal numbers cannot win a fuzzy match. If no
+name wins, matching tries the remaining stages. Unresolved true/near ties remain
+exceptions, and duplicate Place IDs are never resolved by name.
+A source URL match retains query parameters and ignores fragments/trailing slashes.
+
+An unparseable tariff, hours value or max stay no longer discards the place. The
+failed value becomes `Not published`; `flags` names the field (`tariff_unparsed`,
+`hours_unparsed`, `max_stay_unparsed`). Raw quotes remain available for PP review.
+Drafted display text replaces en/em dashes with plain hyphens without discarding
+the identity match; the raw quoted source stays available.
+Generic imports still cannot certify source authority: parsed claims without trusted
+adapter evidence are withheld with field-specific `*_unverified` flags. City of
+London's adapter repairs only `?` immediately before a digit in its tariff field.
+
+`validate` checks published prices against Price Status, paid tariffs with a free
+first period, and missing Brand/Place Category on Yes or Conditional rows. The
+identity check runs only if `Identity resolved` exists in the input. Clear charging
+or controlled-hours context is an error; ambiguous context is a `charging-hours`
+warning, written to `validation.csv` with `WARNING:` and excluded from the failure
+exit code. Unicode dashes and Closed/parking contradictions remain errors.
+
+```bash
+python -m ferro_parking triage-blanks --sheet-csv data/raw/all_london_clean.csv
+python -m ferro_parking triage-blanks --sheet-csv data/raw/all_london_clean.csv --pbf data/raw/greater-london-latest.osm.pbf
+python -m ferro_parking readiness --sheet-csv data/raw/all_london_clean.csv
+```
+
+Two more commands prepare category and postcode review CSVs:
+
+```bash
+python -m ferro_parking propose-categories --sheet-csv data/raw/all_london_clean.csv
+python -m ferro_parking propose-categories --sheet-csv data/raw/all_london_clean.csv --pbf data/raw/greater-london-latest.osm.pbf
+python -m ferro_parking fill-postcodes --sheet-csv data/raw/all_london_clean.csv --postcodes-csv PATH_TO_CENTROIDS.csv
+```
+
+`propose-categories` uses an ordered captured-type table and the exact Place
+Category dropdown. It writes `propose_categories.csv`, `unclassified.csv` and
+`conflicts.csv`. Blank categories receive proposals; existing matching categories
+are omitted, and disagreements or invalid existing values become conflicts.
+Unknown types stay unclassified unless the existing discovery classifier gives
+one unambiguous dropdown value. Optional OSM tags are observations only. The
+command never proposes Brand or infers Station from a venue name alone.
+
+`fill-postcodes` only considers blank postcodes with usable pins and excludes
+Postcode centroid pins. Its required local directory accepts postcode/Postcode/pcds,
+lat/latitude and lon/longitude headers. Coordinates must be WGS84 decimal degrees.
+Postcodes are normalised to uppercase with one space before the inward code.
+It writes `fill_postcodes.csv` and `skipped.csv`. Haversine distance chooses the
+nearest centroid; the default maximum distance is 250 m, adjustable with
+`--max-distance-m`. Equidistant different postcodes are skipped. A nearest-centroid
+proposal needs human review: it is not proof of the exact site's postcode.
+An empty directory produces explicit skips rather than guessed postcodes.
+
+Both commands only write review CSVs to fresh run directories. `--out` must name
+a directory that does not exist. Inputs, captured fields, coordinates, protected
+column rules and the live sheet remain unchanged. No network or Google auth is
+used. The centroid fixture in tests is synthetic and must not be used as a real
+postcode directory.
+
+`triage-blanks` writes `triage_blanks.csv` in a fresh run directory. Its buckets
+are research queues, not parking answers. It includes every blank Can Park? row;
+`--pbf` optionally attaches nearby raw OSM tags. Both commands read local files
+only, require no network or Google authentication, and never write to the sheet.
+
+`readiness` prints showable and complete counts, overall and by Borough and
+postcode district. Showable needs Yes/Conditional, finite coordinates in range,
+and known Who Can Park/Cost Type. Complete additionally needs known Hours, Max Stay
+and Tariff Detail. `Not published` counts as documented only for Hours and Max Stay
+with a non-empty source; `Not applicable` counts as known. A missing, Unknown or
+Not published tariff, access or cost never passes the complete bar.
+
+Replay Heathrow, LCY, NR3, Havering and City of London (`2026-11-09-col`) when
+the original local run folders are available:
+
+```bash
+PYTHONPATH=src python scripts/replay_discovery_batches.py --runs-dir data/runs --sheet-csv data/raw/all_london_clean.csv
+```
+
+This extracts each `exceptions.csv` source JSON into fresh outputs and passes the
+decoded records directly to `discover.run`, preserving their existing `official`
+provenance. It records both the original supplied baseline and the PR review
+replay counts alongside newly measured results in `comparison.json`. Each batch
+also writes `spot_checks.csv`
+with source name, Place ID and sheet Location Name for manual identity checks.
+Exit code 0 requires the expected listing count and a majority matched for every
+batch. No batch input or full sheet export
+is committed to the repository.

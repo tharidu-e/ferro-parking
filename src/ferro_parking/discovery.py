@@ -11,7 +11,7 @@ the sheet's own files. It only reads the OSM extract and a CSV export, and
 writes new CSV files under data/runs/<date>/discovery/.
 
 Run (from the project root):
-  python -m ferro_parking discover data/raw/greater-london-latest.osm.pbf data/raw/all_london_clean.csv
+  python -m ferro_parking.discovery data/raw/greater-london-latest.osm.pbf data/raw/all_london_clean.csv
 Options:
   --out DIR     output directory (default: data/runs/<today>/discovery)
 
@@ -518,7 +518,7 @@ def run(pbf_path, csv_path, out_dir, categories=None):
 
 
 def _write_csv(path, fieldnames, rows):
-    with open(path, "w", newline="", encoding="utf-8") as f:
+    with open(path, "x", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=fieldnames)
         w.writeheader()
         w.writerows(rows)

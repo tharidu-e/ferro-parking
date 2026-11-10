@@ -6,7 +6,8 @@ python -m ferro_parking clear-unverified
     and undo.json (every current value) to
     data/runs/<today>/clear_unverified/ for every row with
     Verification Result blank. Apply with the normal write command once
-    approved; this command itself never writes to the sheet.
+    approved. --apply additionally requires --confirm-wipe and uses the
+    existing writer after reporting the affected row count.
 
 Only CLEARED_COLUMNS are touched. Every other column, every row with a
 Verification Result already set, and the "ALL LONDON" tab are left alone.
@@ -88,7 +89,9 @@ def main(argv=None):
     print("Non-blank cells per column:")
     for col in CLEARED_COLUMNS:
         print(f"  {non_blank_by_column[col]:5d}  {col}")
-    print(f"\nOutputs in {out_dir}/. Dry run only, nothing written to the sheet.")
+    print(f"\nOutputs in {out_dir}/.")
+    if not args.apply:
+        print("Dry run only, nothing written to the sheet.")
     if args.apply:
         from .fill import write_main
         return write_main([str(out_dir / "plan.json"), "--apply", "--confirm-wipe"])

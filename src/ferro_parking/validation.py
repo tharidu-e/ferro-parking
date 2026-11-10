@@ -19,6 +19,29 @@ def dropdowns():
         return tomllib.load(stream)['dropdowns']
 
 
+PRICE_TOKEN = re.compile(r'(?:£|GBP)\s*\d+(?:[.,]\d+)?|\b\d+\.\d{2}\s*(?:per\b|/)|\b\d+\s*(?:pence|p)\b', re.I)
+MISSING = {'', 'Unknown', 'Not published', 'Not applicable'}
+
+
+def charging_hours_message(row):
+    """Flag context about charging, without declaring vague enforcement text fact."""
+    if str(row.get(HOURS, '')).strip() in MISSING:
+        return None
+    context = ' '.join(str(row.get(key, '')) for key in (
+        'Hours Basis', 'Notes', 'Rules Summary', 'Evidence Detail (what the source shows)',
+        'Charges (as published)', 'Enforcement Details'))
+    clear = re.search(r'\b(?:charging|chargeable|controlled|enforcement)\s+(?:hours|times)\b|\bcharges apply\b', context, re.I)
+    if clear:
+        return 'Hours may describe charging/control periods instead of when parking is allowed; review the source'
+    if re.search(r'\b(?:charging|charges|controlled|enforcement|paid parking|pay and display)\b', context, re.I):
+        return 'WARNING: Charging/control context is ambiguous; confirm these are parking opening hours'
+    return None
+
+
+def is_warning(problem):
+    return problem['message'].startswith('WARNING:')
+
+
 def validate_rows(entries, plan=False):
     failures, identities = [], set()
     allowed = dropdowns()
@@ -45,6 +68,21 @@ def validate_rows(entries, plan=False):
                 fail(key, 'dashes', 'Use a plain hyphen')
             if key in allowed and value not in allowed[key]:
                 fail(key, 'dropdown', 'Value must exactly match config/rules.toml')
+        if row.get(fill.CAN_PARK) in ('Yes', 'Conditional'):
+            for column in ('Brand', 'Place Category'):
+                if not str(row.get(column) or '').strip():
+                    fail(column, 'required', f'{column} is required when parking is Yes or Conditional')
+        if row.get('Price Status') == 'Not published':
+            for column in ('Charges (as published)', 'Tariff Detail'):
+                if PRICE_TOKEN.search(str(row.get(column, ''))):
+                    fail('Price Status', 'price-status', f'{column} contains a price but Price Status is Not published')
+        detail = str(row.get('Tariff Detail', '')).strip()
+        free_first = re.match(r'Free\b|\d+-\d+\s+(?:hrs|mins)\s+£0\.00(?:;|$)', detail, re.I)
+        if row.get('Cost Type') == 'Paid' and free_first:
+            fail('Cost Type', 'cost-type', 'Tariff has a free first period; use Free then paid instead of Paid')
+        charging_message = charging_hours_message(row)
+        if charging_message:
+            fail(HOURS, 'charging-hours', charging_message)
         if 'Tariff Detail' in row and not tariff_valid(row.get('Tariff Type'), row['Tariff Detail']):
             fail('Tariff Detail', 'template', 'Invalid tariff template or band ranges')
         if 'Max Stay (mins)' in row and not (re.fullmatch(r'\d+', str(row['Max Stay (mins)'])) or row['Max Stay (mins)'] in ('No limit', 'Not published', 'Not applicable')):
@@ -63,7 +101,7 @@ def validate_rows(entries, plan=False):
             fail('Max Stay (mins)', 'evidence', 'No limit requires explicit source words')
         if row.get('Verification Result') == 'Confirmed' and any(str(row.get(key, '')) in ('', 'Not published', 'Unknown') for key in ('Max Stay (mins)', HOURS, 'Who Can Park')):
             fail('Verification Result', 'confirmed', 'Confirmed requires known max stay, hours and who can park')
-        if row.get(fill.CAN_PARK) == 'Yes' and row.get('Verification Result') == 'Needs on-site check' and row.get('Identity resolved') != 'Yes':
+        if 'Identity resolved' in row and row.get(fill.CAN_PARK) == 'Yes' and row.get('Verification Result') == 'Needs on-site check' and row.get('Identity resolved') != 'Yes':
             fail(fill.CAN_PARK, 'identity', 'Unresolved identity cannot say Yes')
         if row.get('Location Status') == 'Closed':
             if row.get(fill.CAN_PARK) != 'No':
@@ -113,5 +151,7 @@ def main(argv=None):
         writer = csv.DictWriter(stream, fieldnames=['Place ID', 'field', 'value', 'rule', 'message'])
         writer.writeheader()
         writer.writerows(failures)
-    print(f'{len(entries)} rows, {len(failures)} failures. Report: {output}')
-    return 1 if failures else 0
+    errors = sum(not is_warning(problem) for problem in failures)
+    warnings = len(failures) - errors
+    print(f'{len(entries)} rows, {errors} failures, {warnings} warnings. Report: {output}')
+    return 1 if errors else 0

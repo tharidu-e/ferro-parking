@@ -2,6 +2,7 @@
 import csv
 import io
 import json
+import re
 from pathlib import Path
 from urllib.request import Request, urlopen
 
@@ -19,7 +20,8 @@ def generic(location):
     if not isinstance(data, list):
         raise ValueError('Generic JSON must be an array of location objects')
     keys = ('name', 'address', 'postcode', 'lat', 'lon', 'url', 'tariff', 'hours', 'max_stay', 'brand')
-    return [{**{key: str(row.get(key) or '') for key in keys}, 'official': False} for row in data]
+    return [{**{key: str(row.get(key) or '') for key in keys}, 'official': False,
+             'place_id': str(row.get('place_id') or row.get('Place ID') or '').strip()} for row in data]
 
 
 # Official City of London public car park finder, ArcGIS layer 2.
@@ -40,7 +42,7 @@ def city_of_london(location=None):
         lon, lat = geometry['coordinates'][:2]
         rows.append({'name': properties['CAR_PARKS'], 'lat': str(lat), 'lon': str(lon),
                      'address': properties.get('LOCATION', '') or '', 'postcode': '',
-                     'url': CITY_URL, 'tariff': properties.get('TARIFFS', '') or '',
+                     'url': CITY_URL, 'tariff': re.sub(r'\?(?=\d)', '£', properties.get('TARIFFS', '') or ''),
                      'hours': '', 'max_stay': '', 'brand': '', 'official': True})
     return rows
 

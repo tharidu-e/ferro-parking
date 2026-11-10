@@ -1,0 +1,126 @@
+{
+  "note": "Synthetic regression cases; these are not replays of the unavailable live batches.",
+  "cases": [
+    {
+      "source": {
+        "name": "Example Long Stay",
+        "postcode": "TW6 1EW",
+        "lat": "51.5",
+        "lon": "0",
+        "url": "",
+        "tariff": "No published tariff",
+        "place_id": "PP-000001"
+      },
+      "sheet": [
+        {
+          "Place ID": "PP-000002",
+          "Location Name": "Example Short Stay",
+          "Postcode": "TW6 1EW",
+          "Latitude": "51.5",
+          "Longitude": "0",
+          "Source URLs (primary first)": ""
+        },
+        {
+          "Place ID": "PP-000001",
+          "Location Name": "Example Long Stay",
+          "Postcode": "TW6 1EW",
+          "Latitude": "51.5",
+          "Longitude": "0",
+          "Source URLs (primary first)": ""
+        }
+      ],
+      "method": "Place ID",
+      "place_id": "PP-000001"
+    },
+    {
+      "source": {
+        "name": "Example Long Stay",
+        "postcode": "TW6 1EW",
+        "lat": "51.5",
+        "lon": "0",
+        "url": "https://www.nationalrail.co.uk/stations/example/",
+        "tariff": "No published tariff"
+      },
+      "sheet": [
+        {
+          "Place ID": "PP-000002",
+          "Location Name": "Example Short Stay",
+          "Postcode": "TW6 1EW",
+          "Latitude": "51.5",
+          "Longitude": "0",
+          "Source URLs (primary first)": ""
+        },
+        {
+          "Place ID": "PP-000001",
+          "Location Name": "Example Long Stay",
+          "Postcode": "TW6 1EW",
+          "Latitude": "51.5",
+          "Longitude": "0",
+          "Source URLs (primary first)": "https://example.org/primary ; https://www.nationalrail.co.uk/stations/example/"
+        }
+      ],
+      "method": "Source URL",
+      "place_id": "PP-000001"
+    },
+    {
+      "source": {
+        "name": "Example Long Stay",
+        "postcode": "TW6 1EW",
+        "lat": "51.5",
+        "lon": "0",
+        "url": "",
+        "tariff": "No published tariff"
+      },
+      "sheet": [
+        {
+          "Place ID": "PP-000002",
+          "Location Name": "Example Short Stay",
+          "Postcode": "TW6 1EW",
+          "Latitude": "51.5",
+          "Longitude": "0",
+          "Source URLs (primary first)": ""
+        },
+        {
+          "Place ID": "PP-000001",
+          "Location Name": "Example Long Stay",
+          "Postcode": "TW6 1EW",
+          "Latitude": "51.5",
+          "Longitude": "0",
+          "Source URLs (primary first)": ""
+        }
+      ],
+      "method": "postcode+name",
+      "place_id": "PP-000001"
+    },
+    {
+      "source": {
+        "name": "Example Long Stay",
+        "postcode": "",
+        "lat": "51.5",
+        "lon": "0",
+        "url": "",
+        "tariff": "No published tariff"
+      },
+      "sheet": [
+        {
+          "Place ID": "PP-000002",
+          "Location Name": "Example Short Stay",
+          "Postcode": "TW6 1EW",
+          "Latitude": "51.5",
+          "Longitude": "0",
+          "Source URLs (primary first)": ""
+        },
+        {
+          "Place ID": "PP-000001",
+          "Location Name": "Example Long Stay",
+          "Postcode": "TW6 1EW",
+          "Latitude": "51.5",
+          "Longitude": "0",
+          "Source URLs (primary first)": ""
+        }
+      ],
+      "method": "pin within 50 m+name",
+      "place_id": "PP-000001"
+    }
+  ]
+}
