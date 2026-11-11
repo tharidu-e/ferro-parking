@@ -44,6 +44,9 @@ Commands:
   db-create-redo  Bring back the records one db-create run made, after an
           undo and a fix (dry run unless --apply; the duplicate guards run
           again and each record keeps its existing Place ID)
+  db-duplicate  Record that one place repeats another, so only one of them
+          routes and publishes (dry run unless --apply; nothing is deleted and
+          no Place ID is freed; --clear reverses it)
   db-undo  Undo one run of applied database changes (dry run unless --apply)
   grok-import  Turn an export of the bot's results tab into a plan file
   default-fill  Dry run: the category default (R1, R10) as a plan file, for
@@ -153,6 +156,9 @@ def main():
     if cmd == "db-create-redo":
         from .create import redo_main as create_redo_main
         return create_redo_main(argv)
+    if cmd == "db-duplicate":
+        from .duplicates import main as duplicates_main
+        return duplicates_main(argv)
     if cmd == "db-undo":
         from .plan import undo_main
         return undo_main(argv)
