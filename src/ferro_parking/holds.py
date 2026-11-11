@@ -441,15 +441,26 @@ def distance_near(case):
 
 
 def already_same_ref(case, context):
-    """A place already carries this exact OpenStreetMap reference. Same feature,
-    same car park: there is nothing to judge and no distance to measure."""
-    if case.state == "created" and case.created_place_id:
-        return ("duplicate", f"place {case.created_place_id} already carries "
-                             f"OpenStreetMap reference {case.candidate_ref}.")
+    """A place already carries this exact OpenStreetMap reference, so there is
+    nothing to create and no distance to measure.
+
+    The candidate's own creation is not such a place. A case the database
+    already holds as its own record, and which also names an older place
+    nearby, carries the open question of whether that created record duplicates
+    the older one. Settling it here on the strength of its own creation would
+    throw that question away, so the case falls through to the other rules and
+    to the reviewers instead."""
     for near in case.near:
         if near.osm_id and near.osm_id == case.candidate_ref:
             return ("duplicate", f"near place {near.place_id} already carries "
                                  f"OpenStreetMap reference {case.candidate_ref}.")
+    if case.state == "created" and case.created_place_id:
+        if [near for near in case.near if near.place_id != case.created_place_id]:
+            return None
+        return ("duplicate", "the database already holds this candidate as place "
+                             f"{case.created_place_id}, created from OpenStreetMap "
+                             f"reference {case.candidate_ref}: there is nothing "
+                             "to create.")
     return None
 
 
@@ -723,6 +734,7 @@ def review_payload(case):
         "candidate_name": case.candidate_name, "geometry": case.geometry,
         "area_m2": round(case.area_m2), "latitude": case.latitude,
         "longitude": case.longitude, "tags": case.tags,
+        "state": case.state, "created_place_id": case.created_place_id,
         "near": [{"place_id": near.place_id, "name": near.name,
                   "postcode": near.postcode, "geo_precision": near.geo_precision,
                   "osm_id": near.osm_id, "metres": near.metres,

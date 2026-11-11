@@ -129,6 +129,47 @@ def test_already_same_ref_does_not_fire_on_a_different_ref():
     assert verdict_of(case) == ("unresolved", holds.NO_RULE)
 
 
+def test_a_created_case_with_an_older_place_nearby_is_not_settled_by_rule_one():
+    """The 47 cases discovery flagged as possible duplicates, which step 2
+    created anyway. The open question is whether the created record duplicates
+    the older place. Settling the case on its own creation throws that away."""
+    case = a_case("node/1319513718", "Eastcote Station Car Park",
+                  state="created", created_place_id="PP-A",
+                  latitude=51.577043, longitude=-0.396241,
+                  near=[holds.NearPlace(place_id="PP-B", name="Eastcote",
+                                        latitude=51.5771, longitude=-0.3963,
+                                        geo_precision="Rooftop", metres=8.0)])
+    assert verdict_of(case) == ("unresolved", holds.NO_RULE)
+
+
+def test_a_created_case_whose_only_near_place_is_its_own_record_is_a_duplicate():
+    """Nothing is left to ask: the near place is the record this candidate made."""
+    case = a_case("node/26866990", "Soho Cark Park", state="created",
+                  created_place_id="PP-C",
+                  near=[holds.NearPlace(place_id="PP-C", name="Soho Car Park",
+                                        metres=0.0)])
+    assert verdict_of(case) == ("duplicate", "already_same_ref")
+    assert "nothing to create" in case.evidence
+
+
+def test_a_created_case_with_an_older_place_nearby_still_stops_on_a_hand_check():
+    """Falling through rule 1 must not fall past the hand check protection."""
+    case = a_case("node/1319513718", "Eastcote Station Car Park",
+                  state="created", created_place_id="PP-A",
+                  near=[holds.NearPlace(place_id="PP-B", name="Eastcote",
+                                        verified_by="Tharidu", metres=8.0)])
+    assert verdict_of(case) == ("unresolved", "protected_row")
+
+
+def test_a_reviewer_sees_that_a_case_is_a_live_record():
+    """A reviewer judging one of the 47 must know it already has a Place ID."""
+    case = a_case("node/1319513718", "Eastcote Station Car Park",
+                  state="created", created_place_id="PP-A")
+    payload = holds.review_payload(case)
+    assert payload["state"] == "created"
+    assert payload["created_place_id"] == "PP-A"
+
+
 # ---------------------------------------------------------------- rule 2
 
 def test_a_protected_row_is_unresolved_even_when_a_duplicate_rule_would_fire():
@@ -442,7 +483,7 @@ def test_a_review_batch_holds_no_verdict_and_no_hint(cases, tmp_path):
     for entry in payload:
         assert set(entry) == {"case_id", "candidate_ref", "candidate_name",
                               "geometry", "area_m2", "latitude", "longitude",
-                              "tags", "near"}
+                              "tags", "near", "state", "created_place_id"}
         for near in entry["near"]:
             assert set(near) == {"place_id", "name", "postcode", "geo_precision",
                                  "osm_id", "metres", "pin_inside_candidate"}
