@@ -1,6 +1,6 @@
 # Code ownership map
 
-Read this before adding a module. Paths below are relative to `src/ferro_parking/`, except `config/` entries. CLI means dispatch from `__main__.py`. This is an ownership index, not a new execution order; use `EXECUTION_CHECKLIST.md` for that.
+Read this before adding a module. Paths below are relative to `src/ferro_parking/`, except `config/` entries. CLI means dispatch from `__main__.py`. This is an ownership index, not a new execution order; use `docs/STATUS.md` for current priorities.
 
 ## Import and export
 

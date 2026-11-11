@@ -61,3 +61,24 @@ R1, R3 and R4 are built into osm_parking_match.py (packet suggestions). R5 and R
 
 - Street View rarely shows signs at readable size; Google Maps Photos of the car park sign are the best manual source (about 5 minutes per row).
 - Sign photos give far more than OSM (no-return rules, enforcement type, PCN amount, Blue Badge rules), so a sampled manual check (or a vision model reading sign photos) is the quality gate, not OSM alone.
+
+
+## Cell and publication controls
+
+These controls override weaker historical examples above. Read this section before preparing any data plan.
+
+- Find sheet columns by header text in row 1, never by letter or position. Match rows by Place ID, never by row number.
+- Protected columns, never in any plan: Postcode Area, Confidence (1-5), Free Stay Countdown (mins), Ferro Autopay, Parking Charge (£), Total incl. Ferro Fee (£), Captured By, Date Captured, Latitude, Longitude, Place ID, every column ending "(as captured)", Charges (as published), Enforcement Details.
+- A filled Verification Result means the row is finished. Never fill it just to mark progress, and never change finished rows or rows whose Verified By is a person's name.
+- Dropdown columns take only their exact allowed values.
+- No en dashes or em dashes in any cell, file or message. Use a plain hyphen.
+- Tariff Detail templates, prices always with £ and two decimals: `Free` / `Free for up to 2 hrs` / `Free for 30 mins, then £1.00 per hour` / `£1.30 per hour` / `£18.00 per 24 hours` / `£15.00 per night` / bands `0-2 hrs £5.00; 2-3 hrs £6.50` (closed ranges only) / `Not published` / `Not applicable`.
+- "Free", Can Park? "Yes" and Who Can Park "Anyone" / "Anyone (paid)" need a strong source for that exact site: official branch page, operator or council page, or a readable sign photo. Never from chain-wide text, reviews, forums, Parkopedia or booking listings (YourParkingSpace, JustPark).
+- Can Park? "No" needs an explicit statement that the site has no car park. Silence is not No.
+- A max stay is never copied from another branch or a chain-wide page.
+
+The original ALL LONDON tab stays read-only. New columns go only at the end.
+Every Sheet change needs plan.json, dry_run.csv and undo.json in a fresh run folder.
+Run the existing six checks and independent second reading. Show counts, samples and rejects, then wait for the owner's explicit go.
+Use the existing writer. Write Verification Result last, then independently re-export and require zero mismatches.
+Stop on any mismatch. Keep the undo and comparison artifacts.

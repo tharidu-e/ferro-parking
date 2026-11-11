@@ -3,8 +3,8 @@
 These are the commands that add car park records to the local database. Run
 them from the project root. Every command is a dry run until you add `--apply`.
 
-No command here touches the Google Sheet. Publication is step 6 of
-`EXECUTION_CHECKLIST.md` and it stops for your approval.
+No command here touches the Google Sheet. Publication is a separate task listed in
+`docs/STATUS.md` and it stops for your approval.
 
 ## What a created record is
 

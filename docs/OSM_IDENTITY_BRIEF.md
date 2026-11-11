@@ -1,15 +1,8 @@
 # Brief: src/ferro_parking/osm_identity.py and tests/test_osm_identity.py
 
-Repo: /Users/deshan/Documents/ferro-parking. Read CLAUDE.md,
-docs/PP_rules_and_pilot.md, src/ferro_parking/osm_places.py,
-src/ferro_parking/discovery.py (the category machinery and classify_osm),
-src/ferro_parking/plan.py (the plan file format and every refusal),
-src/ferro_parking/route.py (source_key), and src/ferro_parking/fill.py
-RESEARCH_COLUMNS, before writing code.
-
-Do not touch src/ferro_parking/sources/*, src/ferro_parking/fetch_fill.py,
-src/ferro_parking/holds.py or src/ferro_parking/create.py. Other workers own
-those right now.
+This is the implemented matcher's contract. Read it only when changing identity matching.
+Follow AGENTS.md. Reuse the category machinery in discovery.py and the existing plan checks.
+The counts below describe the original implementation brief. Current work is in STATUS.md.
 
 ## The problem
 

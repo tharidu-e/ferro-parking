@@ -1,811 +1,104 @@
 # Ferro parking pipeline
 
-Read `docs/MAP.md` for code ownership before adding a module.
-Use `EXECUTION_CHECKLIST.md` for current order and remaining work.
-Document consolidation and pending deletions are in `docs/CLEANUP_PROPOSAL.md`.
+Ferro parking researches parking places for Ferro Maps.
+The local SQLite database holds imported Sheet rows, created places and audited changes.
+Google Sheet publication requires separate owner approval.
 
-Fills and checks the Ferro Maps parking sheet ("PP Parking places", tab **ALL LONDON (clean)**)
-using free data first (OpenStreetMap + rules) and the Grok PP bot only for the rows code cannot settle.
+## Setup
 
-Design: `docs/PP_architecture_OSM_first.md`. Rules R1-R6 and the pilot: `docs/PP_rules_and_pilot.md`.
-Bot prompt for the residue rows: `docs/PP_Validator_prompt_v2_OSM.md`.
-Step order for the London expansion: `EXECUTION_CHECKLIST.md`.
-Commands for adding car parks: `ADD_PLACES_RUNBOOK.md`.
-
-## Run the project
-
-Three commands get you from a clean checkout to a working database.
+Use Python 3.11 or later from the project root:
 
 ```bash
-cd ~/Documents/ferro-parking
-python3 -m venv .venv && source .venv/bin/activate
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -e ".[dev]"
+python -m pytest tests/ -q
 ```
 
-Put `all_london_clean.csv` and `greater-london-latest.osm.pbf` in `data/raw/`.
-The links are in the Setup section below. Then load the sheet into the database.
+Keep credentials outside Git. Do not print their contents.
+Local inputs belong in `data/raw/`:
+
+- `all_london_clean.csv`: an export of the ALL LONDON (clean) Sheet tab.
+- `greater-london-latest.osm.pbf`: the London extract from [Geofabrik](https://download.geofabrik.de/europe/united-kingdom/england/greater-london-latest.osm.pbf).
+- Source exports and cached evidence needed by the selected research command.
+
+The Sheet identity and tab names are in `config/sheets.toml`.
+For a new database, import a saved export with:
 
 ```bash
-python -m pytest                                                   # 1,383 tests
 python -m ferro_parking db-import --sheet-csv data/raw/all_london_clean.csv
-python -m ferro_parking route
 ```
 
-`db-import` reads the CSV and writes the database. `route` gives every place one
-research stage. Neither command touches the Google Sheet.
+This writes the local database. It does not write to Sheets.
 
-Nothing writes to the Google Sheet unless you type `--apply` on a publish
-command, and publishing needs a reviewed plan. Every other command is a dry run
-or writes only to the local database.
+## How many places remain?
 
-To see what is in the database, read "Query the database" below.
-
-## Why adding places needed new code
-
-The short version: the database could only hold places that came from the
-Google Sheet, so there was nowhere to put a car park the sheet did not have.
-
-In more detail. `db-import` stores each sheet row in the `raw` table. The
-`places` and `parking` tables are not stored, they are computed from `raw` plus
-the `changes` log, and `db-rebuild` recomputes them from scratch. That design is
-deliberate, because it means the database can never silently disagree with the
-sheet.
-
-It also meant a record created in the database had no home. You could insert a
-row into `places`, and the next `db-rebuild` would compute the tables from `raw`
-again and your row would be gone. `db-apply` could not help either, because it
-only edits cells on a Place ID that already exists, and it refuses an unknown
-one.
-
-So the fix was a second origin. The `created` table holds places the database
-made itself, and the readers that build `places` and `parking` now read the
-sheet rows and then the created records. A created record therefore survives a
-rebuild, reaches the export, and gets a research stage from `route`.
-
-This is why 4,852 London car parks from OpenStreetMap could be proposed but not
-stored until now, and it is step 1 of `EXECUTION_CHECKLIST.md`.
-
-## Setup (once)
+Run this from the project root with the environment active.
+It opens the existing database read-only and uses the package's current-row logic.
 
 ```bash
-cd ~/Documents/ferro-parking
-python3 -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
-python -m pytest            # all tests should pass
+python -B - <<'PYCOUNTS'
+from collections import Counter
+from pathlib import Path
+import sqlite3
+from ferro_parking import db
+
+with sqlite3.connect(Path(db.DB_PATH).resolve().as_uri() + "?mode=ro", uri=True) as conn:
+    conn.row_factory = sqlite3.Row
+    _, rows = db.current_rows(conn)
+    run, stages = db.latest_routing(conn)
+    results = Counter(row.get("Verification Result", "").strip() or "(blank)" for row in rows)
+    print("Total places:", len(rows))
+    print("Remaining with blank verification:", results["(blank)"])
+    print("Verification results:", dict(results))
+    print("Latest saved routing:", run)
+    print("Saved stages:", dict(Counter(stages.values())))
+PYCOUNTS
 ```
 
-Put the input data in `data/raw/` (never committed):
-- `greater-london-latest.osm.pbf` from https://download.geofabrik.de/europe/united-kingdom/england/greater-london-latest.osm.pbf
-- `all_london_clean.csv`: export of the ALL LONDON (clean) tab
-  (https://docs.google.com/spreadsheets/d/1VHtzY1001e0aRSXE6s_-IJU9YioJtjSNZ5WCOt1IO-o/export?format=csv&gid=1850000003)
+Blank verification measures unfinished research. On-site checks are a separate queue.
+A filled result does not mean every parking fact is known or independently verified.
+Saved routing can be older than the current data. `route` refreshes it and writes local routing records.
 
-## Commands
+## Common commands
 
-| Step | Command | Status |
+Commands run from the project root. Use `python -m ferro_parking COMMAND --help` for arguments.
+Outputs use fresh folders under `data/runs/`. Existing runs remain untouched.
+
+| Purpose | Command | Effect |
 |---|---|---|
-| 1. Match + route | `python -m ferro_parking match data/raw/greater-london-latest.osm.pbf data/raw/all_london_clean.csv` | built, tested |
-| Export the live sheet | `python -m ferro_parking export` | built, tested |
-| 2-3. Fill (rules R1-R7, dry run only) | `python -m ferro_parking fill --borough Haringey` | built, tested |
-| 4. Write to the sheet | `python -m ferro_parking write PLAN.json --apply` | built, tested with mocks |
-| 4. Undo a write | `python -m ferro_parking undo UNDO.json --apply` | built, tested with mocks |
-
-Outputs go to `data/runs/<date>/`, so nothing is ever overwritten and no `_v2` files are needed.
-
-## Rules
-
-Rules live in `config/rules.toml`, not in code. Change a rule there, add a test in `tests/`, run `python -m pytest`.
-
-## Safety
-
-- The pipeline never edits these columns: Brandon's four (Free Stay Countdown, Ferro Autopay, Parking Charge, Total incl. Ferro Fee), Latitude, Longitude, Place ID, formulas, and the "(as captured)" columns.
-- Every write has a dry run and an undo file first, writes Verification Result last, and is read back.
-- OSM data (c) OpenStreetMap contributors, ODbL.
-
-## PP workflow
-
-Export -> discover -> validate -> PP reviews `exceptions.csv` -> write dry run -> owner approval -> write --apply.
-
-```bash
-python -m ferro_parking export
-python -m ferro_parking discover --source city-of-london --sheet-csv data/raw/all_london_clean.csv
-python -m ferro_parking discover --source generic --input locations.csv --sheet-csv data/raw/all_london_clean.csv
-python -m ferro_parking validate data/runs/<date>/discover/candidates.csv
-python -m ferro_parking osm-gaps data/raw/greater-london-latest.osm.pbf --sheet-csv data/raw/all_london_clean.csv
-```
-
-Discovery writes `candidates.csv`, `matches.csv`, `exceptions.csv` and `summary.json`.
-It never creates or appends sheet rows. The existing OSM category report remains
-available as `python -m ferro_parking.discovery PBF CSV`.
-Generic CSV columns (or JSON array keys) are `name`, `address`, `postcode`, `lat`,
-`lon`, `url`, `tariff`, `hours`, `max_stay`, `brand`. Generic imports cannot certify
-source authority: tariff, hours and max-stay claims require PP evidence review.
-The official adapter uses the [City of London car park finder](https://www.mapping.cityoflondon.gov.uk/arcgis/rest/services/COMPASS_Driving_and_Cycling/MapServer/2).
-Both adapters support `--input` fixtures. Postcodes.io bulk responses are cached in
-`data/cache/postcodes`; uncached calls are limited to one per second. Missing or
-terminated postcodes use coordinate reverse lookup. Unresolved locations go to exceptions.
-Only `region == London` passes. Nearby-postcode reverse lookup is a region check,
-not proof of an exact site or a licence to change coordinates.
-
-`validate` returns 0 when clean and 1 for failures, writing `validation.csv`.
-It checks the supported conservative OSM hours grammar; unusual valid syntax is
-sent for review. Tariff bands require plain hyphens, closed contiguous ranges
-and prices with two decimal places. Unknown values stay `Not published` or the
-column's exact `Unknown` dropdown value. No Verification Result is assigned to drafts.
-
-After PP reviews the exceptions and source quotes, use the existing fill tools to
-prepare `plan.json`, `dry_run.csv` and `undo.json`. Run the six checks and independent
-second reading, show counts, samples and rejects, and wait for the owner's explicit
-"go". Then:
-
-```bash
-python -m ferro_parking validate PATH/plan.json
-python -m ferro_parking write PATH/plan.json
-# Only after the owner's go:
-python -m ferro_parking write PATH/plan.json --apply
-```
-
-Run the independent re-export compare after applying; require 0 mismatches.
-Clearing cells additionally requires `--confirm-wipe`, including when applying a
-saved clear plan through `write`. The clear command prints the affected row count.
-Completed and personally verified rows are refused by the writer. Protected and
-unknown headers are refused before authentication, including during dry runs.
-
-Run folders are append-only: an existing date gets `_2`, `_3`, etc. Explicit output
-directories and validation reports must be new. Sheet settings live in
-`config/sheets.toml`; override them with `FERRO_SPREADSHEET_ID`, `FERRO_CLEAN_TAB`,
-`FERRO_ORIGINAL_TAB` and `FERRO_CLEAN_GID`. `sync-apply` requires an explicit
-`--append-plan` path. Tab joins require unique Place IDs or name plus postcode;
-ambiguous identities abort without producing an append plan.
-
-## PP matching and review tools
-
-`discover` now tries exact Place ID, then any listed Source URL, before postcode,
-name plus street, nearby pin and brand. Generic CSV/JSON accepts either `place_id`
-or `Place ID`. Shared Source URLs, postcodes, pins and other non-ID stages use a unique exact
-normalised name or a clear score leader. Fuzzy winners require score >= 0.40 and
-a margin >= 0.08; conflicting terminal numbers cannot win a fuzzy match. If no
-name wins, matching tries the remaining stages. Unresolved true/near ties remain
-exceptions, and duplicate Place IDs are never resolved by name.
-A source URL match retains query parameters and ignores fragments/trailing slashes.
-
-An unparseable tariff, hours value or max stay no longer discards the place. The
-failed value becomes `Not published`; `flags` names the field (`tariff_unparsed`,
-`hours_unparsed`, `max_stay_unparsed`). Raw quotes remain available for PP review.
-Drafted display text replaces en/em dashes with plain hyphens without discarding
-the identity match; the raw quoted source stays available.
-Generic imports still cannot certify source authority: parsed claims without trusted
-adapter evidence are withheld with field-specific `*_unverified` flags. City of
-London's adapter repairs only `?` immediately before a digit in its tariff field.
-
-`validate` checks published prices against Price Status, paid tariffs with a free
-first period, and missing Brand/Place Category on Yes or Conditional rows. The
-identity check runs only if `Identity resolved` exists in the input. Clear charging
-or controlled-hours context is an error; ambiguous context is a `charging-hours`
-warning, written to `validation.csv` with `WARNING:` and excluded from the failure
-exit code. Unicode dashes and Closed/parking contradictions remain errors.
-
-```bash
-python -m ferro_parking triage-blanks --sheet-csv data/raw/all_london_clean.csv
-python -m ferro_parking triage-blanks --sheet-csv data/raw/all_london_clean.csv --pbf data/raw/greater-london-latest.osm.pbf
-python -m ferro_parking readiness --sheet-csv data/raw/all_london_clean.csv
-```
-
-Two more commands prepare category and postcode review CSVs:
-
-```bash
-python -m ferro_parking propose-categories --sheet-csv data/raw/all_london_clean.csv
-python -m ferro_parking propose-categories --sheet-csv data/raw/all_london_clean.csv --pbf data/raw/greater-london-latest.osm.pbf
-python -m ferro_parking fill-postcodes --sheet-csv data/raw/all_london_clean.csv --postcodes-csv PATH_TO_CENTROIDS.csv
-```
-
-`propose-categories` uses an ordered captured-type table and the exact Place
-Category dropdown. It writes `propose_categories.csv`, `unclassified.csv` and
-`conflicts.csv`. Blank categories receive proposals; existing matching categories
-are omitted, and disagreements or invalid existing values become conflicts.
-Unknown types stay unclassified unless the existing discovery classifier gives
-one unambiguous dropdown value. Optional OSM tags are observations only. The
-command never proposes Brand or infers Station from a venue name alone.
-
-`fill-postcodes` only considers blank postcodes with usable pins and excludes
-Postcode centroid pins. Its required local directory accepts postcode/Postcode/pcds,
-lat/latitude and lon/longitude headers. Coordinates must be WGS84 decimal degrees.
-Postcodes are normalised to uppercase with one space before the inward code.
-It writes `fill_postcodes.csv` and `skipped.csv`. Haversine distance chooses the
-nearest centroid; the default maximum distance is 250 m, adjustable with
-`--max-distance-m`. Equidistant different postcodes are skipped. A nearest-centroid
-proposal needs human review: it is not proof of the exact site's postcode.
-An empty directory produces explicit skips rather than guessed postcodes.
-
-Both commands only write review CSVs to fresh run directories. `--out` must name
-a directory that does not exist. Inputs, captured fields, coordinates, protected
-column rules and the live sheet remain unchanged. No network or Google auth is
-used. The centroid fixture in tests is synthetic and must not be used as a real
-postcode directory.
-
-`triage-blanks` writes `triage_blanks.csv` in a fresh run directory. Its buckets
-are research queues, not parking answers. It includes every blank Can Park? row;
-`--pbf` optionally attaches nearby raw OSM tags. Both commands read local files
-only, require no network or Google authentication, and never write to the sheet.
-
-`readiness` prints showable and complete counts, overall and by Borough and
-postcode district. Showable needs Yes/Conditional, finite coordinates in range,
-and known Who Can Park/Cost Type. Complete additionally needs known Hours, Max Stay
-and Tariff Detail. `Not published` counts as documented only for Hours and Max Stay
-with a non-empty source; `Not applicable` counts as known. A missing, Unknown or
-Not published tariff, access or cost never passes the complete bar.
-
-Replay Heathrow, LCY, NR3, Havering and City of London (`2026-11-09-col`) when
-the original local run folders are available:
-
-```bash
-PYTHONPATH=src python scripts/replay_discovery_batches.py --runs-dir data/runs --sheet-csv data/raw/all_london_clean.csv
-```
-
-This extracts each `exceptions.csv` source JSON into fresh outputs and passes the
-decoded records directly to `discover.run`, preserving their existing `official`
-provenance. It records both the original supplied baseline and the PR review
-replay counts alongside newly measured results in `comparison.json`. Each batch
-also writes `spot_checks.csv`
-with source name, Place ID and sheet Location Name for manual identity checks.
-Exit code 0 requires the expected listing count and a majority matched for every
-batch. No batch input or full sheet export
-is committed to the repository.
-
-## Local database (Phase 1 of the db-router work)
-
-The database at `data/db/ferro_parking.sqlite` is the single source of truth for
-the parking data. The Google Sheet becomes a published view and an inbox for bot
-results. The file sits under `data/`, so git ignores it.
-
-```bash
-python -m ferro_parking db-import --sheet-csv data/raw/all_london_clean.csv
-python -m ferro_parking db-export --out data/runs/2026-11-10/db/export.csv
-python -m ferro_parking db-rebuild
-```
-
-`db-import` stores each sheet row exactly as read, in the `raw` table. It keeps
-one JSON object per Place ID per import. Nothing is ever lost and no row is ever
-deleted. Each run creates a new `import_id`, so you can re-import a fresh export
-at any time. The command then reports what differs from the previous import: new
-Place IDs, Place IDs now absent, changed cells, and conflicts. A conflict means
-the sheet value matches neither the old nor the new value of a change the
-database owns. That is the signal that somebody edited the sheet by hand.
-
-`db-export` writes the 60 sheet columns in the sheet's own header order and row
-order. So `discover`, `readiness`, `triage-blanks` and the other full-export
-readers work on the result without a change. When the database owns no changes,
-the output is byte-identical to the export it came from.
-
-The typed tables `places` and `parking` are derived from `raw` plus the applied
-rows of the `changes` log. Nothing edits them directly. `db-rebuild` recomputes
-them, and running it twice gives the same tables. The `sheet_owned` table mirrors
-the four columns another owner writes. Those are read-only here and are never
-published.
-
-The `db-import` output also prints the next unused Place ID, which later phases
-use when they append a new place.
-
-## Query the database
-
-The database is one SQLite file at `data/db/ferro_parking.sqlite`. Any SQLite
-client reads it. The `sqlite3` command ships with macOS.
-
-```bash
-sqlite3 data/db/ferro_parking.sqlite
-```
-
-Inside the shell, `.tables` lists the tables, `.schema places` shows one table's
-columns and `.quit` exits. Two settings make the output readable.
-
-```
-.mode box
-.headers on
-```
-
-To run one query and exit, pass it on the command line.
-
-```bash
-sqlite3 -box data/db/ferro_parking.sqlite "SELECT COUNT(*) FROM places;"
-```
-
-Reading the file is always safe. It cannot change the Google Sheet. Do not run
-`INSERT`, `UPDATE` or `DELETE` by hand, because `db-rebuild` recomputes the
-derived tables and your edit disappears. Use the commands instead, so the change
-is logged and has an undo.
-
-### How many rows are there
-
-```sql
-SELECT 'places'  AS table_name, COUNT(*) AS rows FROM places
-UNION ALL SELECT 'parking', COUNT(*) FROM parking
-UNION ALL SELECT 'created', COUNT(*) FROM created
-UNION ALL SELECT 'changes', COUNT(*) FROM changes
-UNION ALL SELECT 'raw',     COUNT(*) FROM raw;
-```
-
-`places` and `parking` hold one row per live place. `raw` holds every sheet row
-of every import, so it is larger. `changes` holds one row per edited cell.
-
-### Where the places came from
-
-```sql
-SELECT CASE WHEN c.place_id IS NULL THEN 'from the sheet'
-            ELSE 'created from OpenStreetMap' END AS origin,
-       COUNT(*) AS places
-FROM places p
-LEFT JOIN created c ON c.place_id = p.place_id AND c.active = 1
-GROUP BY origin;
-```
-
-### Places per borough
-
-```sql
-SELECT borough, COUNT(*) AS places
-FROM places GROUP BY borough ORDER BY places DESC;
-```
-
-### Find a place by name
-
-`LIKE` is case insensitive here and `%` matches any text.
-
-```sql
-SELECT place_id, name, borough, category
-FROM places WHERE name LIKE '%chinatown%';
-```
-
-### Read one place in full
-
-```sql
-SELECT p.place_id, p.name, p.borough, p.latitude, p.longitude, p.osm_id,
-       k.can_park, k.who_can_park, k.cost_type, k.tariff_detail,
-       k.max_stay_mins, k.verification_result
-FROM places p JOIN parking k ON k.place_id = p.place_id
-WHERE p.place_id = 'PP-000125';
-```
-
-Use `-line` instead of `-box` for a one record per line layout, which is easier
-to read when a query returns many columns.
-
-```bash
-sqlite3 -line data/db/ferro_parking.sqlite "SELECT * FROM places WHERE place_id = 'PP-000125';"
-```
-
-### How much is still unanswered
-
-```sql
-SELECT COUNT(*) AS no_can_park_answer FROM parking WHERE can_park = '';
-```
-
-### What each research stage holds
-
-```sql
-SELECT stage, COUNT(*) AS places FROM routing
-WHERE run_id = (SELECT run_id FROM routing ORDER BY rowid DESC LIMIT 1)
-GROUP BY stage ORDER BY places DESC;
-```
-
-### What every run changed
-
-```sql
-SELECT run_id, COUNT(*) AS cells FROM changes GROUP BY run_id ORDER BY cells DESC;
-```
-
-To see the cells of one run:
-
-```sql
-SELECT place_id, column_name, old_value, new_value
-FROM changes WHERE run_id = 'categories-20261110-authorised' LIMIT 20;
-```
-
-### The created records
-
-```sql
-SELECT run_id, source, COUNT(*) AS records,
-       SUM(active) AS active, SUM(1 - active) AS deactivated
-FROM created GROUP BY run_id, source ORDER BY run_id;
-```
-
-### Check for a duplicate OpenStreetMap reference
-
-This must return no rows. Two places naming the same OpenStreetMap feature are
-the same car park twice.
-
-```sql
-SELECT osm_id, COUNT(*) AS places, GROUP_CONCAT(place_id) AS ids
-FROM places WHERE osm_id != ''
-GROUP BY osm_id HAVING COUNT(*) > 1;
-```
-
-### Check that no created record claims a parking answer
-
-This must also return 0. A created record holds an identity only.
-
-```sql
-SELECT COUNT(*) AS created_records_with_an_answer
-FROM parking k JOIN created c ON c.place_id = k.place_id AND c.active = 1
-WHERE k.can_park != '' OR k.who_can_park != '' OR k.cost_type != ''
-   OR k.verification_result != '';
-```
-
-### Export a query to a CSV file
-
-```bash
-sqlite3 -header -csv data/db/ferro_parking.sqlite \
-  "SELECT place_id, name, borough FROM places WHERE borough = 'Sutton';" \
-  > /tmp/sutton.csv
-```
-
-## Created records: adding places the sheet does not have
-
-```bash
-python -m ferro_parking osm-places data/raw/greater-london-latest.osm.pbf
-python -m ferro_parking db-create --plan CANDIDATES.jsonl
-python -m ferro_parking db-create --plan CANDIDATES.jsonl --apply
-python -m ferro_parking db-create-undo --run RUN_ID --apply
-python -m ferro_parking db-create-redo --run RUN_ID --apply
-```
-
-`ADD_PLACES_RUNBOOK.md` holds the ordered procedure. This section describes what
-the commands do.
-
-`osm-places` reads an OpenStreetMap extract and writes a create plan. It is
-read-only and makes no network request. It proposes an identity only: a name, a
-point, a borough, a category and the OpenStreetMap reference. It never proposes
-who can park, what it costs or a maximum stay. An OpenStreetMap tag proves that
-a car park exists. It does not prove permission.
-
-The access filter is the gate that matters. An access tag of private, no,
-residents, permit, employees, delivery, staff or students excludes the feature,
-as do street side, lane, kerb and shoulder parking, and parking a car may not
-enter. Only yes, public, permissive and customers count as public access. A
-feature with no access tag needs one qualifier: a name, an operator, a fee tag,
-a capacity of 10 or more, a multi-storey or underground type, or an area of at
-least 500 square metres. A qualifier admits a candidate identity. It is not a
-claim of public access.
-
-Greater London containment is a geometry test against the union of the borough
-polygons read from the extract itself, not a postcode lookup. For a polygon the
-record takes the centroid, or a point inside the polygon when the centroid falls
-outside its own shape.
-
-`db-create` is a dry run unless you add `--apply`. A created record may fill only
-the fifteen columns in `create.CREATE_COLUMNS`, so no create plan can state a
-parking answer or write any of the four owner payment columns. The database
-allocates the Place ID. These lines are refused, and one refusal blocks the whole
-plan:
-
-- a column outside `create.CREATE_COLUMNS`, or an unknown column
-- a plan that chooses its own Place ID
-- a record with no Location Name, or with no usable coordinate
-- the same source reference twice in one plan
-
-Two outcomes are not refusals, because neither is an error and neither blocks
-the plan. A record whose OpenStreetMap reference already belongs to a place is
-skipped, which is what makes a repeated or interrupted run safe. A record whose
-pin lands within 30 m of a place the database already holds is held and listed
-in `held.csv`, because a pin that close is a possible duplicate and not proof.
-Different businesses, levels and adjacent car parks sit metres apart, so a
-person decides.
-
-`db-create-undo` deactivates the records one run made. It deletes no row and
-frees no Place ID, so a later run never reuses one. It refuses a record a later
-run has changed, because that would discard newer evidence.
-
-`db-create-redo` brings those records back after a fix. The guards run again, so
-a record that now duplicates a place stays deactivated, and each record keeps
-the Place ID it already has.
-
-## Router (Phase 2 of the db-router work)
-
-```bash
-python -m ferro_parking route
-```
-
-`route` reads the database and gives every Place ID exactly one stage. It writes
-the `routing` table, writes `data/runs/<date>/route/routing.csv`, and prints the
-counts. It never reads or writes the sheet.
-
-Decision order, first match wins:
-
-1. `skip_named`: Verified By starts with "Tharidu". Hand-checked rows are never
-   touched. Agent labels such as "Policy script" or "Grok (discovery)" are not
-   people, so those rows stay routable.
-2. `skip_missing`: the newest import no longer lists this Place ID.
-3. `skip_duplicate`: `duplicate_of` is set.
-4. `skip_onsite`: Verification Result is "Needs on-site check".
-5. `skip_done`: Verification Result is filled, unless rule 6 applies.
-6. Priority 2: a public car park that says you can park, but does not say who
-   can park or what it costs.
-7. Priority 1: Verification Result is blank.
-
-A routed row then gets its stage from its derived source key. The key is the
-Operator, else the domain of the first Source URL, else the brand parsed from
-the name. A key with a registered fetcher gives `fetcher:<key>`. A station row
-gives `station`. A public car park with no fetcher gives `grok`. Everything
-else gives `default`.
-
-A station row is one in the Station category, or one whose Type (as captured)
-says station car park. The station stage is checked before `grok` and
-`default`. A station car park is neither a customer venue nor an ordinary
-public car park, so the category default of Phase 4 never touches it.
-
-The brand fallback drops trailing car park wording, so "Sainsbury's Car Park"
-keys as `sainsburys` and not as `sainsburys car`. A row left with no usable key
-is grouped as `unbranded`, and `unbranded` never matches a fetcher.
-
-The router and fetch-fill share the registered station, Better, Gym Group and PureGym readers. The key is still
-computed and reported, because Phase 5 picks its first fetchers from those
-counts. "Known" comes from `readiness.known`, so blank, Unknown and Not
-published all read as not known. The reason text comes from
-`triage_blanks.bucket`.
-
-`route` also writes `proposals.csv` in the same run folder. It lists routed
-rows a person has to look at, such as a row with a blank Location Name. Nothing
-in that file is ever written back, because Location Name is a protected
-column.
-
-## Plan files (Phase 3 of the db-router work)
-
-```bash
-python -m ferro_parking grok-import --results-csv RESULTS.csv
-python -m ferro_parking db-apply --plan PLAN.jsonl
-python -m ferro_parking db-apply --plan PLAN.jsonl --apply
-python -m ferro_parking db-undo --run RUN_ID
-python -m ferro_parking db-undo --run RUN_ID --apply
-```
-
-A plan file is JSON lines. Each line is one change. The keys are `place_id`,
-`column`, `new_value`, `quote`, `source_url`, `stage` and `verified_by`. The
-column is the exact sheet header text.
-
-`db-apply` is a dry run unless you add `--apply`. One refusal blocks the whole
-plan, and `rejected.csv` lists every refused line with its reason. These lines
-are refused:
-
-- an unknown Place ID, or an unknown column
-- a column another owner writes, or any other protected column
-- a column outside `fill.RESEARCH_COLUMNS`
-- a row whose Verified By starts with "Tharidu"
-- anything `validation.validate_rows` refuses
-
-A line that replaces a value already in the row needs strong evidence. The
-plan's own Source Tier must be in `page_fill.STRONG_SOURCE_TIERS` and its
-Specificity must be Site-specific. The row's existing Source Tier belongs to
-the value being replaced, so it cannot vouch for the new one. A line that
-restates the value already there changes nothing. It stays in the plan as
-context for the validator, which sees only the plan's own columns. The change
-log skips it.
-
-Verification Result is recorded last, so a row is never finished before its
-other values are in place. Every applied change is one row in the `changes`
-table, under a single run id. A line with a quote or a source URL also adds an
-`evidence` row.
-
-`db-undo --run RUN_ID` appends the reverse of that run, under the run id
-`undo-RUN_ID`. Nothing is deleted. A second undo of the same run does
-nothing.
-
-`grok-import` wraps the existing `grok_import.build_plan`, so the value
-mapping, the validation and the second reading are unchanged. It writes
-`plan.jsonl`, plus `skipped.csv`, `rejects.csv` and `dropped_columns.csv`. The
-dropped file lists columns `db-apply` can never write, such as Location
-Status, and columns the bot left blank. Dropping them keeps the plan usable
-instead of blocked.
-
-## Category default (Phase 4 of the db-router work)
-
-```bash
-python -m ferro_parking default-fill
-```
-
-`default-fill` is a dry run and writes nothing to the database or the sheet.
-It reads the Place IDs the latest routing run put on stage `default`. It runs
-the existing R1 and R10 rules from `policy_fill` on each one. It then writes a
-plan file for `db-apply`.
-
-Station rows, grok rows, fetcher rows and every skip row are out of scope. The
-routing table alone decides that. A station car park is not a customer venue,
-so the category default never touches one.
-
-The rules are `policy_fill.classify`, `chain_policy_fields` and
-`presumed_no_parking_fields`, used unchanged with `config/rules.toml`. Rule R7
-therefore holds. No Free, no Anyone and no max stay without site-specific
-evidence. A chain policy row sets Can Park? Conditional and Who Can Park per R1. It also sets Cost Type Unknown or Paid, and Max Stay
-Not published. Verification Result becomes "Confirmed, details not published",
-and Evidence Level becomes "Chain policy".
-
-Each plan also carries the row's Brand and Place Category. They usually change
-nothing, but `validation.validate_rows` sees only the plan's own columns and
-asks for both whenever Can Park? is Yes or Conditional. A row with neither on it gets no plan and waits for a person.
-
-The run folder holds three files. `plan.jsonl` is the plan. `summary.csv`
-holds the counts by outcome and by Place Category. `examples.csv` holds five
-example rows per outcome, with each field the plan changes.
-
-`policy_fill` answers "Map absence is not evidence of no parking" for a small
-venue and for a convenience format. So R10's presumed No never fires from this
-command. The count is reported, and it is 0.
-
-## Car park evidence, and the no_evidence stage
-
-The category default claims that a car park exists. A brand name alone does
-not establish that. So `route` asks for positive evidence first, before it
-sends a customer venue to `default`. Any one of these counts as evidence:
-
-- a cached official page for that place states parking
-- an OpenStreetMap car park lies within 50 m and is either tagged
-  `access=customers` or matches the venue by name, brand or operator
-- Type (as captured) or the Location Name says car park
-
-A routed row with none of the three goes to stage `no_evidence`. It gets no
-plan lines and it is not queued for the bot. The OpenStreetMap part reads the
-newest `osm_results.csv`. A row the match run never covered therefore has no
-OSM evidence. The report names the file it used.
-
-`route` reads the Location Name too. For the stage choice, a name with "car park", "car
-parks" or "parking" in it counts as a public car park. That test
-never decides whether a row is routed at all, so a finished row stays
-finished. The report prints 20 example rows that only the name moves.
-
-## Probes (Phase 5 of the db-router work)
-
-```bash
-python -m ferro_parking probe --key puregym.com --limit 3
-python -m ferro_parking probe --all-keys
-```
-
-`probe` takes a few routed rows for one source key and finds each branch
-page. It fetches the page and reports three things: the HTTP status, whether
-the page states parking for that branch, and the exact quotes. It writes
-`summary.csv` and `pages.csv` in the run folder. It also saves each page as a
-fixture under `tests/fixtures/pages/`. A fetcher built later is then tested
-without the network.
-
-`sources/fetch.py` holds the fetcher interface. A fetcher has three members:
-`key`, `branch_url(row)` and `quotes(text, row)`. A silent page gives no
-quotes, so it gives no plan line. The interface never guesses.
-
-Fetching is one request per second per domain, with a normal browser
-User-Agent and no bot-protection workaround. A 403 is recorded as a 403 and
-nothing retries. A page that answers 200 with a bot challenge is recorded as
-blocked. Page text is cached under `data/cache/pages`. The `pages` table records each
-fetch with its time and status, so a second look costs no request.
-
-## Category fills (the propose-categories plan)
-
-```bash
-python -m ferro_parking propose-categories --sheet-csv EXPORT.csv
-python -m ferro_parking category-plan --proposals PROPOSE_CATEGORIES.csv
-```
-
-`category-plan` turns the proposals into a plan. It fills blank Place Category
-cells only. A proposal that disagrees with a value already on the row is
-rejected, and the existing value stays.
-
-One guard sits over the supermarket proposals. The R10 rules read the store
-format from the name and not from the category. So a proposal of "Supermarket
-- large format" is kept only when `rules.format_for` reads the name as
-large. A name that reads as convenience is proposed as "Supermarket -
-convenience" instead. A name the rules cannot read is dropped.
-
-Every dropped, reshaped or held row lands in `category_review.csv` with its
-reason. A row verified by a named person is never touched.
-
-## Fetchers (Phase 5, the built ones)
-
-```bash
-python -m ferro_parking fetch-fill --key station
-python -m ferro_parking fetch-fill --key better.org.uk
-python -m ferro_parking fetch-fill --key thegymgroup.com
-python -m ferro_parking fetch-fill --key puregym.com
-python -m ferro_parking fetch-fill --key marksandspencer.com
-```
-
-`fetch-fill` is a dry run. It fetches pages, writes a plan file, and changes
-nothing but the page cache. The report counts rows attempted, pages fetched,
-plan lines, silent pages, blocked pages, unresolved names and rows held for a
-person. It also saves ten examples, each with its quote and URL.
-
-The station fetcher uses the complete public station list used by National
-Rail's finder. The list is fetched once and cached. It matches a cleaned row
-name exactly to an official list name and uses the finder's own slug rule.
-Ambiguous and unmatched names, and pages that return 404, are labelled
-"not National Rail" and routed to Grok. This is a research label, not proof
-that the location is outside National Rail. A stated number of parking spaces sets Can Park? Yes and puts the count in
-Notes. The exact words "No parking spaces" set Can Park? No only when captured
-charges are blank, Tariff Detail is blank or Not published, and the fresh
-OSM match shows no car park within 50 m. Missing OSM coverage holds the row.
-Conflicts produce a Review Flag and go to Grok without changing the parking
-answer. Zero spaces never produces Yes. National Rail values carry Brand
-National Rail. A
-statement about accessible bays alone writes nothing. Operator is written only
-when the page names it. Tariff, Free and Max Stay are never written from a
-station page.
-
-The venue fetcher serves better.org.uk, thegymgroup.com and puregym.com. It
-sets Can Park? Conditional and Who Can Park Customers only. Cost Type reads Free only for a positive free-parking statement with no charge mentioned elsewhere on the page. Negated statements never establish free parking. Sometimes the page states a charge this reader cannot
-write in the tariff template. Cost Type then reads Unknown, the wording goes in
-Notes, and the row gets a Review Flag. Max Stay is written only for a page that states a maximum stay. A free period
-is not a maximum stay, because the driver can pay to stay longer. Operator and the PCN amount come
-only from the page. A caution such as "check the signs in the car park" goes in
-Notes.
-
-`marksandspencer.com` is cache only. Its pages are fetched for the evidence
-gate to read, and no value is ever written from them.
-
-A row the fetcher cannot answer stays unanswered. The next route run sends it
-on by the ordinary rules.
-
-
-## Category metadata, research reports and Grok queue
-
-A plan whose only actual changes are Place Category and/or Brand does not
-need a Decision Reason route label. An unchanged Decision Reason can retain
-its existing typography. Changed text still passes the normal checks.
-category-plan never adds or changes Decision Reason.
-
-```bash
-python -m ferro_parking grok-queue --out NEW_DIRECTORY
-python -m ferro_parking research-report --runs RESEARCH_RUN_DIRECTORY --out NEW_DIRECTORY
-```
-
-The queue is a local CSV in the Grok Queue tab's exact column order. Owner
-payment columns are blank. Row is a reference from the newest import, never
-an update key. Priority is 1 for a name containing car park or a council or
-operator category, and 2 otherwise.
-
-The report runs db-apply checks without applying and reuses the independent
-second reading. It reports each reader's attempts, plan lines, parking and
-cost values, holds and refusals. It includes ten examples per reader and
-category default. A default with no proposal has no invented source quote.
-
-## Phase 7: publish
-
-```bash
-python -m ferro_parking publish --limit 10
-python -m ferro_parking publish --place-ids PP-000001 PP-000002
-# Only after owner approval of the saved plan:
-python -m ferro_parking publish --limit 10 --approved-plan PATH/plan.json --apply
-```
-
-Publish defaults to a dry run. It considers applied database changes only.
-It compares each selected owned cell with the last published value, or its
-imported value before the first publish. Drift blocks the whole publication.
-The pilot filters select Place IDs before checking or publishing their cells.
-
-Every run creates plan.json, dry_run.csv, undo.json and checks.json in a new
-folder. Six controls cover identity, allowed columns, locks, drift, validation
-and the existing independent second reading. Finished rows and reviewers the
-existing writer protects remain refused, including category-only sheet edits.
-The metadata exception never removes the writer's row locks.
-
-Apply requires a previously reviewed plan.json and an exact fresh match of
-its values and undo values. Place IDs are resolved again, so saved row numbers
-are never trusted. The existing guarded writer checks target cells again,
-writes Verification Result last and reads back. An independent full formula
-export compare must show zero mismatches before the published baseline is
-recorded. Failure leaves the undo file and compare report for investigation.
-No insert, append, delete or reorder operation exists in publish.
-
-
-## OSM identity proposals
-
-```bash
-python -m ferro_parking osm-identity --pbf data/raw/greater-london-latest.osm.pbf
-# Optional: --db PATH --out NEW_DIRECTORY --limit 20
-```
-
-This reads the database and extract without network or mutation. It proposes
-only blank or placeholder Brand, Place Category and Notes on active
-OSM-created records, using the latest routed stage. Geometry priority is
-inside the car park, inside the site, then beside it within 40 m. Conflicting
-identities at the strongest strength are held. Categories come from
-`config/discovery_categories.toml`, through discovery's existing classifier.
-
-The new run contains plan.jsonl, proposals.csv, held.csv, absent.csv and
-counts.csv. The command checks the plan with the existing db-apply checks,
-prints counts by method and the top 20 brands by proposal count, and stops.
-Existing filled Notes remain unchanged under the replacement guard. Evidence
-quotes stay on each plan line. No parking answer or Operator is proposed.
-Applying a reviewed plan is a separate db-apply action, never part of this
-command. Sheet publication remains separately gated.
+| List commands | `python -m ferro_parking --help` | Prints help |
+| Export local data | `python -m ferro_parking db-export --out NEW_PATH.csv` | Writes a new local export |
+| Refresh research stages | `python -m ferro_parking route` | Writes local routing and reports |
+| Propose OSM identities | `python -m ferro_parking osm-identity --pbf data/raw/greater-london-latest.osm.pbf` | Writes a plan, never applies |
+| Check a database plan | `python -m ferro_parking db-apply --plan PLAN.jsonl` | Dry run |
+| Research with a reader | `python -m ferro_parking fetch-fill --key station` | Fetches and caches pages, writes a plan |
+| Assess category defaults | `python -m ferro_parking default-fill` | Writes a plan |
+| Export the Grok queue | `python -m ferro_parking grok-queue --out NEW_DIRECTORY` | Writes a local queue |
+| Assess readiness | `python -m ferro_parking readiness --sheet-csv EXPORT.csv` | Prints legacy readiness measures |
+| Prepare publication | `python -m ferro_parking publish --limit 20` | Dry run |
+
+Apply commands change data. Review their plans and follow AGENTS.md and the relevant guide before using `--apply`.
+Sheet publication needs plan.json, dry_run.csv, undo.json, six checks and independent second reading before the owner's go.
+After publication, independent re-export must show zero mismatches.
+Creation proposes identity only. It never establishes parking permission, prices or maximum stay.
+The identity matcher proposes Brand, Place Category and Notes only. Filled values remain protected.
+Ambiguous matches are held. Evidence stays in the plan and review reports.
+
+## Read only what the task needs
+
+| Task | Document |
+|---|---|
+| Agent safety and development rules | [AGENTS.md](AGENTS.md) |
+| Priorities, blockers and last measured counts | [STATUS.md](docs/STATUS.md) |
+| Find existing code before adding a module | [MAP.md](docs/MAP.md) |
+| Parking evidence, cell restrictions and publication controls | [Parking rules](docs/PP_rules_and_pilot.md) |
+| Create, undo or restore places | [Creation runbook](ADD_PLACES_RUNBOOK.md) |
+| Change identity matching | [Identity contract](docs/OSM_IDENTITY_BRIEF.md) |
+| Run independent hold reviews | [Reviewer prompt](docs/holds_reviewer_prompt.md) |
+| Prepare or import Grok research | [Bot prompt](docs/PP_Validator_prompt_v2_OSM.md), [Importer guide](docs/grok_import.md) |
+| Investigate rejected skip rules | [Skip decision](docs/grok_skip.md) |
+| Discuss the long-term architecture | [Architecture](docs/PP_architecture_OSM_first.md) |
+
+Do not read every guide at startup. Historical plans and reports are in Git history.
+Detailed run evidence remains under `data/runs/`. Current command behavior is in code and `--help`.

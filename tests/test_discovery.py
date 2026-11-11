@@ -1,4 +1,4 @@
-"""Tests for the read-only discovery count (docs/HANDOVER.md, "Discovery count")."""
+"""Tests for the read-only discovery count (discovery module)."""
 from pathlib import Path
 
 import pytest
