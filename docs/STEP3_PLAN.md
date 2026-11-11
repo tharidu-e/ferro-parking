@@ -1,7 +1,8 @@
 # Step 3 plan: resolve the hold list
 
-Draft for approval. No code and no apply happens until Deshan approves this
-plan. Nothing here writes to the Google Sheet.
+Phases A to D ran on 11 November 2026. The run record is in
+`EXECUTION_CHECKLIST.md`. Phase E, the apply, is not written and waits for
+Deshan. Nothing here writes to the Google Sheet.
 
 ## The problem
 

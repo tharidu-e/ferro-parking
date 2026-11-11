@@ -281,3 +281,108 @@ Nothing was written to the Google Sheet. No created record can reach it yet:
 publication matches applied changes against the live sheet by Place ID, and a
 created record has no sheet row, so it reports drift instead of writing. New-row
 append plans are step 6.
+
+## Run record: step 3, the hold list, 11 November 2026
+
+Nothing was applied. The database is unchanged and nothing reached the Google
+Sheet. This run decided the cases. The apply is the next step and it waits for
+Deshan.
+
+Commands, in order:
+
+```
+python -m ferro_parking holds-bundle --pbf data/raw/greater-london-latest.osm.pbf
+./scripts/run_codex_reviewer.sh docs/holds_reviewer_prompt.md \
+    data/runs/2026-11-11_3/holds/review data/runs/2026-11-11_3/reviews/codex
+python -m ferro_parking holds-merge \
+    --a data/runs/2026-11-11_3/reviews/reviewer_a.csv \
+    --b data/runs/2026-11-11_3/reviews/reviewer_b.csv \
+    --bundle data/runs/2026-11-11_3/holds/bundle.jsonl
+```
+
+Reviewer A is Claude Opus 5, run as six parallel agents over the same batches
+and the same instructions. Reviewer B is Codex. Neither reviewer saw the rule
+verdicts, the other reviewer's answers, or the web.
+
+The four source files hold 801 distinct cases, not the 807 the earlier step
+estimated. Nine references appear in two files.
+
+| Source file | Pending | Already created |
+|---|---|---|
+| held_all.csv, from step 2 | 461 | 0 |
+| possible_duplicates.csv, from 2026-11-05 | 193 | 47 |
+| held_car_parks_strict.csv | 1 | 105 |
+| held_car_parks_names.csv | 1 | 7 |
+
+Two questions live in those files, and they have different safe answers. A
+creation question asks whether a car park the database does not hold is already
+in it under another row. An attachment question asks whether an OpenStreetMap
+venue is the same business as a place the database holds. The 2026-11-05 report
+carries 110 supermarkets, 22 gyms, 20 hotels, 15 stations, 15 DIY stores and 2
+fast food outlets, which are attachment cases. None of them is a car park.
+
+| Stage | Count |
+|---|---|
+| cases | 801 |
+| creation cases | 617 |
+| attachment cases, a separate plan | 184 |
+| settled by a rule | 169 |
+| judged by the two reviewers | 448 |
+
+Rule outcomes:
+
+| Rule | Cases | Verdict |
+|---|---|---|
+| already_same_ref | 108 | duplicate |
+| pin_inside_candidate_same_brand | 58 | duplicate |
+| same_feature_twice | 1 | duplicate |
+| protected_row | 2 | unresolved, reported to a person |
+
+The two reviewers gave the same verdict on 316 of the 448 creation cases, which
+is 71 percent. They never contradicted each other. In every one of the 132
+disagreements, one reviewer committed and the other said the evidence does not
+settle it. No case had one reviewer say duplicate and the other say distinct.
+
+| Reviewer A | Reviewer B | Cases |
+|---|---|---|
+| unresolved | unresolved | 192 |
+| duplicate | duplicate | 114 |
+| distinct | unresolved | 66 |
+| duplicate | unresolved | 61 |
+| distinct | distinct | 10 |
+| unresolved | duplicate | 5 |
+
+Final verdicts, after the agreement gate:
+
+| Verdict | Count | What it means |
+|---|---|---|
+| duplicate | 258 | the database already holds this car park. Create nothing. |
+| distinct | 9 | a separate car park. These are the only creations. |
+| unresolved | 534 | the evidence does not settle it. Nothing happens. |
+
+The 534 unresolved hold 184 attachment cases, 348 creation cases where the
+reviewers did not fully agree at high confidence, and the 2 hand checked rows.
+
+Three defects were found and fixed during this run. Each one carries a
+regression test.
+
+1. The first rule settled all 47 created records on their own creation. A place
+   carried the candidate reference, and that place was the record the candidate
+   itself created. The open question, whether that created record repeats an
+   older row beside it, was never asked. The rule now fires on a candidate's own
+   creation only when no other place is near.
+2. A rule ended a case as unresolved when every place near it was geocoded to a
+   postcode centroid. On the real list that rule decided 311 of 801 cases, and
+   222 of those shared a brand token with the place beside them. It discarded
+   the easiest duplicates in the set. The protection was never in that rule, so
+   the rule is deleted and those cases go to the reviewers.
+3. The merge reported all 184 attachment cases as cases both reviewers failed to
+   judge. It now names the attachment question and counts them on their own line.
+
+Test suite: 1,438 passed.
+
+What is not done. The apply is not written and has not run. No record was
+created, no record was deactivated, and no identity was attached. The 184
+attachment cases need their own prompt and their own audited plan. The 2 hand
+checked rows are in
+`data/runs/2026-11-11_3/holds/protected_rows.csv` and need Deshan.
