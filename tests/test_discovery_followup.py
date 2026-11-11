@@ -459,3 +459,12 @@ def test_greenwich_joins_marker_names_and_pins_by_id(tmp_path):
     path.write_text(f'<input id="map_marker_info_17" value="{quote_plus(anchor)}">')
     with pytest.raises(ValueError, match='missing map'):
         greenwich(path)
+
+
+def test_redbridge_keeps_distinct_eastwood_codes_and_excludes_street_parking(tmp_path):
+    from ferro_parking.sources import redbridge
+    path = tmp_path / 'redbridge.html'
+    path.write_text('<h2>Council car parks</h2><h3>Area</h3><h3>Eastwood Close</h3><p>E18 1BY RingGo Location Number: 7105</p><h3>Eastwood Close</h3><p>E18 1BY RingGo Location Number: 7116</p><h2>On-street parking</h2><h3>A bay</h3><p>RingGo Location Number: 123</p>')
+    rows = redbridge(path)
+    assert [r['location_code'] for r in rows] == ['7105', '7116']
+    assert all(r['postcode'] == 'E18 1BY' and r['tariff'] == r['lat'] == '' for r in rows)

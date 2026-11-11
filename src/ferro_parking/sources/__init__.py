@@ -272,7 +272,47 @@ def greenwich(location=None):
     return rows
 
 
+def _plain_text(markup):
+    return ' '.join(unescape(re.sub(r'<[^>]*>', ' ', markup)).split()).translate({0x2013: '-', 0x2014: '-'})
+
+
+def _heading_sections(raw, level):
+    headings = list(re.finditer(rf'<h{level}\b[^>]*>(.*?)</h{level}>', raw, re.S | re.I))
+    return [(_plain_text(h[1]), raw[h.end():headings[i + 1].start() if i + 1 < len(headings) else len(raw)])
+            for i, h in enumerate(headings)]
+
+
+def _inventory_identity(name, url, detail=''):
+    postcode = re.search(r'\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b', detail)
+    return {'name': name, 'url': url, 'address': '', 'postcode': postcode[0] if postcode else '',
+            'lat': '', 'lon': '', 'tariff': '', 'hours': '', 'max_stay': '', 'brand': '',
+            'official': True, 'identity_quote': detail}
+
+
+REDBRIDGE_URL = 'https://www.redbridge.gov.uk/parking/car-parks-and-on-street-parking/'
+
+
+def redbridge(location=None):
+    """The council inventory distinguishes the two Eastwood sites by RingGo code."""
+    raw = read_input(location or REDBRIDGE_URL)
+    sections = [body for title, body in _heading_sections(raw, 2) if title == 'Council car parks']
+    if len(sections) != 1:
+        raise ValueError('Redbridge page has no unique council car park inventory')
+    rows = []
+    for name, body in _heading_sections(sections[0], 3):
+        text = _plain_text(body)
+        code = re.search(r'RingGo Location Number:\s*(\d+)', text)
+        if not code:
+            continue  # Area headings have no site code.
+        row = _inventory_identity(name, REDBRIDGE_URL, text)
+        row['location_code'] = code[1]
+        rows.append(row)
+    if not rows or len({r['location_code'] for r in rows}) != len(rows):
+        raise ValueError('Redbridge inventory is empty or repeats a site code')
+    return rows
+
+
 ADAPTERS = {'generic': generic, 'city-of-london': city_of_london,
             'barnet': barnet, 'hillingdon': hillingdon, 'bromley': bromley,
             'hounslow': hounslow, 'havering': havering, 'bexley': bexley,
-            'croydon': croydon, 'greenwich': greenwich}
+            'croydon': croydon, 'greenwich': greenwich, 'redbridge': redbridge}

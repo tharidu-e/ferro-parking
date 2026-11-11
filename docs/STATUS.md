@@ -70,6 +70,7 @@ Greenwich creation added two identity-only records; no Sheet changes were made.
 | Hillingdon | Council points, refreshed | 28 | 24 | Unresolved (4) | 259 |
 | Hounslow | Council lists, refreshed | 21 | 21 | 0 | 229 |
 | Greenwich | Official directory markers | 17 | 17 | 0 | 153 |
+| Redbridge | Council site codes | 18 | 18 | 0 | 146 |
 | City of London | COMPASS layer 2 | 5 | 5 | 0 | 6 |
 
 Discovery uses current database rows and cached borough polygons. A shared
@@ -93,6 +94,7 @@ refresh resolves all 21 region exceptions by exact site-name review: `data/runs/
 
 Download batch: 18 of 25 pages saved under `data/raw/2026-11-11_112/official_lists/`;
 seven failed. Manifest: `data/runs/2026-11-11_112/official_downloads/download_results.json`.
+Redbridge: 18 exact name/site-code matches, gap zero. Review: `data/runs/2026-11-11_121/coverage_redbridge/`.
 Greenwich: 17 reviewed sites, two new identities, gap zero.
 Review: `data/runs/2026-11-11_117/coverage_greenwich/`; create run `create-20261111T220331Z`.
 
@@ -101,7 +103,6 @@ linked site/list pages in `data/raw/`; an index alone is not a site inventory.
 Counts remain unknown until reviewed. These links are download requests only.
 
 - Enfield: [Car parks](https://www.enfield.gov.uk/services/parking/car-parks), including the map data; HTTP 403 here.
-- Redbridge: [Car parks](https://www.redbridge.gov.uk/parking/car-parks-and-on-street-parking/).
 - Newham: [Car park directory](https://www.newham.gov.uk/directory/2/car-parks-in-newham), plus all five area lists and site pages.
 - Waltham Forest: [Council car parks](https://www.walthamforest.gov.uk/parking-roads-and-travel/car-parks-and-street-parking/council-car-parks).
 - Sutton: [Car parks](https://www.sutton.gov.uk/streets-transport-and-parking/parking/car-parks), plus linked site lists.
