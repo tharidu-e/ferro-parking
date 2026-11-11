@@ -117,6 +117,50 @@ def test_replay_uses_frozen_sources_without_human_answers_or_old_attestations():
     assert item["answers"]["Cost Type"] == "Free"
 
 
+def test_a_registered_fetcher_replays_on_the_frozen_page_alone():
+    item = case()
+    item["identity"] = {"Location Name": "Example Station", "Notes": "Free expected"}
+    item["source"]["text"] = "Station parking\n120 parking spaces"
+    item["source"]["sha256"] = hashlib.sha256(item["source"]["text"].encode()).hexdigest()
+    result = ev.replay([item], ev.fetcher_extractor("station"))
+    assert result[0]["answers"]["Can Park? (Yes/No/Conditional)"] == "Yes"
+    # Tariff, free and max stay are never read from a station page.
+    assert result[0]["answers"]["Cost Type"] == ""
+    assert result[0]["answers"]["Max Stay (mins)"] == ""
+
+
+def test_an_unknown_or_cache_only_replay_key_is_refused():
+    for key in ("nosuchsource.example", "marksandspencer.com"):
+        with pytest.raises(SystemExit):
+            ev.fetcher_extractor(key)
+
+
+def test_the_replay_command_scores_its_own_answers_per_field(tmp_path, capsys):
+    import json
+    item = case(answer="Free")
+    item["identity"] = {"Location Name": "Example Station"}
+    # The reviewer's quote stays in the page, so the reference is still
+    # supported and the field has a denominator of one.
+    item["source"]["text"] = ("This site has free customer parking.\n"
+                               "Station parking\nNo parking spaces")
+    item["source"]["sha256"] = hashlib.sha256(item["source"]["text"].encode()).hexdigest()
+    item["assessments"]["Cost Type"]["quote"] = "This site has free customer parking."
+    item["assessments"]["Cost Type"]["source_sha256"] = item["source"]["sha256"]
+    bundle = tmp_path / "bundle.json"
+    bundle.write_text(json.dumps({"cases": [item]}))
+    out = tmp_path / "replayed"
+    assert ev.main(["--input", str(bundle), "--out", str(out), "--replay", "station"]) == 0
+    report = json.loads((out / "evaluation.json").read_text())
+    assert report["replayed_with"] == "station"
+    # The bundle's own "Free" answer is replaced by what the page states, and
+    # the earlier attestation cannot certify the new answer.
+    assert report["fields"]["Cost Type"]["accuracy"] == 0.0
+    assert report["fields"]["Cost Type"]["accuracy_denominator"] == 1
+    printed = capsys.readouterr().out
+    assert "Cost Type: 0% of 1 supported" in printed
+    assert "no reference answer and no reviewer note" in printed
+
+
 def test_empty_or_unassessed_evaluation_cannot_authorise_apply():
     assert not ev.evaluate([])["evaluation_checks_passed"]
     item = case()

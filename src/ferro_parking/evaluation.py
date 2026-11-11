@@ -1,6 +1,11 @@
 """Offline, field-level reference evaluation. Human labels are never truth by default.
 
 Run with ``python -m ferro_parking.evaluation --input bundle.json --out NEW_DIR``.
+Add ``--replay KEY`` to run one registered fetcher over the frozen pages and
+score its own answers. The replayed extractor receives the allowlisted
+identity and the frozen page only, so no reference answer and no reviewer note
+can reach it. The command prints supported accuracy per field with its
+denominator.
 This diagnostic does not authorise database or Sheet applies. Identity binding
 to an actual mutation plan remains a separate required control.
 The bundle supplies original/clean/database rows, explicit field assessments,
@@ -157,6 +162,12 @@ def evaluate(cases):
                 count["accuracy_denominator"] += 1
                 if not is_abstention(answer) and supported_claim:
                     count["answered_supported"] += 1
+                # A fresh replay has no attestation for its own answers yet, so
+                # every answer scores wrong until a reviewer reads it. This
+                # counts the plain agreement with the supported reference, so a
+                # replay still says something before that review happens.
+                if str(answer) == str(expected):
+                    count["matched_reference"] += 1
             # Unsupported assertions still matter even when the reference is disputed.
             positive = not is_abstention(answer)
             if positive and not supported_claim and not drift:
@@ -172,6 +183,7 @@ def evaluate(cases):
         denom = counts["accuracy_denominator"]
         values["supported_answer_coverage"] = counts["answered_supported"] / denom if denom else None
         values["accuracy"] = counts["correct"] / denom if denom else None
+        values["reference_match"] = counts["matched_reference"] / denom if denom else None
         summary[field] = values
     return {"fields": summary, "details": details, "critical_blockers": blockers,
             "evaluation_checks_passed": bool(cases) and not blockers
@@ -180,18 +192,68 @@ def evaluate(cases):
                 counts["correct"] for counts in totals.values()), "benchmark": "regression reference, not unseen holdout"}
 
 
+def fetcher_extractor(key):
+    """An extractor that answers from a frozen page with one registered fetcher.
+
+    It receives the allowlisted request only, so the reference answers, the
+    reviewer notes and the row's own existing values never reach it."""
+    from .fetch_fill import CACHE_ONLY, REGISTRY
+
+    if key in CACHE_ONLY:
+        raise SystemExit(f"{key!r} is cache only and answers nothing.")
+    fetcher = REGISTRY.get(key)
+    if fetcher is None:
+        raise SystemExit(f"No fetcher registered for {key!r}. "
+                         f"Registered: {', '.join(sorted(REGISTRY))}")
+
+    def answer(request):
+        values = fetcher.values(request["source"]["text"], request["identity"])[0]
+        return {field: values.get(field, "") for field in FIELDS}
+    return answer
+
+
+def accuracy_report(report):
+    """One line per field: the supported denominator and what it scored."""
+    out = []
+    for field, counts in report["fields"].items():
+        denominator = counts.get("accuracy_denominator", 0)
+        accuracy = counts.get("accuracy")
+        match = counts.get("reference_match")
+        scored = "no supported reference" if accuracy is None else f"{accuracy:.0%}"
+        agreed = "" if match is None else f", agrees with the reference {match:.0%}"
+        out.append(f"{field}: {scored} of {denominator} supported "
+                   f"({counts.get('correct', 0)} correct, {counts.get('wrong', 0)} wrong, "
+                   f"{counts.get('abstention', 0)} abstained{agreed})")
+    return out
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", required=True)
     parser.add_argument("--out", required=True)
+    parser.add_argument("--replay", metavar="KEY",
+                        help="Replay this registered fetcher over the frozen pages "
+                             "and score its own answers, instead of the bundle's.")
     args = parser.parse_args(argv)
     bundle = json.loads(Path(args.input).read_text())
-    report = evaluate(bundle.get("cases", []))
+    cases = bundle.get("cases", [])
+    if args.replay:
+        cases = replay(cases, fetcher_extractor(args.replay))
+        bundle = {**bundle, "cases": cases, "replayed_with": args.replay}
+    report = evaluate(cases)
+    report["replayed_with"] = args.replay or ""
     report["original_to_clean"] = reconcile(bundle.get("original_rows", []), bundle.get("clean_rows", []))
     report["clean_to_database"] = reconcile(bundle.get("clean_rows", []), bundle.get("database_rows", []))
     out = reserve_output(args.out)
     (out / "reference_snapshot.json").write_text(json.dumps(bundle, indent=2, ensure_ascii=False))
     (out / "evaluation.json").write_text(json.dumps(report, indent=2, ensure_ascii=False))
+    if args.replay:
+        print(f"Replayed {args.replay!r} over {len(cases)} frozen pages. "
+              f"The extractor saw no reference answer and no reviewer note.")
+    print("Supported accuracy per field, with the supported denominator:")
+    for row in accuracy_report(report):
+        print(f"  {row}")
+    print(f"Reports in {out}/")
     return 0
 
 
