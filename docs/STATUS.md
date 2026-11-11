@@ -13,9 +13,9 @@ Historical documents remain available in Git history. Run evidence stays under `
 | Needs on-site check | 1,176 |
 | Active OSM-created records | 3,951 |
 
-The latest saved route is `route-20261111T210324Z`.
-Its 6,244 routed rows comprise 4,807 Grok, 901 no_evidence, 233 default,
-190 website reader and 113 station rows. 5,314 rows are skipped, of which 47
+The latest saved route is `route-20261111T211945Z`.
+Its 6,244 routed rows comprise 4,788 Grok, 866 no_evidence, 233 default,
+244 website reader and 113 station rows. 5,314 rows are skipped, of which 47
 are personal locks and 1,175 need an on-site check.
 A filled verification result does not prove that every parking detail is known.
 For current counts, run the read-only example in README.md. Saved routing can lag behind data changes.
@@ -24,20 +24,19 @@ For current counts, run the read-only example in README.md. Saved routing can la
 
 | Measure | Places |
 |---|---:|
-| Legacy showable | 1,450 |
+| Legacy showable | 1,500 |
 | Legacy complete | 1,055 |
-| Evidence-supported showable | 0 |
+| Evidence-supported showable | 50 |
+| Evidence-supported complete | 0 |
 
 Legacy counts read the sheet's own cells, through `readiness.counts` over a
 `db-export`. Evidence-supported means the `evidence` table holds a quote for
-Can Park?, Who Can Park and Cost Type on that place. No row reaches that bar.
-The quoted evidence covers Place Category 2,903 times, Brand 703 times, and
-Can Park? and Who Can Park 15 times each, from the Asda run. Every legacy
-answer predates the evidence table. Do not read 1,450 as 1,450 checked car
-parks.
+Can Park?, Who Can Park and Cost Type on that place. 50 rows reach that bar,
+all from the website readers. The other 1,450 legacy answers predate the
+evidence table, so do not read 1,500 as 1,500 checked car parks.
 
-The 15 Asda rows are not legacy showable, because their Cost Type reads
-Unknown. The store page states a car park and no price.
+The Asda rows are not legacy showable, because their Cost Type reads Unknown.
+The store page states a car park and no price.
 
 ## Next work, in order
 
@@ -164,17 +163,29 @@ be applied.
 
 ## Applied research
 
-The Asda plan is applied, with the owner's approval. The run is
-`apply-20261111T210308Z` and `db-undo --run apply-20261111T210308Z` restores
-all 240 values. It filled 15 rows with Can Park? Conditional, Who Can Park
-Customers only and Cost Type Unknown. Nothing was refused. 30 lines restated
-the value already there.
+Every website reader plan is applied, each with its own undo. Use
+`db-undo --run <run>` to restore one.
 
-45 evidence rows carry the quote, the store url, the retrieval time and the
-cached page hash. They cover Can Park?, Who Can Park and Evidence Detail only,
-because the store page states nothing else. The 15 rows now route to
-`fetcher:storelocator.asda.com` instead of Grok, because their Source URLs
-hold the store page.
+| Source | Rows read | Rows with values | Changes | Run |
+|---|---:|---:|---:|---|
+| storelocator.asda.com | 17 | 17 | 244 | `apply-20261111T210308Z`, `apply-20261111T211238Z` |
+| better.org.uk | 84 | 37 | 635 | `apply-20261111T210620Z` |
+| thegymgroup.com | 49 | 14 | 252 | `apply-20261111T210659Z` |
+| puregym.com | 40 | 15 | 272 | `apply-20261111T210907Z` |
+| nuffieldhealth.com | 15 | 6 | 108 | `apply-20261111T211935Z` |
+| www.lidl.co.uk | 25 | 0 | 0 | nothing to apply |
+| marksandspencer.com | 39 | 0 | 0 | 15 rows held |
+
+No plan was refused. Each evidence row carries the quote, the page url, the
+retrieval time and the cached page hash, for the fields the page states only.
+
+The M&S store pages state a car park for 15 rows. All 15 are held, because
+the row has no Place Category. The validator asks for that column on a
+Conditional row. A guessed category invents identity, so run
+`propose-categories` and `category-plan` for those rows instead.
+
+Lidl reads every page and writes nothing, which is correct. Its store pages
+list accessible bays and no car park.
 
 ## Applied identity
 
