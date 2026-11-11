@@ -312,7 +312,29 @@ def redbridge(location=None):
     return rows
 
 
+WALTHAM_FOREST_URL = ('https://www.walthamforest.gov.uk/parking-roads-and-travel/'
+                      'car-parks-and-street-parking/council-car-parks')
+
+
+def waltham_forest(location=None):
+    """Expand grouped council tariff headings into distinct site identities."""
+    raw = read_input(location or WALTHAM_FOREST_URL)
+    sections = [body for title, body in _heading_sections(raw, 2) if title == 'Council car park charges']
+    if len(sections) != 1:
+        raise ValueError('Waltham Forest page has no council car park section')
+    rows = []
+    for title, body in _heading_sections(sections[0], 3):
+        for name in re.split(r',\s*|\s+and\s+', title):
+            if not re.search(r'\bE\d{1,2}$', name):
+                raise ValueError('Waltham Forest heading lacks a site name and district')
+            rows.append(_inventory_identity(name, WALTHAM_FOREST_URL, title))
+    if not rows:
+        raise ValueError('Waltham Forest inventory is empty')
+    return rows
+
+
 ADAPTERS = {'generic': generic, 'city-of-london': city_of_london,
             'barnet': barnet, 'hillingdon': hillingdon, 'bromley': bromley,
             'hounslow': hounslow, 'havering': havering, 'bexley': bexley,
-            'croydon': croydon, 'greenwich': greenwich, 'redbridge': redbridge}
+            'croydon': croydon, 'greenwich': greenwich, 'redbridge': redbridge,
+            'waltham-forest': waltham_forest}

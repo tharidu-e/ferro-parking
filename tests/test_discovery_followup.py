@@ -468,3 +468,13 @@ def test_redbridge_keeps_distinct_eastwood_codes_and_excludes_street_parking(tmp
     rows = redbridge(path)
     assert [r['location_code'] for r in rows] == ['7105', '7116']
     assert all(r['postcode'] == 'E18 1BY' and r['tariff'] == r['lat'] == '' for r in rows)
+
+
+def test_waltham_forest_splits_grouped_sites_and_excludes_street_bays(tmp_path):
+    from ferro_parking.sources import waltham_forest
+    path = tmp_path / 'forest.html'
+    path.write_text('<h2>Council car park charges</h2><h3>Bedford Road E17</h3><p>£1</p><h3>Brandon Road E17, Hall Lane E4</h3><p>£2</p><h3>Town Hall Car Park E17 and Willow House Car Park E17</h3><h2>On-street pay and display charges</h2><h3>Street E17</h3>')
+    rows = waltham_forest(path)
+    assert len(rows) == 5
+    assert rows[-1]['name'] == 'Willow House Car Park E17'
+    assert all(r['tariff'] == r['lat'] == '' for r in rows)
