@@ -13,30 +13,39 @@ Historical documents remain available in Git history. Run evidence stays under `
 | Needs on-site check | 1,176 |
 | Active OSM-created records | 3,951 |
 
-The latest saved route is `route-20261111T143442Z`.
-Its 6,190 unfinished rows comprise 4,824 Grok, 901 no_evidence, 113 station,
-173 website reader, 233 default, 43 personal-lock and 1 on-site-hold rows.
+The latest saved route is `route-20261111T204717Z`.
+Its 6,244 routed rows comprise 4,822 Grok, 901 no_evidence, 233 default,
+175 website reader and 113 station rows. 5,314 rows are skipped, of which 47
+are personal locks and 1,175 need an on-site check.
 A filled verification result does not prove that every parking detail is known.
 For current counts, run the read-only example in README.md. Saved routing can lag behind data changes.
 
+## Readiness, two ways
+
+| Measure | Places |
+|---|---:|
+| Legacy showable | 1,450 |
+| Legacy complete | 1,055 |
+| Evidence-supported showable | 0 |
+
+Legacy counts read the sheet's own cells, through `readiness.counts` over a
+`db-export`. Evidence-supported means the `evidence` table holds a quote for
+Can Park?, Who Can Park and Cost Type on that place. It holds a quote for no
+parking answer at all: 2,903 are for Place Category and 703 for Brand. Every
+legacy answer predates the evidence table. Do not read 1,450 as 1,450 checked
+car parks.
+
 ## Next work, in order
 
-1. Finish extractor controls before any research apply. Venue charge association,
-   free-period handling and contradictory-sentence guards are implemented.
-   Station guards, fetch metadata, shared finished/personal locks including undo,
-   and offline replay evaluation remain open in the last recorded continuation.
-   Inspect code and tests before treating a recorded item as unimplemented.
-   Replay must hide expected answers and report supported accuracy per field with denominators.
-2. Build source adapters from identity counts. The leading proposals are Sainsbury's 33,
-   Lidl 25, Tesco Express 19, Tesco 17 and Asda 15.
-   The full list is `data/runs/2026-11-11_20/osm_identity/counts.csv`.
-   Preserve each field's quote, canonical URL, retrieval time and cached page hash.
-   Report requests, failures, cache hits and measured throughput.
+1. Build source adapters from identity counts. Asda and Lidl are built.
+   Sainsbury's 33, Tesco 17 and Tesco Express 19 are measured and skipped,
+   with the reason in `fetch_fill.SKIPPED_HOSTS`.
+   The full brand list is `data/runs/2026-11-11_20/osm_identity/counts.csv`.
    Make sure that the optional TfL endpoint and its terms allow use. Missing credentials mean skip that source.
-3. Refresh routing and research queues after reviewed database changes.
-   Report legacy readiness separately from evidence-supported readiness.
-   Keep Grok payment fields blank and database-only row numbers blank.
-4. Complete publication dry runs for new-row appends before any Sheet approval.
+2. Decide the Asda plan. `data/runs/2026-11-11_40/fetch_fill/plan.jsonl` fills
+   15 blank rows with Can Park? Conditional, Who Can Park Customers only and
+   Cost Type Unknown. The dry run refuses nothing. Nothing is applied.
+3. Complete publication dry runs for new-row appends before any Sheet approval.
    Cover fresh identity, drift, duplicate IDs, missing imported IDs, protected fields,
    formulas, grid growth and partial-write recovery. Test the six controls offline.
    Make sure that OSM attribution and licensing agree with primary sources. Produce a full dry run
@@ -56,43 +65,124 @@ Every https request from the owner's machine currently fails with a
 certificate error, so an official list has to be downloaded outside the tool
 and passed with `--input`.
 
-| Borough or source | Official list | Published official | Official sites we hold | Official gap | OSM-derived |
-|---|---|---:|---:|---:|---:|
-| City of London | ArcGIS COMPASS layer 2 | 5 | 5 | 0 | Not counted |
+| Borough | Official inventory | Published | Reviewed held | Gap | Active OSM-derived |
+|---|---|---:|---:|---|---:|
+| Barnet | December 2014 CSV | 20 historical | 17 historical | 3 held | 375 |
+| Hillingdon | Council point layer 3 | 28 | 24 | 4 held | 259 |
+| Bromley | Council directory | 30 | 30 | 0 | 254 |
+| Hounslow | Council area lists | 21 | 21 by name | 0 by name | 229 |
+| Enfield | Not imported | Unknown | Unknown | Unknown | 209 |
+| Havering | Council car park links | 24 | 24 by name | 0 by name | 204 |
+| Bexley | Council sections | 19 listed, 18 headline | 19 by name | Count conflict | 176 |
+| Croydon | Council map markers | 19 | 19 by name | 0 by name | 176 |
+| Greenwich | Not imported | Unknown | Unknown | Unknown | 153 |
+| Redbridge | Not imported | Unknown | Unknown | Unknown | 146 |
+| Newham | Not imported | Unknown | Unknown | Unknown | 134 |
+| Waltham Forest | Not imported | Unknown | Unknown | Unknown | 129 |
+| Sutton | Not imported | Unknown | Unknown | Unknown | 117 |
+| Richmond upon Thames | Not imported | Unknown | Unknown | Unknown | 116 |
+| Ealing | Not imported | Unknown | Unknown | Unknown | 112 |
+| Merton | Not imported | Unknown | Unknown | Unknown | 110 |
+| Harrow | Not imported | Unknown | Unknown | Unknown | 101 |
+| Tower Hamlets | Not imported | Unknown | Unknown | Unknown | 100 |
+| Brent | Not imported | Unknown | Unknown | Unknown | 91 |
+| Barking and Dagenham | Not imported | Unknown | Unknown | Unknown | 86 |
+| Southwark | Not imported | Unknown | Unknown | Unknown | 83 |
+| Lewisham | Not imported | Unknown | Unknown | Unknown | 81 |
+| Kingston upon Thames | Not imported | Unknown | Unknown | Unknown | 76 |
+| Wandsworth | Not imported | Unknown | Unknown | Unknown | 73 |
+| Haringey | Not imported | Unknown | Unknown | Unknown | 68 |
+| Westminster | Not imported | Unknown | Unknown | Unknown | 59 |
+| Camden | Not imported | Unknown | Unknown | Unknown | 53 |
+| Kensington and Chelsea | Not imported | Unknown | Unknown | Unknown | 45 |
+| Lambeth | Not imported | Unknown | Unknown | Unknown | 42 |
+| Hackney | Not imported | Unknown | Unknown | Unknown | 35 |
+| Hammersmith and Fulham | Not imported | Unknown | Unknown | Unknown | 34 |
+| Islington | Not imported | Unknown | Unknown | Unknown | 19 |
+| City of London | COMPASS layer 2 | 5 | 5 | 0 | 6 |
 
-Coverage is complete for City of London, and the import found a duplicate pair
-in our own data rather than a gap. 32 boroughs remain uncounted, so there is
-still no defensible total for London. Build the table one borough at a time;
-the published count per borough is the only honest denominator.
+Order uses `readiness.counts` over active OSM-created current database rows,
+not brand counts or a Sheet export. Snapshot:
+`data/runs/2026-11-11_25/coverage/borough_order.csv`.
+Official inventories cover their stated council lists, not every private site.
+Unknown is not zero. OSM-derived identities do not establish parking permission.
 
-Discovery now ignores URLs shared by every row of a multi-row import when
-matching identities, including duplicates within that import. Source evidence
-keeps the URLs. Regression coverage includes the saved Minories exception.
+Discovery ignores URLs shared by every row of a multi-row import when matching
+identities, including duplicates within the import. Evidence keeps the URLs.
 
-Coverage imports await the owner's local official lists and borough gap order.
-The specified `data/runs/2026-11-11_14/osm_identity/counts.csv` contains brand
-counts, not borough gaps. Only the City of London list is currently in
-`data/raw/`. No other borough has been classified as lacking a machine-readable
-list, so no OSM fallback has been applied. The Minories borough disagreement
-remains held for the owner.
+Barnet's official CSV is downloaded but dated December 2014 and has no pins or
+postcodes. All 20 rows remain London-region unresolved in
+`data/runs/2026-11-11_24/discover/`. The current council page download is an
+interruption page, not a usable list (`data/raw/barnet_car_parks_current.html`).
+
+Hillingdon lists 28 sites: discovery returned 26 matches, one new candidate and
+one ambiguous postcode. Coordinate/name review supports 24 existing sites;
+Civic Hall, Hayes Pool, Kingsend South short stay and Falling Lane remain held.
+Cedars and Tesco are distinct sites, not duplicates. Review:
+`data/runs/2026-11-11_27/coverage_review/hillingdon_review.csv`.
+No db-duplicate or db-create changes were applied.
+Bromley lists 30 sites, all matched existing named council car parks, with no
+exceptions. Hounslow lists 21 sites, all reviewed by name against existing
+council car parks; its source has no pins, so discovery retains 21 region
+exceptions. Barnet has 17 historical name matches and three held names. Reviews:
+`data/runs/2026-11-11_31/coverage_review/`. Enfield download returned HTTP 403;
+needs an owner browser download. Havering has 24 listed named sites, with
+possible repeated records held; Bexley lists 19 named sites already held but
+its headline says 18. Croydon lists 19 named sites already held; Waddon Leisure
+Centre has a 1.9 km pin disagreement, left unchanged. Imports are in
+`2026-11-11_32`, `_33` and `_37` under `data/runs/`.
+
+Stopped for the owner: the requested db-duplicate dry run for PP-009347
+(Slaney Road) keeping PP-000818 refuses an active created record and points to
+retirement instead. Zero changes were applied. Report:
+`data/runs/2026-11-11_38/db_duplicate/report.json`. No retirement is authorized.
+Greenwich is the next borough after this decision.
+No OSM fallback is applied until absence of a machine-readable list is established.
+No commits until the coverage task is finished, as requested by the owner.
 
 ## Applied identity
 
 The identity plan is applied. The run is `apply-20261111T202010Z` and `db-undo
 --run apply-20261111T202010Z` restores all 703 values. The plan filled 703
-blank Brand cells and nothing else. No row was refused.
+blank Brand cells and nothing else. No row was refused. The applied plan is
+`data/runs/2026-11-11_20/osm_identity/plan.jsonl`.
 
 The review of the first plan found two anchors that stand in another owner's
 car park. A street vendor and a kiosk each named a car park after a food stall.
 The matcher now rejects `street_vendor=yes` and `building=kiosk` anchors, so
 one case went back to held and PP-008716 reads B&Q instead of Burgers Bar.
-The applied plan is `data/runs/2026-11-11_20/osm_identity/plan.jsonl`.
 
 Seven of the 21 inside-car-park brands remain weak and need a person:
 PP-008073, PP-008196, PP-008381, PP-009553, PP-010743, PP-011554 and
 PP-012272. Each names a small food outlet or a bus stop node that the geometry
 places inside a larger car park. Brand is identity only, so no parking answer
 depends on them.
+
+## Extractor controls
+
+All of step 4 is closed. The station guards were already built and tested, so
+nothing was rebuilt there. Three controls were open and are now done.
+
+Page metadata. A plan line carries `retrieved_at` and `page_hash`. Both are
+copied while they still describe the page the quote came from. `db-apply`
+stores both on the evidence row. The quote, the url and the metadata reach only a
+column the fetcher itself read from the page. A bookkeeping column, a column
+page_fill derived, and a value such as Unknown carry none of them.
+
+Locks. One verifier test holds any label the automation list in
+`config/grok_value_map.toml` does not declare. Four live rows read
+"Deshan (pilot, manual check)" and the old prefix test let them through.
+`db-apply` also keeps a finished row's result and its existing answers. It
+still fills a blank cell on that row. If a finished row has a parking gap,
+routing sends it back and asks for that cell.
+`db-undo` refuses a row a person checked since the run and
+a cell somebody changed after the run wrote it.
+
+Replay. `python -m ferro_parking.evaluation --replay KEY` runs one registered
+fetcher over frozen pages and prints supported accuracy per field with its
+denominator. The extractor sees the allowlisted identity and the page only. A
+fresh replay scores every answer wrong until a reviewer attests it, so the
+report adds plain agreement with the supported reference.
 
 ## Owner decisions and holds
 
@@ -119,6 +209,6 @@ depends on them.
 
 The created-record path, London OSM insertion and hold-list apply are complete.
 Created identities do not establish access, prices or time limits.
-The identity matcher generates plans only. The coverage change passed 1,525 tests.
+The identity matcher generates plans only. The latest full suite check passed 1,575 tests, including concurrent evidence work.
 Code ownership is in `docs/MAP.md`. Creation procedures are in `ADD_PLACES_RUNBOOK.md`.
 Keep this file current and short. Do not append historical run narratives.
