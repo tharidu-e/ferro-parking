@@ -1,5 +1,9 @@
 # Ferro parking pipeline
 
+Read `docs/MAP.md` for code ownership before adding a module.
+Use `EXECUTION_CHECKLIST.md` for current order and remaining work.
+Document consolidation and pending deletions are in `docs/CLEANUP_PROPOSAL.md`.
+
 Fills and checks the Ferro Maps parking sheet ("PP Parking places", tab **ALL LONDON (clean)**)
 using free data first (OpenStreetMap + rules) and the Grok PP bot only for the rows code cannot settle.
 
@@ -782,3 +786,26 @@ writes Verification Result last and reads back. An independent full formula
 export compare must show zero mismatches before the published baseline is
 recorded. Failure leaves the undo file and compare report for investigation.
 No insert, append, delete or reorder operation exists in publish.
+
+
+## OSM identity proposals
+
+```bash
+python -m ferro_parking osm-identity --pbf data/raw/greater-london-latest.osm.pbf
+# Optional: --db PATH --out NEW_DIRECTORY --limit 20
+```
+
+This reads the database and extract without network or mutation. It proposes
+only blank or placeholder Brand, Place Category and Notes on active
+OSM-created records, using the latest routed stage. Geometry priority is
+inside the car park, inside the site, then beside it within 40 m. Conflicting
+identities at the strongest strength are held. Categories come from
+`config/discovery_categories.toml`, through discovery's existing classifier.
+
+The new run contains plan.jsonl, proposals.csv, held.csv, absent.csv and
+counts.csv. The command checks the plan with the existing db-apply checks,
+prints counts by method and the top 20 brands by proposal count, and stops.
+Existing filled Notes remain unchanged under the replacement guard. Evidence
+quotes stay on each plan line. No parking answer or Operator is proposed.
+Applying a reviewed plan is a separate db-apply action, never part of this
+command. Sheet publication remains separately gated.

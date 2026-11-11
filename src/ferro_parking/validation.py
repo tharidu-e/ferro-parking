@@ -51,6 +51,7 @@ def validate_rows(entries, plan=False):
         old = entry.get('old', {})
         changed = {key for key, value in row.items() if str(value) != str(old.get(key, ''))}
         category_only = plan and bool(changed) and changed <= {'Place Category', 'Brand'}
+        identity_only = plan and bool(row) and set(row) <= {'Place Category', 'Brand', 'Notes'}
         def fail(field, rule, message):
             failures.append({'Place ID': pid, 'field': field, 'value': row.get(field, ''), 'rule': rule, 'message': message})
         if not plan:
@@ -114,7 +115,7 @@ def validate_rows(entries, plan=False):
                 if row.get(key) != 'Not applicable':
                     fail(key, 'closed', 'Closed requires Not applicable')
         for message in page_fill.consistency_checks(row):
-            if category_only and message == 'Decision Reason missing or does not name the route':
+            if (category_only or identity_only) and message == 'Decision Reason missing or does not name the route':
                 continue
             fail('*', 'consistency', message)
         # Wrap the existing captured-evidence validator with unknown defaults for

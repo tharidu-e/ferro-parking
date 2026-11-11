@@ -33,6 +33,7 @@ Commands:
           data/runs/<date>/route/routing.csv (never writes to the sheet)
   db-apply  Apply a JSON lines plan file to the database (dry run unless
           --apply; any refusal blocks the whole plan)
+  osm-identity  Read-only: propose Brand, Place Category and Notes from OSM geometry
   osm-places  Read-only: propose new car park records from an OSM extract
           (identity only, never a parking answer; writes a db-create plan)
   db-create  Create new records in the database from a db-create plan (dry
@@ -137,6 +138,9 @@ def main():
     if cmd == "db-apply":
         from .plan import apply_main
         return apply_main(argv)
+    if cmd == "osm-identity":
+        from .osm_identity import main as osm_identity_main
+        return osm_identity_main(argv)
     if cmd == "osm-places":
         from .osm_places import main as osm_places_main
         return osm_places_main(argv)
