@@ -43,6 +43,9 @@ The store page states a car park and no price.
 
 Follow `docs/PLAN.md` for batch steps and the engineering gate. The next work is
 supported parking answers on existing places, using the readers already built.
+Before fetching or coding, name the missing driver answers on current records
+or a reviewed new-place candidate. Reuse downloaded pages first. The driver
+completion target and unchanged safety controls are defined in PLAN.md.
 
 1. Start with the 15 held M&S records whose official pages mention parking.
    Review the missing store categories with `propose-categories` and `category-plan`.
@@ -50,9 +53,11 @@ supported parking answers on existing places, using the readers already built.
    M&S reader. Save parking answers that pass the existing checks. Leave uncertain
    categories, prices and stay limits unknown unless the source supports them.
 2. Report how many of those 15 records improved, how many remain blocked and why,
-   with five before-and-after examples. Then select the next batch of up to 25
-   unfinished, unlocked records with useful pages. Recorded reader plans are
-   already applied; do not repeat unchanged work.
+   with five before-and-after examples. Next inspect saved council site pages
+   against current records and fill only missing driver answers they support.
+   Then choose supermarket, shopping centre, hotel, gym, leisure or station
+   batches by useful saved evidence and remaining gaps. Recorded reader plans
+   are already applied; do not repeat unchanged work.
 3. Change code only for a reproduced blocker in the selected batch. The station
    context issue is an exception task, not a reason to redesign all validation.
 4. Import Grok when its results arrive. Missing results do not block other readers.

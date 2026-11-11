@@ -19,17 +19,28 @@ answers, and approved Sheet publication. Keep these three measures in STATUS.md:
 3. Publication: applied changes published after approval, with zero mismatches
    on independent re-export. An unperformed comparison is not zero mismatches.
 
-A supported partial answer is useful progress before a record becomes showable.
-For example, save supported parking availability while price and stay remain
-unknown. Partial progress does not lower the final evidence or publication bar.
-The rules and cell controls in `docs/PP_rules_and_pilot.md` still apply.
+The first completion target is useful driver information, not every column filled:
+Can Park?, Who Can Park and Cost Type, supported for the exact place. Include
+any stated conditions that affect use, such as customer-only access, validation,
+opening hours or a maximum stay. Record an unstated tariff, stay or hour as unknown;
+never present an unknown restriction as unrestricted parking. An explicit no-parking
+answer is useful too; keep dependent fields consistent with the existing rules.
+
+Save supported partial answers even when the core answers are not yet complete.
+Report core answers complete separately from all details complete. This working
+target does not change readiness calculations, validation, finished-row locks or
+Verification Result rules. The controls in `docs/PP_rules_and_pilot.md` still apply.
 
 ## Working order
 
 1. Run `git status`. Preserve and report unrelated work. Commit only your files.
 2. Read the owner holds. Leave them unchanged and continue with other records.
-3. Use existing commands on a small batch first. Default to 25 places per batch
-   and one source, so outcomes are easy to inspect. Adjust to the source size.
+3. Before a web request or code change, inspect the current database and saved
+   inputs. Name the target Place IDs and missing driver answers, or show the
+   reviewed candidate is a new place. Reuse downloaded pages, captured text and
+   accepted evidence first. Skip records already meeting the driver target unless
+   evidence is stale or conflicting. Fetch only pages needed for a named gap;
+   repeat a download only with a recorded reason. Use batches of up to 25 places.
 4. Review the batch, save its outcome and undo, update STATUS.md and commit the
    finished task. Repeat until your remaining tasks are done or blocked.
 5. Keep exceptions separate from routine processing. A refusal blocks that plan,
@@ -78,7 +89,9 @@ reviewed identities. Never reactivate an inactive reference to increase coverage
 
 The default task is to fill existing places from usable exact-site sources.
 A new reader, a category fix or a refactor is an exception to that routine.
-Missing Grok results do not block work through existing readers.
+Missing Grok results do not block work through existing readers. This applies to
+council sites, supermarkets, shopping centres, hotels, gyms, leisure centres and
+stations. Most are existing records: check before proposing a new place.
 
 1. Start with the named batch and prerequisites in STATUS.md. After that batch,
    select up to 25 unfinished, unlocked places with missing supported answers
