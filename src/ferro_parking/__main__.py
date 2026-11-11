@@ -64,6 +64,13 @@ Commands:
   tranche1-write-apply  Append the tranche1-write plan to the sheet's
           bottom (--apply to actually write; dry run reports the plan
           otherwise)
+  holds-bundle  Read-only: gather the evidence on every held car park
+          candidate, decide what the rules can decide and write the
+          reviewer batches (never writes to the database or the sheet;
+          --pbf parses the extract, --bundle reloads a written one)
+  holds-merge  Merge two reviewers' verdicts on the held cases; only full
+          agreement at high confidence decides a case, and a case the
+          rules decided is carried through unchanged
   fill-round2  Dry run: osm fill, capture fill, policy fill and a draft
           category policy on every blank-Verification-Result row, each
           pass checked against page_fill's consistency checks (never
@@ -216,6 +223,12 @@ def main():
     if cmd == "tranche1-write-apply":
         from .tranche1_write import apply_main as tranche1_write_apply_main
         return tranche1_write_apply_main(argv)
+    if cmd == "holds-bundle":
+        from .holds import bundle_main
+        return bundle_main(argv)
+    if cmd == "holds-merge":
+        from .holds import merge_main
+        return merge_main(argv)
     if cmd == "fill-round2":
         from .fill_round2 import main as fill_round2_main
         return fill_round2_main(argv)

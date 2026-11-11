@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<osm version="0.6" generator="test">
+ <node id="801" version="1" timestamp="2026-05-01T00:00:00Z" lat="51.35960" lon="-0.19060"/>
+ <node id="802" version="1" timestamp="2026-05-01T00:00:00Z" lat="51.35960" lon="-0.18940"/>
+ <node id="803" version="1" timestamp="2026-05-01T00:00:00Z" lat="51.36040" lon="-0.18940"/>
+ <node id="804" version="1" timestamp="2026-05-01T00:00:00Z" lat="51.36040" lon="-0.19060"/>
+ <node id="888002" version="1" timestamp="2026-05-01T00:00:00Z" lat="51.36001" lon="-0.19001">
+  <tag k="amenity" v="parking"/><tag k="name" v="Bluebird Retail Park Car Park"/><tag k="access" v="customers"/></node>
+ <way id="888001" version="1" timestamp="2026-05-01T00:00:00Z">
+  <nd ref="801"/><nd ref="802"/><nd ref="803"/><nd ref="804"/><nd ref="801"/>
+  <tag k="amenity" v="parking"/><tag k="name" v="Bluebird Retail Park Car Park"/><tag k="access" v="customers"/><tag k="fee" v="yes"/></way>
+</osm>

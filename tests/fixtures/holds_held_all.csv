@@ -1,0 +1,5 @@
+source,source ref,Location Name,near place_id,near name,metres,reason
+osm,node/26846355,QPark Chinatown,PP-000125,Q-Park Chinatown,12,"within 12 m of place PP-000125: a possible duplicate, not proof"
+osm,node/266898069,Hayes Station Car Park,PP-003809,Hayes Station - Hayes (APCOA),14,"within 14 m of place PP-003809: a possible duplicate, not proof"
+osm,way/555001,Bermondsey Wharf Car Park,PP-000400,Tharidu Checked Car Park,8,"within 8 m of place PP-000400: a possible duplicate, not proof"
+osm,node/777001,Angel Islington Car Park,PP-000500,Centroid Only Car Park,21,"within 21 m of place PP-000500: a possible duplicate, not proof"

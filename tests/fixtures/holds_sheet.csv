@@ -1,0 +1,6 @@
+Place ID,Location Name,Postcode,Geo Precision,OSM ID,Verified By,Latitude,Longitude,Can Park? (Yes/No/Conditional)
+PP-000125,Q-Park Chinatown,W1D 6AU,Rooftop,,,51.512300,-0.131400,
+PP-003809,Hayes Station - Hayes (APCOA),UB3 4AY,Building,,,51.503100,-0.421000,
+PP-000400,Tharidu Checked Car Park,SE1 9AA,Building,,Tharidu,51.504000,-0.090000,
+PP-000500,Centroid Only Car Park,N1 9AA,Postcode centroid,,,51.540000,-0.100000,
+PP-000600,Riverside Wharf Car Park,SE1 2AA,Building,way/999001,,51.505500,-0.075500,
