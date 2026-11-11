@@ -129,8 +129,10 @@ def test_a_registered_fetcher_replays_on_the_frozen_page_alone():
     assert result[0]["answers"]["Max Stay (mins)"] == ""
 
 
-def test_an_unknown_or_cache_only_replay_key_is_refused():
-    for key in ("nosuchsource.example", "marksandspencer.com"):
+def test_an_unknown_or_cache_only_replay_key_is_refused(monkeypatch):
+    from ferro_parking import fetch_fill
+    monkeypatch.setattr(fetch_fill, "CACHE_ONLY", {"cacheonly.example"})
+    for key in ("nosuchsource.example", "cacheonly.example"):
         with pytest.raises(SystemExit):
             ev.fetcher_extractor(key)
 

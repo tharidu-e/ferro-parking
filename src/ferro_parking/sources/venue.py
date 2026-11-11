@@ -22,6 +22,8 @@ The rules, per the brief:
   longer, so writing 240 there would send them away early.
 - Free only when the free claim has no day or time qualifier. "All parking is
   free on Sundays" is not Free: the wording goes in Notes with a Review Flag.
+- A question states nothing. "Is car parking available?" is a heading.
+- Street parking and parking in the surrounding area are somebody else's.
 - Operator and the PCN amount only when stated.
 - A caution such as "check the signs in the car park" goes in Notes.
 - Source Tier official, Specificity Site-specific, and every value carries the
@@ -106,13 +108,40 @@ WORD_NUMBERS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6}
 
 PARKING_MENTION = re.compile(r"\bcar park\b|\bparking\b", re.I)
 
+# Parking somewhere else. A council page offering street parking in the
+# surrounding area says nothing about this site's own car park, and the live
+# City of London page did exactly that while another line on it said the site
+# has no car park. "Parking outside the club" is this venue's own parking and
+# is deliberately not matched here.
+ELSEWHERE = re.compile(
+    r"\bon-?street\b|\bstreet parking\b"
+    r"|\bsurrounding (?:area|areas|streets|roads)\b"
+    r"|\bnearby (?:public\s+)?(?:car parks?|parking)\b"
+    r"|\blocal (?:council\s+)?(?:car parks?|parking)\b"
+    r"|\b(?:all\s+)?other car parks?\b", re.I)
+
 
 def sentences(text):
     return [part.strip() for part in re.split(r"(?<=[.!?;])\s+|\n+", text) if part.strip()]
 
 
+def states_something(sentence):
+    """False for a sentence that asserts nothing about this site's car park.
+
+    A question is a heading, not an answer: the Royal Parks pages carry "Is
+    car parking available?" and no statement beside it. A sentence only about
+    Blue Badge or accessible bays establishes no car park either, which is the
+    rule the station reader already follows. A space count in the same
+    sentence does state one, so that sentence stays."""
+    if sentence.rstrip().endswith("?") or ELSEWHERE.search(sentence):
+        return False
+    # ACCESSIBLE_ONLY and SPACES are defined below, and this runs at call time.
+    return not (ACCESSIBLE_ONLY.search(sentence) and not SPACES.search(sentence))
+
+
 def parking_sentences(text):
-    return [sentence for sentence in sentences(text) if PARKING_MENTION.search(sentence)]
+    return [sentence for sentence in sentences(text)
+            if PARKING_MENTION.search(sentence) and states_something(sentence)]
 
 
 def facility_car_park(found):
@@ -158,6 +187,8 @@ def _charge_candidates(text, found):
     every = sentences(text)
     out = []
     for index, sentence in enumerate(every):
+        if not states_something(sentence):
+            continue
         if PARKING_CHARGE.search(sentence):
             out.append(sentence)
         elif (index and every[index - 1] in found
@@ -227,6 +258,7 @@ class VenueFetcher:
         "better.org.uk": "Better",
         "thegymgroup.com": "The Gym Group",
         "puregym.com": "PureGym",
+        "nuffieldhealth.com": "Nuffield Health",
     }
 
     def __init__(self, key, verified_by="Code (page fetch)", brand=None):
@@ -424,4 +456,9 @@ class StoreFetcher(VenueFetcher):
         self.lookup = lookup
 
     def branch_url(self, row):
-        return (self.lookup or {}).get((row.get("Place ID") or "").strip(), "")
+        """The identity match's url, else a url the row itself already lists.
+
+        A sheet row can carry its own store page on this host, and that is as
+        canonical as the one the extract published. Neither path guesses."""
+        found = (self.lookup or {}).get((row.get("Place ID") or "").strip(), "")
+        return found or super().branch_url(row)

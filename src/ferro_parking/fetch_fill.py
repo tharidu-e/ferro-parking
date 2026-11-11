@@ -27,9 +27,10 @@ from .sources.fetch import fetch, looks_like_a_challenge
 from .sources.station import StationFetcher, station_slug
 from .sources.venue import StoreFetcher, VenueFetcher, official_store_urls
 
-# Fetcher E is cache only: the pages are fetched so the evidence gate can read
-# them, and no value is ever written from them.
-CACHE_ONLY = {"marksandspencer.com"}
+# Cache only: the pages are fetched so the evidence gate can read them, and no
+# value is ever written from them. marksandspencer.com left this set on 11
+# November 2026, once the facility-list rule could read its store pages.
+CACHE_ONLY = set()
 
 # Brand store fetchers. The routing source key of these rows is
 # openstreetmap.org, because the identity match is their only source url, so
@@ -39,6 +40,9 @@ CACHE_ONLY = {"marksandspencer.com"}
 BRAND_HOSTS = {
     "storelocator.asda.com": "Asda",
     "www.lidl.co.uk": "Lidl",
+    # An M&S store page carries "Store information / Facilities / Car parking"
+    # for that store. Its rows reach the fetcher by their own source key.
+    "marksandspencer.com": "M&S",
 }
 
 # Measured on 11 November 2026 and not built. A probe of each host is in
@@ -53,6 +57,37 @@ SKIPPED_HOSTS = {
     "www.tesco.com":
         "every request answers 403 Access Denied with a bot challenge, "
         "including robots.txt. A challenge is recorded, never worked around.",
+    "cityoflondon.gov.uk":
+        "the pages read are area pages. One covers every car park in an "
+        "8,000-acre forest, so a value from it is area-wide and not evidence "
+        "for one site. Another states that the site has no car park.",
+    "royalparks.org.uk":
+        "the only parking text is a question heading and a sentence about "
+        "other car parks. Neither states anything about the site.",
+    "tkmaxx.com":
+        "all three probed pages were blocked.",
+    "primark.com":
+        "all three probed pages were blocked.",
+    "toolstation.com":
+        "the pages read carry no parking statement at all.",
+    "all.accor.com":
+        "the pages read carry no parking statement at all.",
+    "iceland.co.uk":
+        "the pages read carry no parking statement at all.",
+    "kfc.co.uk":
+        "the pages read carry no parking statement at all.",
+    "mcdonalds.com":
+        "the pages read carry no parking statement at all.",
+    "nandos.co.uk":
+        "the pages read carry no parking statement at all.",
+    "screwfix.com":
+        "the pages read carry no parking statement at all.",
+    "euro car parks":
+        "these are public operator car parks. The venue reader writes Who Can "
+        "Park Customers only, which is wrong for a public pay car park, so "
+        "these rows need a reader of their own.",
+    "ncp":
+        "these are public operator car parks. See the euro car parks note.",
 }
 
 REGISTRY = {
@@ -60,6 +95,7 @@ REGISTRY = {
     "better.org.uk": VenueFetcher("better.org.uk"),
     "thegymgroup.com": VenueFetcher("thegymgroup.com"),
     "puregym.com": VenueFetcher("puregym.com"),
+    "nuffieldhealth.com": VenueFetcher("nuffieldhealth.com"),
     **{host: StoreFetcher(brand, host) for host, brand in BRAND_HOSTS.items()},
 }
 
@@ -150,7 +186,7 @@ def plan_lines(place_id, stage, values, notes, flags, row, quote, url, verified_
                    if not (new.get(column) or row.get(column) or "").strip()]
         if missing:
             return [], (f"the row has no {' and no '.join(missing)}, which the validator "
-                        f"asks for on a Yes or Conditional row")
+                        f"asks for on a Yes or Conditional row"), []
         for column in CONTEXT_COLUMNS:
             new.setdefault(column, row.get(column, ""))
 
@@ -163,11 +199,21 @@ def plan_lines(place_id, stage, values, notes, flags, row, quote, url, verified_
     if "Notes" in new and any(dash in str(new["Notes"]) for dash in DASHES):
         del new["Notes"]
 
-    lines = []
+    lines, kept_back = [], []
     for column in sorted(new, key=lambda name: (name == fill.VERIFICATION_RESULT, name)):
         value = new[column]
         if value is None or str(value).strip() == "":
             continue
+        # Routing sends a finished row back when it has a parking gap, so the
+        # blank cell is filled and everything the row already answered stays.
+        # The value becomes the row's own, which db-apply counts as no change.
+        # Dropping the column instead would hide it from validate_rows, which
+        # sees only the plan's own columns and then asks for it.
+        if fill.finished_column_refusal(row, column, value):
+            kept_back.append(column)
+            value = row.get(column, "")
+            if str(value).strip() == "":
+                continue
         stated = (column in values and column not in BOOKKEEPING_COLUMNS
                   and str(value).strip() not in ABSTENTIONS)
         lines.append({"place_id": place_id, "column": column, "new_value": str(value),
@@ -176,7 +222,7 @@ def plan_lines(place_id, stage, values, notes, flags, row, quote, url, verified_
                        "stage": stage, "verified_by": verified_by,
                        "retrieved_at": retrieved_at if stated else "",
                        "page_hash": page_hash if stated else ""})
-    return lines, ""
+    return lines, "", kept_back
 
 
 def run(conn, key, limit=None, today=None, fetcher=None):
@@ -199,9 +245,11 @@ def run(conn, key, limit=None, today=None, fetcher=None):
         candidates = candidates[:limit]
 
     lines, examples, unresolved, blocked_rows = [], [], [], []
+    finished_rows = []
     counts = {"rows attempted": 0, "pages fetched": 0, "plan lines": 0,
               "silent pages": 0, "blocked pages": 0, "unresolved names": 0,
               "rows with values": 0, "rows held for a person": 0,
+              "columns a finished row keeps": 0,
               "network requests": 0, "cache hits": 0, "failed requests": 0,
               "seconds": 0.0, "pages per minute": 0.0}
     started = time.monotonic()
@@ -264,10 +312,17 @@ def run(conn, key, limit=None, today=None, fetcher=None):
         row_lines = []
         if values:
             retrieved_at, page_hash = page_metadata(conn, url)
-            row_lines, held = plan_lines(
+            row_lines, held, kept_back = plan_lines(
                 place_id, stage, values, notes, flags, row, quote, url,
                 getattr(fetcher, "verified_by", "Code (page fetch)"), today,
                 retrieved_at, page_hash)
+            if kept_back:
+                counts["columns a finished row keeps"] += len(kept_back)
+                finished_rows.append({"key": key, "Place ID": place_id,
+                                       "Location Name": row.get(LOCATION_NAME, ""),
+                                       "url": url,
+                                       "reason": "the row is finished, so it keeps "
+                                                 + ", ".join(sorted(kept_back))})
             if held:
                 counts["rows with values"] -= 1
                 counts["rows held for a person"] += 1
@@ -289,7 +344,7 @@ def run(conn, key, limit=None, today=None, fetcher=None):
     counts["pages per minute"] = round(read / counts["seconds"] * 60, 1) if counts["seconds"] else 0.0
     return lines, {"key": key, "routing_run": run_id, "counts": counts,
                    "examples": sorted(examples, key=lambda e: (e["outcome"] != "values", e["outcome"] == "not National Rail"))[:10], "unresolved": unresolved,
-                   "held": blocked_rows, "osm_source": osm_source}
+                   "held": blocked_rows, "finished": finished_rows, "osm_source": osm_source}
 
 
 def main(argv=None):
@@ -315,7 +370,8 @@ def main(argv=None):
     plan_mod.write_plan(out_dir / "plan.jsonl", lines)
     for name, headers, rows in (("examples.csv", EXAMPLE_HEADERS, report["examples"]),
                                  ("unresolved.csv", UNRESOLVED_HEADERS, report["unresolved"]),
-                                 ("held.csv", BLOCKED_HEADERS, report["held"])):
+                                 ("held.csv", BLOCKED_HEADERS, report["held"]),
+                                 ("finished.csv", BLOCKED_HEADERS, report["finished"])):
         with open(out_dir / name, "x", newline="", encoding="utf-8") as stream:
             writer = csv.DictWriter(stream, fieldnames=headers)
             writer.writeheader()
@@ -330,6 +386,7 @@ def main(argv=None):
     print(f"\nTen examples: {out_dir / 'examples.csv'}")
     print(f"Unresolved names: {out_dir / 'unresolved.csv'}")
     print(f"Rows held for a person: {out_dir / 'held.csv'}")
+    print(f"Columns a finished row keeps: {out_dir / 'finished.csv'}")
     print(f"Plan: {out_dir / 'plan.jsonl'}")
     print("Dry run only. Check it with db-apply, which needs --apply to write.")
     return 0

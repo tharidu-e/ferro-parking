@@ -213,6 +213,33 @@ def test_a_qualified_free_claim_never_becomes_a_price(sentence, free):
     assert (values.get("Cost Type") == "Free") == free, values.get("Cost Type")
 
 
+@pytest.mark.parametrize("sentence,states", [
+    ("Is car parking available?", False),
+    ("Do you have a car park?", False),
+    ("Limited street parking is available in the surrounding area.", False),
+    ("On-street parking is available nearby.", False),
+    ("Alternative Blue Badge parking is available at all other car parks.", False),
+    ("Those with a valid Blue Badge park free in our car parks.", False),
+    ("Disabled parking is available.", False),
+    ("Free parking is available.", True),
+    ("There is limited, free parking available outside the club.", True),
+    ("Car parking available 40 total spaces available 2 disabled spaces available", True),
+])
+def test_only_a_statement_about_this_site_is_read(sentence, states):
+    """A question, parking somewhere else, and accessible bays alone all
+    establish nothing. A space count in the same sentence does."""
+    assert venue_mod.states_something(sentence) == states
+    assert bool(venue_mod.VenueFetcher("puregym.com").values(sentence)[0]) == states
+
+
+def test_the_saved_royal_parks_pages_state_nothing_about_the_site():
+    fetcher = venue_mod.VenueFetcher("royalparks.org.uk")
+    texts = saved("royalparks.org.uk")
+    assert texts
+    assert any("Is car parking available?" in text for text in texts)
+    assert not any(fetcher.values(text)[0] for text in texts)
+
+
 def test_a_stated_maximum_stay_is_written():
     text = "Free parking is available. The maximum stay is 3 hours."
     values, notes, _, _ = venue_mod.VenueFetcher("puregym.com").values(text)
@@ -264,7 +291,8 @@ def test_every_value_carries_an_official_site_specific_source():
     assert "Route B" in values["Decision Reason"]
 
 
-@pytest.mark.parametrize("key", ["better.org.uk", "thegymgroup.com", "puregym.com"])
+@pytest.mark.parametrize("key", ["better.org.uk", "thegymgroup.com", "puregym.com",
+                                  "nuffieldhealth.com"])
 def test_the_saved_pages_for_each_key_still_give_values(key):
     fetcher = venue_mod.VenueFetcher(key)
     results = [fetcher.values(text)[0] for text in saved(key)]
@@ -331,17 +359,33 @@ def test_a_store_page_url_comes_from_the_identity_match_not_the_name(conn):
     assert fetcher.branch_url({"Place ID": "PP-000002"}).endswith("/london/sutton/x")
     assert fetcher.branch_url({"Place ID": "PP-000001"}) == ""
     assert fetcher.branch_url({"Place ID": "PP-000004", "Location Name": "Asda Acton"}) == ""
+    # A row that already lists its own store page on this host still resolves.
+    own = {"Place ID": "PP-000004",
+           "Source URLs (primary first)": "https://storelocator.asda.com/london/acton/x"}
+    assert fetcher.branch_url(own).endswith("/london/acton/x")
+    # A url on another host is never followed.
+    assert fetcher.branch_url({"Place ID": "PP-000004",
+                               "Source URLs (primary first)": "https://example.org/a"}) == ""
 
 
-def test_the_saved_marks_and_spencer_pages_are_cache_only():
-    assert "marksandspencer.com" in fetch_fill.CACHE_ONLY
-    assert "marksandspencer.com" not in fetch_fill.REGISTRY
+def test_the_saved_marks_and_spencer_pages_state_a_car_park():
+    """The pages were cache only until the facility-list rule could read them.
+    Each store page carries "Store information / Facilities / Car parking"."""
+    assert "marksandspencer.com" not in fetch_fill.CACHE_ONLY
+    fetcher = venue_mod.StoreFetcher("M&S", "marksandspencer.com")
+    results = [fetcher.values(text)[0] for text in saved("marksandspencer.com")]
+    assert results and all(results)
+    for values in results:
+        assert values[fill.CAN_PARK] == "Conditional"
+        assert values["Brand"] == "M&S"
+        assert values["Cost Type"] == "Unknown"
 
 
 def test_the_registry_holds_only_the_approved_fetchers():
     assert set(fetch_fill.REGISTRY) == {"station", "better.org.uk", "thegymgroup.com",
                                         "puregym.com", "storelocator.asda.com",
-                                        "www.lidl.co.uk"}
+                                        "www.lidl.co.uk", "marksandspencer.com",
+                                        "nuffieldhealth.com"}
 
 
 def test_a_measured_unreadable_host_is_named_and_never_registered():
@@ -656,9 +700,32 @@ def test_venue_denial_never_becomes_conditional():
 
 
 def test_fetch_plan_records_the_page_url_in_the_row():
-    lines, held = fetch_fill.plan_lines('PP-1', 'station', {'Brand': 'National Rail', 'Decision Reason': 'Route A: page'}, [], [], sheet_row(), 'No parking spaces', 'https://www.nationalrail.co.uk/stations/brockley/', 'Code (page fetch)', TODAY)
+    lines, held, _ = fetch_fill.plan_lines('PP-1', 'station', {'Brand': 'National Rail', 'Decision Reason': 'Route A: page'}, [], [], sheet_row(), 'No parking spaces', 'https://www.nationalrail.co.uk/stations/brockley/', 'Code (page fetch)', TODAY)
     assert not held
     assert next(l['new_value'] for l in lines if l['column'] == fill.SOURCE_URLS).endswith('/brockley/')
+
+
+def test_a_finished_row_keeps_its_answers_and_the_plan_stays_appliable():
+    """Routing sends a finished row back when it has a parking gap. Proposing
+    what db-apply would refuse there blocks the whole plan, so the planner
+    drops those columns and reports them instead."""
+    row = sheet_row(**{"Verification Result": "Confirmed",
+                       "Decision Reason": "Route Z: a person read the signs",
+                       "Verified By": "Policy script", "Brand": "National Rail",
+                       "Place Category": "Station"})
+    lines, held, kept_back = fetch_fill.plan_lines(
+        "PP-1", "station", {fill.CAN_PARK: "Yes", "Decision Reason": "Route A: page"},
+        [], [], row, "250 parking spaces",
+        "https://www.nationalrail.co.uk/stations/brockley/", "Code (page fetch)", TODAY)
+    assert not held
+    assert "Decision Reason" in kept_back
+    # The line carries the row's own value, so db-apply counts no change and
+    # the validator still sees the column it asks for.
+    kept = next(line for line in lines if line["column"] == "Decision Reason")
+    assert kept["new_value"] == "Route Z: a person read the signs"
+    assert kept["quote"] == ""
+    # The blank answer routing asked for is still proposed.
+    assert fill.CAN_PARK in {line["column"] for line in lines}
 
 
 def test_venue_never_treats_an_unrelated_domain_as_its_official_page():

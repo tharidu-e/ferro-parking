@@ -108,6 +108,9 @@ not brand counts or a Sheet export. Snapshot:
 Official inventories cover their stated council lists, not every private site.
 Unknown is not zero. OSM-derived identities do not establish parking permission.
 
+Bromley reimport: 30 per-car-park pages, 30 reviewed existing sites, zero
+exceptions or gaps. Review: `data/runs/2026-11-11_73/coverage_bromley/`.
+
 Bexley reimport: all 19 region exceptions resolved by exact site-name and
 borough review against PP-000105 to PP-000123. No place needs creation or a
 duplicate mark. The page headline still says 18. Review: `data/runs/2026-11-11_62/coverage_bexley/`.
