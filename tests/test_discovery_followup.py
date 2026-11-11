@@ -291,10 +291,10 @@ def test_single_listing_retains_source_url_match(tmp_path):
 
 
 def test_barnet_historical_csv_preserves_names_without_parking_claims(tmp_path):
-    from ferro_parking.sources import barnet
+    from ferro_parking.sources import barnet_2014
     path = tmp_path / 'barnet.csv'
     path.write_text('Car Park,Type,Number of Free Parking Spaces \n Church Hill Road Car park ,Free Off Street Parking,68\n')
-    row = barnet(path)[0]
+    row = barnet_2014(path)[0]
     assert row['name'] == 'Church Hill Road Car park'
     assert row['source_period'] == '2014-12'
     assert row['official'] is True
@@ -304,11 +304,11 @@ def test_barnet_historical_csv_preserves_names_without_parking_claims(tmp_path):
 
 @pytest.mark.parametrize('text', ['name,Type\nExample,Free\n', 'Car Park,Type\n,Free\n'])
 def test_barnet_rejects_wrong_header_or_blank_name(text, tmp_path):
-    from ferro_parking.sources import barnet
+    from ferro_parking.sources import barnet_2014
     path = tmp_path / 'barnet.csv'
     path.write_text(text)
     with pytest.raises(ValueError, match='Barnet CSV'):
-        barnet(path)
+        barnet_2014(path)
 
 
 def test_hillingdon_point_inventory_is_identity_only(tmp_path):
@@ -424,3 +424,24 @@ def test_croydon_refuses_missing_map(tmp_path):
     path.write_text('No map')
     with pytest.raises(ValueError):
         croydon(path)
+
+
+def test_barnet_current_list_excludes_other_lists_and_retains_closure_quote(tmp_path):
+    from ferro_parking.sources import barnet, BARNET_URL
+    path = tmp_path / 'current.html'
+    path.write_text('<h2>Barnet car parks</h2><ul><li><a>Brunswick Road</a> - Brunswick Park Road, London, N11 1JJ | Open all day</li><li>Watling Avenue- River approach, HA8 0AZ | Car Park Closed.</li></ul><h2>Pay By Phone</h2><ul><li>Not another site</li></ul>')
+    rows = barnet(path)
+    assert [r['name'] for r in rows] == ['Brunswick Road', 'Watling Avenue']
+    assert rows[0]['postcode'] == 'N11 1JJ'
+    assert rows[0]['url'] == BARNET_URL
+    assert 'Closed' in rows[1]['identity_quote']
+    assert all(r['lat'] == r['lon'] == r['tariff'] == r['hours'] == '' for r in rows)
+
+
+@pytest.mark.parametrize('text', ['<title>Pardon Our Interruption</title>', 'Car Park,Type\nOld site,Free\n'])
+def test_barnet_current_adapter_refuses_challenge_or_historical_csv(tmp_path, text):
+    from ferro_parking.sources import barnet
+    path = tmp_path / 'current.html'
+    path.write_text(text)
+    with pytest.raises(ValueError, match='Barnet current page'):
+        barnet(path)

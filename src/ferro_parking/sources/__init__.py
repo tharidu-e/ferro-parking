@@ -48,16 +48,17 @@ def city_of_london(location=None):
     return rows
 
 
-BARNET_URL = 'https://open.barnet.gov.uk/download/23lk2/kjx/car-parks.csv'
+BARNET_CSV_URL = 'https://open.barnet.gov.uk/download/23lk2/kjx/car-parks.csv'
+BARNET_URL = 'https://www.barnet.gov.uk/parking/car-parks-and-street-parking-locations'
 
 
-def barnet(location=None):
+def barnet_2014(location):
     """Council's December 2014 inventory; no coordinates or current tariffs.
 
     Preserve names for review. Do not infer current parking terms from the
     historical Type column or manufacture pins to pass the London filter.
     """
-    reader = csv.DictReader(io.StringIO(read_input(location or BARNET_URL)))
+    reader = csv.DictReader(io.StringIO(read_input(location)))
     if not reader.fieldnames or 'Car Park' not in reader.fieldnames:
         raise ValueError('Barnet CSV requires the Car Park header')
     rows = []
@@ -66,8 +67,40 @@ def barnet(location=None):
         if not name:
             raise ValueError('Barnet CSV contains a missing car park name')
         rows.append({'name': name, 'address': '', 'postcode': '', 'lat': '', 'lon': '',
-                     'url': BARNET_URL, 'tariff': '', 'hours': '', 'max_stay': '',
+                     'url': BARNET_CSV_URL, 'tariff': '', 'hours': '', 'max_stay': '',
                      'brand': '', 'official': True, 'source_period': '2014-12'})
+    return rows
+
+
+def barnet(location=None):
+    """Current council list only; the old CSV is a separate cross-check."""
+    raw = read_input(location or BARNET_URL)
+    headings = list(re.finditer(r'<h[1-6]\b[^>]*>(.*?)</h[1-6]>', raw, re.S | re.I))
+    section = None
+    for index, heading in enumerate(headings):
+        title = unescape(re.sub(r'<[^>]*>', '', heading[1])).strip()
+        if title.casefold() == 'barnet car parks':
+            end = headings[index + 1].start() if index + 1 < len(headings) else len(raw)
+            section = raw[heading.end():end]
+            break
+    listing = re.search(r'<ul\b[^>]*>(.*?)</ul>', section or '', re.S | re.I)
+    if not listing:
+        raise ValueError('Barnet current page has no Barnet car parks list; CSV and interruption pages are not current inventories')
+    rows = []
+    for item in re.findall(r'<li\b[^>]*>(.*?)</li>', listing[1], re.S | re.I):
+        text = ' '.join(unescape(re.sub(r'<[^>]*>', ' ', item)).split())
+        text = text.translate({0x2013: '-', 0x2014: '-'})
+        parts = re.split(r'\s*-\s*', text, maxsplit=1)
+        if len(parts) != 2 or not parts[0] or not parts[1]:
+            raise ValueError('Barnet current listing lacks a site name and address')
+        name, address = parts
+        postcode = re.search(r'\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b', address)
+        rows.append({'name': name, 'address': address.split('|', 1)[0].strip(),
+                     'postcode': postcode[0] if postcode else '', 'lat': '', 'lon': '',
+                     'url': BARNET_URL, 'tariff': '', 'hours': '', 'max_stay': '',
+                     'brand': '', 'official': True, 'identity_quote': text})
+    if not rows:
+        raise ValueError('Barnet current list is empty')
     return rows
 
 

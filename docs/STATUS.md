@@ -66,9 +66,9 @@ Every https request from the owner's machine currently fails with a
 certificate error, so an official list has to be downloaded outside the tool
 and passed with `--input`.
 
-| Borough | Official inventory | Published | Reviewed held | Gap | Active OSM-derived |
+| Borough | Official inventory | Published official | Official sites we hold | Official gap | OSM-derived |
 |---|---|---:|---:|---|---:|
-| Barnet | December 2014 CSV | 20 historical | 17 historical | 3 held | 375 |
+| Barnet | Current page blocked | Unknown | Unknown | Unknown | 375 |
 | Hillingdon | Council point layer 3 | 28 | 24 | 4 held | 259 |
 | Bromley | Council directory | 30 | 30 | 0 | 254 |
 | Hounslow | Council area lists | 21 | 21 by name | 0 by name | 229 |
@@ -111,10 +111,10 @@ Unknown is not zero. OSM-derived identities do not establish parking permission.
 Discovery ignores URLs shared by every row of a multi-row import when matching
 identities, including duplicates within the import. Evidence keeps the URLs.
 
-Barnet's official CSV is downloaded but dated December 2014 and has no pins or
-postcodes. All 20 rows remain London-region unresolved in
-`data/runs/2026-11-11_24/discover/`. The current council page download is an
-interruption page, not a usable list (`data/raw/barnet_car_parks_current.html`).
+Barnet: the current-page adapter rejects both saved interruption responses.
+Current coverage is unknown; the 2014 CSV remains a cross-check only. Owner
+must save the actual [current list](https://www.barnet.gov.uk/parking/car-parks-and-street-parking-locations)
+as `data/raw/barnet_car_parks_current.html`. Block report: `data/runs/2026-11-11_49/coverage_barnet/review.json`.
 
 Hillingdon lists 28 sites: discovery returned 26 matches, one new candidate and
 one ambiguous postcode. Coordinate/name review supports 24 existing sites;
@@ -139,7 +139,7 @@ retirement instead. Zero changes were applied. Report:
 `data/runs/2026-11-11_38/db_duplicate/report.json`. No retirement is authorized.
 Greenwich is the next borough after this decision.
 No OSM fallback is applied until absence of a machine-readable list is established.
-No commits until the coverage task is finished, as requested by the owner.
+Discovery foundation committed as `2f9b24c`; each borough now gets its own commit.
 
 ## Grok hand-off
 
