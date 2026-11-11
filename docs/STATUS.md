@@ -45,9 +45,42 @@ For current counts, run the read-only example in README.md. Saved routing can la
    Verify OSM attribution and licensing from primary sources. Produce a full dry run
    and a selectable 20-row pilot. Stop for the owner's explicit go before publication.
 
+## Source imports
+
+`discover` imports an official car park list and deduplicates it against the
+database. Two changes on 11 November made it usable: it reads
+`db.current_rows` instead of a sheet export, so it sees the 3,951 created
+records, and it decides London membership from the extract's borough polygons
+instead of postcodes.io, so it needs no network. The polygon cache is
+`data/cache/boroughs.geojson`. Delete that file to rebuild it from a newer
+extract with `--boroughs-from`.
+
+Every https request from the owner's machine currently fails with a
+certificate error, so an official list has to be downloaded outside the tool
+and passed with `--input`.
+
+| Borough or source | Official list | Published | We hold | New |
+|---|---|---:|---:|---:|
+| City of London | ArcGIS COMPASS layer 2 | 5 | 5 | 0 |
+
+Coverage is complete for City of London, and the import found a duplicate pair
+in our own data rather than a gap. 32 boroughs remain uncounted, so there is
+still no defensible total for London. Build the table one borough at a time;
+the published count per borough is the only honest denominator.
+
+A weakness to fix before the next borough: every row from one feed carries the
+same feed URL, so the Source URL match stage is not identifying. That is why
+one of the five became an ambiguous exception.
+
 ## Owner decisions and holds
 
 - PP-008072, New Barnet Sainsbury's Car Park: proposed retirement only, awaiting owner approval.
+- PP-005457 and PP-000194 are the same car park held twice, 27 m apart, both
+  named Minories Car Park, both postcode EC3N 4DX, both Confirmed with the same
+  answers. The City of London official feed exposed the pair. PP-005457 carries
+  the OpenStreetMap reference and PP-000194 does not. Neither is personally
+  verified. Both are imported sheet rows, so retiring one is a Sheet decision
+  for the owner, recorded as duplicate metadata and never by moving a pin.
 - Eight weaker retirement proposals remain report-only.
 - 184 attachment cases need a separate audited plan:
   `data/runs/2026-11-11_6/holds/attachment_cases.csv`.
@@ -61,6 +94,6 @@ For current counts, run the read-only example in README.md. Saved routing can la
 
 The created-record path, London OSM insertion and hold-list apply are complete.
 Created identities do not establish access, prices or time limits.
-The identity matcher generates plans only. Its latest suite result is 1,504 passing tests.
+The identity matcher generates plans only. The latest suite result is 1,509 passing tests.
 Code ownership is in `docs/MAP.md`. Creation procedures are in `ADD_PLACES_RUNBOOK.md`.
 Keep this file current and short. Do not append historical run narratives.
