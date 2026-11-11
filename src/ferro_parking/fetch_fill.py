@@ -249,7 +249,7 @@ def run(conn, key, limit=None, today=None, fetcher=None):
     counts = {"rows attempted": 0, "pages fetched": 0, "plan lines": 0,
               "silent pages": 0, "blocked pages": 0, "unresolved names": 0,
               "rows with values": 0, "rows held for a person": 0,
-              "columns a finished row keeps": 0,
+              "columns a finished row keeps": 0, "rows db-apply refused": 0,
               "network requests": 0, "cache hits": 0, "failed requests": 0,
               "seconds": 0.0, "pages per minute": 0.0}
     started = time.monotonic()
@@ -338,6 +338,27 @@ def run(conn, key, limit=None, today=None, fetcher=None):
                 "quote": quote,
                 "columns": ", ".join(sorted({line["column"] for line in row_lines})),
             })
+
+    # A second reading by the applier itself. One refused line blocks a whole
+    # plan, and a finished row can be refused for text somebody else wrote,
+    # such as an en dash or a dropdown value the rules no longer list. Those
+    # rows are reported for a person instead of blocking every other row.
+    refused_by = {}
+    for reject in plan_mod.check_plan(conn, lines)[1]:
+        refused_by.setdefault(reject["Place ID"], []).append(
+            f"{reject['column']}: {reject['reason']}")
+    if refused_by:
+        by_place = {place: row for row, _ in candidates
+                    for place in [(row.get(PLACE_ID) or "").strip()]}
+        for place_id, reasons in sorted(refused_by.items()):
+            counts["rows db-apply refused"] += 1
+            counts["rows with values"] -= 1
+            blocked_rows.append({
+                "key": key, "Place ID": place_id,
+                "Location Name": (by_place.get(place_id) or {}).get(LOCATION_NAME, ""),
+                "url": "", "reason": "; ".join(reasons[:3])})
+        lines = [line for line in lines if line["place_id"] not in refused_by]
+        counts["plan lines"] = len(lines)
 
     counts["seconds"] = round(time.monotonic() - started, 1)
     read = counts["network requests"] + counts["cache hits"]

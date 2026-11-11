@@ -424,6 +424,21 @@ class FakeFetcher:
         return dict(self._values), list(self._notes), list(self._flags), "the quote"
 
 
+def no_parking_values():
+    """A complete Can Park? No answer. The runner reads the plan back through
+    db-apply's own checks, so a partial answer is dropped there."""
+    from ferro_parking import page_fill
+    values = {fill.CAN_PARK: "No", "Source Tier": "Operator / council site",
+              "Specificity": "Site-specific", "Evidence Level": "Verified",
+              "Evidence Type": "Official site: clear answer",
+              "Evidence Detail (what the source shows)": "No parking spaces",
+              "Rules Stated": "Yes", "Prices Stated": "No",
+              "Decision Reason": "Route A: National Rail station page, visible text"}
+    values.update({column: "Not applicable"
+                   for column in page_fill.NOT_APPLICABLE_IF_NO_PARKING})
+    return values
+
+
 def fake_fetch(pages):
     def inner(url, conn, *args, **kwargs):
         return (*pages.get(url, (404, "")), False)
@@ -461,9 +476,7 @@ def test_the_runner_counts_every_outcome(conn, monkeypatch):
         {"https://example.org/branch": (200, "Free parking is available.")}))
     lines, report = fetch_fill.run(
         conn, "station", today=TODAY,
-        fetcher=FakeFetcher(values={fill.CAN_PARK: "No", "Source Tier": "Official site - text",
-                                     "Specificity": "Site-specific",
-                                     "Decision Reason": "Route A: test"}))
+        fetcher=FakeFetcher(values=no_parking_values()))
     assert report["counts"]["rows attempted"] == 1
     assert report["counts"]["pages fetched"] == 1
     assert report["counts"]["rows with values"] == 1
@@ -575,9 +588,8 @@ def test_page_metadata_goes_only_to_the_fields_the_page_states(conn, monkeypatch
     monkeypatch.setattr(fetch_fill, "fetch", fake_fetch(
         {"https://example.org/branch": (200, "No parking spaces")}))
     cache_page(conn)
-    lines, _ = fetch_fill.run(conn, "station", today=TODAY, fetcher=FakeFetcher(values={
-        fill.CAN_PARK: "No", "Source Tier": "Operator / council site",
-        "Specificity": "Site-specific"}))
+    lines, _ = fetch_fill.run(conn, "station", today=TODAY,
+                               fetcher=FakeFetcher(values=no_parking_values()))
     by_column = {entry["column"]: entry for entry in lines}
     stated = by_column[fill.CAN_PARK]
     assert stated["quote"] == "the quote"
@@ -703,6 +715,24 @@ def test_fetch_plan_records_the_page_url_in_the_row():
     lines, held, _ = fetch_fill.plan_lines('PP-1', 'station', {'Brand': 'National Rail', 'Decision Reason': 'Route A: page'}, [], [], sheet_row(), 'No parking spaces', 'https://www.nationalrail.co.uk/stations/brockley/', 'Code (page fetch)', TODAY)
     assert not held
     assert next(l['new_value'] for l in lines if l['column'] == fill.SOURCE_URLS).endswith('/brockley/')
+
+
+def test_a_row_db_apply_refuses_is_dropped_and_not_left_to_block_the_plan(conn, monkeypatch):
+    """One refused line blocks a whole plan. A finished row can be refused for
+    text somebody else wrote, such as an en dash, so the runner reads its own
+    plan back through db-apply's checks and reports that row instead."""
+    monkeypatch.setattr(fetch_fill, "fetch", fake_fetch(
+        {"https://example.org/branch": (200, "No parking spaces")}))
+    conn.execute("UPDATE raw SET json = json_set(json, '$.\"Decision Reason\"',"
+                 " 'Route A: an en dash – here') WHERE place_id = 'PP-000002'")
+    conn.execute("UPDATE raw SET json = json_set(json, '$.\"Verification Result\"',"
+                 " 'Confirmed') WHERE place_id = 'PP-000002'")
+    conn.commit()
+    lines, report = fetch_fill.run(conn, "station", today=TODAY,
+                                   fetcher=FakeFetcher(values=no_parking_values()))
+    assert lines == []
+    assert report["counts"]["rows db-apply refused"] == 1
+    assert any("dash" in row["reason"] for row in report["held"])
 
 
 def test_a_finished_row_keeps_its_answers_and_the_plan_stays_appliable():

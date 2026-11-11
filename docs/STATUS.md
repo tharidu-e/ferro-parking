@@ -13,10 +13,11 @@ Historical documents remain available in Git history. Run evidence stays under `
 | Needs on-site check | 1,176 |
 | Active OSM-created records | 3,951 |
 
-The latest saved route is `route-20261111T211945Z`.
-Its 6,244 routed rows comprise 4,788 Grok, 866 no_evidence, 233 default,
-244 website reader and 113 station rows. 5,314 rows are skipped, of which 47
-are personal locks and 1,175 need an on-site check.
+The latest saved route is `route-20261111T212456Z`.
+Its 6,244 routed rows comprise 4,844 Grok, 866 no_evidence, 233 default,
+229 website reader and 57 station rows. 5,314 rows are skipped, of which 47
+are personal locks and 1,175 need an on-site check. The station count fell
+from 113, because 56 station pages state that the station has no parking.
 A filled verification result does not prove that every parking detail is known.
 For current counts, run the read-only example in README.md. Saved routing can lag behind data changes.
 
@@ -175,6 +176,7 @@ Every website reader plan is applied, each with its own undo. Use
 | nuffieldhealth.com | 15 | 6 | 108 | `apply-20261111T211935Z` |
 | www.lidl.co.uk | 25 | 0 | 0 | nothing to apply |
 | marksandspencer.com | 39 | 0 | 0 | 15 rows held |
+| station | 473 | 119 | 2,275 | `apply-20261111T212427Z` |
 
 No plan was refused. Each evidence row carries the quote, the page url, the
 retrieval time and the cached page hash, for the fields the page states only.
@@ -186,6 +188,30 @@ Conditional row. A guessed category invents identity, so run
 
 Lidl reads every page and writes nothing, which is correct. Its store pages
 list accessible bays and no car park.
+
+The station fetcher owns 473 rows: the 113 on the station stage and every Grok
+row that is a station. 138 pages resolved and 335 names did not. 56 rows read
+Can Park? No from the exact words "No parking spaces". 48 read Yes from a
+stated space count. No station row gained a price, a maximum stay or a Who Can
+Park, because the page does not carry them.
+
+19 station rows are reported for a person in
+`data/runs/2026-11-11_94/fetch_fill/held.csv`. Each is a finished row whose own
+text db-apply refuses. The causes are an en dash, a Decision Reason that names
+no route, and an Evidence Level the rules no longer list. One refused line
+blocks a whole plan, so the runner now reads its own plan back through
+db-apply's checks and drops such a row.
+
+The replay is `data/runs/2026-11-11_98/station_replay/`. The station fetcher
+read 104 frozen pages with the reference answers hidden and agreed with the
+reference on Can Park? for 104 of 104. Supported accuracy reads 0 percent of
+104, because a fresh replay has no attestation for its own answers until a
+reviewer reads them.
+
+A structural weakness to fix next: `validate_rows` sees only the plan's own
+columns, so a planner has to restate a row's existing values as context. That
+is why the rows above fail on text somebody else wrote. Pass the row to the validator as context. That
+removes the need for `CONTEXT_COLUMNS` and for the kept-back lines.
 
 ## Applied identity
 
