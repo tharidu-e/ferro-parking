@@ -612,8 +612,21 @@ def tower_hamlets(location=None):
     return rows
 
 
+ISLINGTON_URL = 'https://www.islington.gov.uk/parking/parking-restrictions/why-we-enforce-parking'
+
+
+def islington(location=None):
+    """Read the council's explicit three-site enforcement inventory."""
+    text = _plain_text(read_input(location or ISLINGTON_URL))
+    sites = re.search(r'The Council enforces three off-street car parks\. They are located at the '
+                      r'(.+?) at the junction of .+?, The (.+?) off .+? and the (.+?) on .+?\.', text)
+    if not sites:
+        raise ValueError('Islington page has no complete three-site enforcement inventory')
+    return [_inventory_identity(name, ISLINGTON_URL, sites[0]) for name in sites.groups()]
+
+
 ADAPTERS = {'generic': generic, 'city-of-london': city_of_london,
             'barnet': barnet, 'hillingdon': hillingdon, 'bromley': bromley,
             'hounslow': hounslow, 'havering': havering, 'bexley': bexley,
             'croydon': croydon, 'greenwich': greenwich, 'redbridge': redbridge,
-            'waltham-forest': waltham_forest, 'newham': newham, 'richmond-upon-thames': richmond_upon_thames, 'ealing': ealing, 'merton': merton, 'harrow': harrow, 'southwark': southwark, 'kingston-upon-thames': kingston_upon_thames, 'haringey': haringey, 'hackney': hackney, 'brent': brent, 'tower-hamlets': tower_hamlets}
+            'waltham-forest': waltham_forest, 'newham': newham, 'richmond-upon-thames': richmond_upon_thames, 'ealing': ealing, 'merton': merton, 'harrow': harrow, 'southwark': southwark, 'kingston-upon-thames': kingston_upon_thames, 'haringey': haringey, 'hackney': hackney, 'brent': brent, 'tower-hamlets': tower_hamlets, 'islington': islington}

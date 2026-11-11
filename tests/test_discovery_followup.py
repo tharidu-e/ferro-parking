@@ -586,3 +586,14 @@ def test_tower_hamlets_expands_off_street_group_and_ignores_zone_tables(tmp_path
     rows = tower_hamlets(path)
     assert [r['name'] for r in rows] == ['John Orwell', 'Haverfield Road', 'Victoria Park', 'Roman Road Car Park']
     assert all(r['tariff'] == '' for r in rows)
+
+
+def test_islington_requires_full_three_site_statement(tmp_path):
+    from ferro_parking.sources import islington
+    path = tmp_path / 'islington.html'
+    path.write_text('The Council enforces three off-street car parks. They are located at the Sobell Leisure Centre at the junction of Isledon and Hornsey Road, The Islington Tennis Centre off Market Road and the RSPCA Harmsworth Animal Hospital on Sonderburg Road.')
+    rows = islington(path)
+    assert [r['name'] for r in rows] == ['Sobell Leisure Centre', 'Islington Tennis Centre', 'RSPCA Harmsworth Animal Hospital']
+    path.write_text('You can pay at Sobell and Sonderburg car parks.')
+    with pytest.raises(ValueError, match='complete three-site'):
+        islington(path)
