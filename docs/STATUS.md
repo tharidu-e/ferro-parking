@@ -74,6 +74,7 @@ Greenwich creation added two identity-only records; no Sheet changes were made.
 | Waltham Forest | Council grouped site headings | 11 | 11 | 0 | 129 |
 | Newham | Five areas, eight site pages | 8 | 8 | 0 | 134 |
 | Richmond upon Thames | All 11 council area lists | 25 | 25 | 0 | 116 |
+| Ealing | Official PDF dated 12 Dec 2024 | 18 dated | 18 | 0 in dated list | 112 |
 | City of London | COMPASS layer 2 | 5 | 5 | 0 | 6 |
 
 Discovery uses current database rows and cached borough polygons. A shared
@@ -97,6 +98,8 @@ refresh resolves all 21 region exceptions by exact site-name review: `data/runs/
 
 Download batch: 18 of 25 pages saved under `data/raw/2026-11-11_112/official_lists/`;
 seven failed. Manifest: `data/runs/2026-11-11_112/official_downloads/download_results.json`.
+Ealing: 18 dated inventory sites held; current completeness unproven. Two
+closure markers are preserved without retirement. Review: `data/runs/2026-11-11_130/coverage_ealing/`.
 Richmond: all 11 areas, 25 reviewed names, gap zero. Review: `data/runs/2026-11-11_128/coverage_richmond/`.
 Newham: eight reviewed site names across all five areas, gap zero. Review: `data/runs/2026-11-11_126/coverage_newham/`.
 Waltham Forest: 11 reviewed site names, gap zero. Review: `data/runs/2026-11-11_124/coverage_waltham_forest/`.
@@ -110,7 +113,6 @@ Counts remain unknown until reviewed. These links are download requests only.
 
 - Enfield: [Car parks](https://www.enfield.gov.uk/services/parking/car-parks), including the map data; HTTP 403 here.
 - Sutton: [Car parks](https://www.sutton.gov.uk/streets-transport-and-parking/parking/car-parks), plus linked site lists.
-- Ealing: [Car parks in the borough](https://www.ealing.gov.uk/downloads/download/580/car_parks_in_the_borough), plus the linked charges/spaces list.
 - Merton: [Parking charges](https://www.merton.gov.uk/streets-parking-transport/parking/charges), including the council car park table.
 - Harrow: [Council car parks](https://www.harrow.gov.uk/parking-permits/council-car-parks-street-parking).
 - Tower Hamlets: [Cashless parking](https://www.towerhamlets.gov.uk/FAQs/Parking-Charges/Cashless-parking.aspx), plus a complete current off-street list; this FAQ alone is not a denominator.

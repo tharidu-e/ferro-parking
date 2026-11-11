@@ -498,3 +498,13 @@ def test_richmond_reads_all_areas_and_excludes_tariffs_and_contact_sections(tmp_
     (tmp_path / 'richmond-upon-thames-ham_area_car_parks.html').write_text('<h2>Ham Street</h2><p>Postcode: TW10 7RS Map: Ham Street car park Tariffs: Free</p><h2>Contact us</h2><p>Town Hall</p>')
     row = richmond_upon_thames(path)[0]
     assert (row['name'], row['postcode'], row['tariff']) == ('Ham Street', 'TW10 7RS', '')
+
+
+def test_ealing_keeps_free_inventory_site_and_closed_marker_without_parking_answers(tmp_path):
+    from ferro_parking.sources import ealing
+    path = tmp_path / 'layout.txt'
+    path.write_text('FEES AND CHARGES FOR OFF-STREET CAR PARKS\nWE03 Singapore Road - Surface\nEmission based Rates - Table 2a\nDean Gardens Car Park *      37217      Hourly rate 4\nArden Road Car Park          37218      Hourly rate 4\nVersion 34_A Updated: 12/12/2024\n')
+    rows = ealing(path)
+    assert [r['name'] for r in rows] == ['Dean Gardens Car Park', 'Arden Road Car Park', 'Singapore Road Car Park']
+    assert rows[0]['source_closed'] is True
+    assert all(r['source_period'] == '12/12/2024' and r['tariff'] == r['lat'] == '' for r in rows)

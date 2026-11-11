@@ -4,6 +4,7 @@ import io
 from html import unescape
 import json
 import re
+import subprocess
 from pathlib import Path
 from urllib.parse import unquote_plus
 from urllib.request import Request, urlopen
@@ -391,8 +392,51 @@ def richmond_upon_thames(location=None):
     return rows
 
 
+EALING_URL = 'https://www.ealing.gov.uk/download/downloads/id/5404/car_park_charges_spaces_and_opening_times.pdf'
+
+
+def ealing(location=None):
+    """Read the dated official PDF, or its pdftotext -layout output, as identity only."""
+    if not location or str(location).startswith(('http://', 'https://')):
+        raise ValueError('Ealing requires a local PDF or layout-preserved text file')
+    if Path(location).suffix.lower() == '.pdf':
+        try:
+            raw = subprocess.run(['pdftotext', '-layout', str(location), '-'],
+                                 check=True, capture_output=True, text=True).stdout
+        except (FileNotFoundError, subprocess.CalledProcessError) as exc:
+            raise ValueError('Ealing PDF needs pdftotext -layout; a saved text extract is also accepted') from exc
+    else:
+        raw = read_input(location)
+    marker = 'Emission based Rates - Table 2a'
+    if 'FEES AND CHARGES FOR OFF-STREET CAR PARKS' not in raw or marker not in raw:
+        raise ValueError('Ealing input is not the official off-street inventory layout')
+    table = raw.split(marker, 1)[1].split('Version ', 1)[0]
+    rows = []
+    for line in table.splitlines():
+        match = re.match(r'^\s*(\S.*?)\s{2,}(\d{5})(?:\s|$)', line)
+        if not match:
+            continue
+        name = match[1].strip().removesuffix('*').strip()
+        row = _inventory_identity(name, EALING_URL, line.strip())
+        row['location_code'] = match[2]
+        row['source_closed'] = match[1].strip().endswith('*')
+        rows.append(row)
+    # This disabled-only site is in the main inventory but has no paid tariff code.
+    if re.search(r'\bWE03\s+Singapore Road', raw):
+        row = _inventory_identity('Singapore Road Car Park', EALING_URL, 'WE03 Singapore Road - Surface')
+        row['location_code'] = 'WE03'
+        row['source_closed'] = False
+        rows.append(row)
+    if not rows or len({r['location_code'] for r in rows}) != len(rows):
+        raise ValueError('Ealing inventory is empty or repeats a site code')
+    updated = re.search(r'Updated:\s*(\d{2}/\d{2}/\d{4})', raw)
+    for row in rows:
+        row['source_period'] = updated[1] if updated else 'Not stated'
+    return rows
+
+
 ADAPTERS = {'generic': generic, 'city-of-london': city_of_london,
             'barnet': barnet, 'hillingdon': hillingdon, 'bromley': bromley,
             'hounslow': hounslow, 'havering': havering, 'bexley': bexley,
             'croydon': croydon, 'greenwich': greenwich, 'redbridge': redbridge,
-            'waltham-forest': waltham_forest, 'newham': newham, 'richmond-upon-thames': richmond_upon_thames}
+            'waltham-forest': waltham_forest, 'newham': newham, 'richmond-upon-thames': richmond_upon_thames, 'ealing': ealing}
