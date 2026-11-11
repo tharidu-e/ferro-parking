@@ -141,6 +141,20 @@ Greenwich is the next borough after this decision.
 No OSM fallback is applied until absence of a machine-readable list is established.
 No commits until the coverage task is finished, as requested by the owner.
 
+## Grok hand-off
+
+The queue is `data/runs/2026-11-11_48/grok_queue/grok_queue.csv`, 4,807 rows
+in the bot's own tab layout. Run the bot over that file outside this project
+and put the results CSV in `data/raw/`.
+
+Ferro Autopay and Parking Charge are blank on all 4,807 rows. The Row column
+is blank on the 3,936 rows that exist only in the database, and holds a sheet
+row number on the other 871. No created record carries a row number.
+
+No results CSV is in `data/raw/` yet, so `grok-import` has not run and there
+are no mapped, rejected or skipped counts to report. Nothing from the bot will
+be applied.
+
 ## Applied research
 
 The Asda plan is applied, with the owner's approval. The run is
