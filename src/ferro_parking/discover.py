@@ -240,19 +240,48 @@ def run(source_rows, sheet_rows, output, london_filter):
     return summary
 
 
+def existing_rows(sheet_csv=None, db_path=None):
+    """The places to deduplicate against.
+
+    The database by default, because it holds every sheet row and also the
+    car parks the project created itself. A sheet export holds only the sheet
+    rows, so deduplicating against one cannot see a created record and would
+    add a car park the database already holds. create.check_plan reads the
+    database for the same reason, and both guards have to see the same world.
+    """
+    if sheet_csv:
+        with open(sheet_csv, newline='', encoding='utf-8-sig') as stream:
+            return list(csv.DictReader(stream)), f'sheet export {sheet_csv}'
+    from . import db
+    path = db_path or db.DB_PATH
+    conn = db.connect(path)
+    try:
+        _, rows = db.current_rows(conn)
+    finally:
+        conn.close()
+    if not rows:
+        raise ValueError(f'nothing imported into {path}: run db-import first')
+    return rows, f'database {path}'
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source', required=True, choices=ADAPTERS)
     parser.add_argument('--input')
-    parser.add_argument('--sheet-csv', required=True)
+    parser.add_argument('--sheet-csv', default=None,
+                        help='deduplicate against this sheet export instead of '
+                             'the database. The export cannot see a created '
+                             'record, so prefer the database')
+    parser.add_argument('--db', default=None)
     parser.add_argument('--out')
     parser.add_argument('--cache', default='data/cache/postcodes')
     args = parser.parse_args(argv)
     if args.source == 'generic' and not args.input:
         parser.error('--source generic requires --input')
     sources = ADAPTERS[args.source](args.input)
-    with open(args.sheet_csv, newline='', encoding='utf-8-sig') as stream:
-        sheet = list(csv.DictReader(stream))
+    sheet, against = existing_rows(args.sheet_csv, args.db)
+    print(f'deduplicating {len(sources)} source rows against {len(sheet)} '
+          f'places from the {against}')
     output = reserve_output(args.out) if args.out else new_run_dir('discover')
     print(json.dumps(run(sources, sheet, output, LondonFilter(args.cache)), indent=2))
     print(f'Outputs: {output}')

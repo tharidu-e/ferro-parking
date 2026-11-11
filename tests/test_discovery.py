@@ -332,3 +332,59 @@ def test_other_category_never_counted_as_missing(tmp_path):
     result = d.run(str(FIX / "discovery_sample.osm"), str(FIX / "discovery_sample_rows.csv"),
                     tmp_path / "results", categories=CATEGORIES)
     assert "other" not in [r["Category"] for r in result["summary_rows"]]
+
+
+# ---------------------------------------------------------- the dedupe source
+
+def test_discover_deduplicates_against_the_database_by_default(tmp_path):
+    """A sheet export cannot see a created record, so deduplicating against one
+    would add a car park the database already holds. That is the defect that
+    produced 446 duplicates on 10 November 2026."""
+    from pathlib import Path
+    from ferro_parking import create, db, discover
+
+    path = tmp_path / "ferro.sqlite"
+    conn = db.connect(path)
+    db.import_sheet_csv(conn, Path(__file__).parent / "fixtures" / "db_sheet_sample.csv")
+    created = create.apply_plan(conn, [{
+        "source": "osm", "source_ref": "way/4242",
+        "row": {"Location Name": "Riverside Wharf Car Park",
+                "Place Category": "Council car park", "Borough": "Sutton",
+                "Latitude": "51.300000", "Longitude": "-0.300000",
+                "Geo Source": "OpenStreetMap", "Geo Precision": "Polygon centroid",
+                "Captured By": "OSM discovery", "Date Captured": "2026-11-11",
+                "Source URLs (primary first)": "https://www.openstreetmap.org/way/4242",
+                "OSM ID": "way/4242", "Notes": "OSM tags: access=yes."}}],
+        "create-test", apply=True)
+    assert created["created"] == 1
+    conn.close()
+
+    rows, against = discover.existing_rows(db_path=path)
+    assert "database" in against
+    names = {str(row.get("Location Name") or "") for row in rows}
+    assert "Riverside Wharf Car Park" in names
+
+    # A council list naming the same car park must match it, not add it again.
+    council = {"name": "Riverside Wharf Car Park", "lat": "51.300000",
+               "lon": "-0.300000", "postcode": "", "address": "", "url": "",
+               "tariff": "", "hours": "", "max_stay": "", "brand": ""}
+    hits, reason = discover.dedupe(council, rows)
+    assert len(hits) == 1
+    assert hits[0]["Location Name"] == "Riverside Wharf Car Park"
+    assert reason
+
+    export = tmp_path / "sheet.csv"
+    db.export_csv(db.connect(path), export)
+    sheet_rows, sheet_against = discover.existing_rows(sheet_csv=export)
+    assert "sheet export" in sheet_against
+    assert len(sheet_rows) == len(rows)
+
+
+def test_an_empty_database_is_refused_rather_than_deduplicating_against_nothing(tmp_path):
+    from ferro_parking import db, discover
+    import pytest as _pytest
+
+    path = tmp_path / "empty.sqlite"
+    db.connect(path).close()
+    with _pytest.raises(ValueError, match="run db-import first"):
+        discover.existing_rows(db_path=path)
