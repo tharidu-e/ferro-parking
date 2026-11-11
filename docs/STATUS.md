@@ -77,6 +77,7 @@ Greenwich creation added two identity-only records; no Sheet changes were made.
 | Ealing | Official PDF dated 12 Dec 2024 | 18 dated | 18 | 0 in dated list | 112 |
 | Merton | Council site-by-area table | 13 | 13 | 0 | 110 |
 | Harrow | Named council car park sections | 14 | 14 | 0 | 101 |
+| Southwark | Two paid council sites only | 2 scoped | 2 | 0 in scoped list | 83 |
 | City of London | COMPASS layer 2 | 5 | 5 | 0 | 6 |
 
 Discovery uses current database rows and cached borough polygons. A shared
@@ -100,6 +101,8 @@ refresh resolves all 21 region exceptions by exact site-name review: `data/runs/
 
 Download batch: 18 of 25 pages saved under `data/raw/2026-11-11_112/official_lists/`;
 seven failed. Manifest: `data/runs/2026-11-11_112/official_downloads/download_results.json`.
+Southwark: both paid-inventory sites held; park facilities remain outside this
+list. Review: `data/runs/2026-11-11_136/coverage_southwark/`.
 Harrow: 14 reviewed site names, gap zero. Review: `data/runs/2026-11-11_134/coverage_harrow/`.
 Merton: 13 reviewed site names, gap zero. Review: `data/runs/2026-11-11_132/coverage_merton/`.
 Ealing: 18 dated inventory sites held; current completeness unproven. Two
@@ -120,7 +123,7 @@ Counts remain unknown until reviewed. These links are download requests only.
 - Tower Hamlets: [Cashless parking](https://www.towerhamlets.gov.uk/FAQs/Parking-Charges/Cashless-parking.aspx), plus a complete current off-street list; this FAQ alone is not a denominator.
 - Brent: [Public car parks](https://brent.gov.uk/parking-roads-and-travel/parking/where-you-can-park/car-parks).
 - Barking and Dagenham: [Parking index](https://www.lbbd.gov.uk/parking), plus the linked current car park inventory; index is blocked here.
-- Southwark: [Car parks](https://www.southwark.gov.uk/parking-streets-and-transport/parking/places-park/car-parks), plus linked park car park lists.
+- Southwark parks: separate park car park inventory still needed; the imported pay-to-park list explicitly excludes these facilities.
 - Lewisham: [Council-managed car parks](https://lewisham.gov.uk/myservices/parking/carparks/car-parks-managed-by-the-council).
 - Kingston upon Thames: [Car parks](https://www.kingston.gov.uk/parking/car-parks), plus site pages.
 - Wandsworth: [Parking tariffs](https://www.wandsworth.gov.uk/parking/parking-bays/paying-to-park/parking-tariffs/), including the car park section.

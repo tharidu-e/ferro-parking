@@ -472,8 +472,31 @@ def harrow(location=None):
     return rows
 
 
+def _accordion_sections(raw):
+    headings = list(re.finditer(r'<h3\b[^>]*>(.*?)</h3>', raw, re.S))
+    for index, heading in enumerate(headings):
+        label = re.search(r'<span class="accordion-pane__heading">(.*?)</span>', heading[1], re.S)
+        if label:
+            end = headings[index + 1].start() if index + 1 < len(headings) else len(raw)
+            yield _plain_text(label[1]), raw[heading.end():end]
+
+
+SOUTHWARK_URL = 'https://www.southwark.gov.uk/parking-streets-and-transport/parking/places-park/car-parks'
+
+
+def southwark(location=None):
+    """The named pay-to-park inventory only; park facilities have separate scope."""
+    raw = read_input(location or SOUTHWARK_URL)
+    rows = [_inventory_identity(name, SOUTHWARK_URL, _plain_text(body))
+            for name, body in _accordion_sections(raw) if name.lower().endswith('car park')]
+    count = re.search(r'We run (\d+) car parks', _plain_text(raw))
+    if not rows or not count or len(rows) != int(count[1]):
+        raise ValueError('Southwark named list does not match its published count')
+    return rows
+
+
 ADAPTERS = {'generic': generic, 'city-of-london': city_of_london,
             'barnet': barnet, 'hillingdon': hillingdon, 'bromley': bromley,
             'hounslow': hounslow, 'havering': havering, 'bexley': bexley,
             'croydon': croydon, 'greenwich': greenwich, 'redbridge': redbridge,
-            'waltham-forest': waltham_forest, 'newham': newham, 'richmond-upon-thames': richmond_upon_thames, 'ealing': ealing, 'merton': merton, 'harrow': harrow}
+            'waltham-forest': waltham_forest, 'newham': newham, 'richmond-upon-thames': richmond_upon_thames, 'ealing': ealing, 'merton': merton, 'harrow': harrow, 'southwark': southwark}

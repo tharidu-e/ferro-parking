@@ -528,3 +528,12 @@ def test_harrow_requires_site_fields_and_keeps_free_period_out_of_answers(tmp_pa
     assert len(rows) == 1
     assert (rows[0]['name'], rows[0]['postcode']) == ('Greenhill Way', 'HA1 1LD')
     assert rows[0]['tariff'] == rows[0]['max_stay'] == ''
+
+
+def test_southwark_counts_heading_once_and_excludes_season_ticket_section(tmp_path):
+    from ferro_parking.sources import southwark
+    path = tmp_path / 'southwark.html'
+    path.write_text('<p>We run 1 car parks</p><h3><span class="accordion-pane__heading">Choumert Grove car park</span><button hidden>Choumert Grove car park</button></h3><p>London SE15 4RB</p><h3><span class="accordion-pane__heading">Car park season tickets</span></h3><p>Monthly</p>')
+    rows = southwark(path)
+    assert len(rows) == 1
+    assert rows[0]['postcode'] == 'SE15 4RB'
