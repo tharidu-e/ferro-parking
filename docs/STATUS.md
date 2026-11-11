@@ -70,7 +70,7 @@ and passed with `--input`.
 |---|---|---:|---:|---|---:|
 | Barnet | Current page blocked | Unknown | Unknown | Unknown | 375 |
 | Hillingdon | Council point layer 3 | 28 | 24 | 4 held | 259 |
-| Bromley | Council directory | 30 | 30 | 0 | 254 |
+| Bromley | 30 saved official site pages | 30 | 30 | 0 | 254 |
 | Hounslow | Council area lists | 21 | 21 by name | 0 by name | 229 |
 | Enfield | Not imported | Unknown | Unknown | Unknown | 209 |
 | Havering | Council car park links | 24 | 24 by name | 0 by name | 204 |
@@ -108,8 +108,8 @@ not brand counts or a Sheet export. Snapshot:
 Official inventories cover their stated council lists, not every private site.
 Unknown is not zero. OSM-derived identities do not establish parking permission.
 
-Bromley reimport: 30 per-car-park pages, 30 reviewed existing sites, zero
-exceptions or gaps. Review: `data/runs/2026-11-11_73/coverage_bromley/`.
+Bromley reimport `2026-11-11_72`: 30 per-car-park pages, 30 reviewed existing
+sites, zero exceptions or gaps. No database or Sheet changes. Review: `data/runs/2026-11-11_73/coverage_bromley/`.
 
 Bexley reimport: all 19 region exceptions resolved by exact site-name and
 borough review against PP-000105 to PP-000123. No place needs creation or a
