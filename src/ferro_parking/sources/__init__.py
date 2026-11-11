@@ -539,8 +539,31 @@ def haringey(location=None):
     return rows
 
 
+HACKNEY_URL = 'https://www.hackney.gov.uk/parking-streets-and-transport/where-park/council-car-parks'
+
+
+def hackney(location=None):
+    """Read exact council site headings and retain named closure notices as holds."""
+    sections = [body for title, body in _heading_sections(read_input(location or HACKNEY_URL), 2)
+                if title == 'Car parks and prices']
+    if len(sections) != 1:
+        raise ValueError('Hackney page has no council car park inventory')
+    raw = sections[0]
+    rows = [_inventory_identity(name, HACKNEY_URL, _plain_text(body))
+            for name, body in _accordion_sections(raw)]
+    for paragraph in re.findall(r'<p\b[^>]*>(.*?)</p>', raw, re.S):
+        notice = re.fullmatch(r'(.+? car park) is currently closed\.', _plain_text(paragraph), re.I)
+        if notice:
+            row = _inventory_identity(notice[1], HACKNEY_URL, _plain_text(paragraph))
+            row['source_closed'] = True
+            rows.append(row)
+    if not rows or len({r['name'].casefold() for r in rows}) != len(rows):
+        raise ValueError('Hackney inventory is empty or repeats a site name')
+    return rows
+
+
 ADAPTERS = {'generic': generic, 'city-of-london': city_of_london,
             'barnet': barnet, 'hillingdon': hillingdon, 'bromley': bromley,
             'hounslow': hounslow, 'havering': havering, 'bexley': bexley,
             'croydon': croydon, 'greenwich': greenwich, 'redbridge': redbridge,
-            'waltham-forest': waltham_forest, 'newham': newham, 'richmond-upon-thames': richmond_upon_thames, 'ealing': ealing, 'merton': merton, 'harrow': harrow, 'southwark': southwark, 'kingston-upon-thames': kingston_upon_thames, 'haringey': haringey}
+            'waltham-forest': waltham_forest, 'newham': newham, 'richmond-upon-thames': richmond_upon_thames, 'ealing': ealing, 'merton': merton, 'harrow': harrow, 'southwark': southwark, 'kingston-upon-thames': kingston_upon_thames, 'haringey': haringey, 'hackney': hackney}

@@ -554,3 +554,13 @@ def test_haringey_keeps_separate_stoneleigh_car_parks(tmp_path):
     rows = haringey(path)
     assert [r['location_code'] for r in rows] == ['34525', '34526', '34528']
     assert rows[2]['name'].endswith('car park C')
+
+
+def test_hackney_keeps_named_closed_site_without_retiring_or_copying_terms(tmp_path):
+    from ferro_parking.sources import hackney
+    path = tmp_path / 'hackney.html'
+    path.write_text('<h2>Car parks and prices</h2><p>Amhurst Road car park is currently closed.</p><h3><span class="accordion-pane__heading">Bentley Road</span><button hidden>Bentley Road Show</button></h3><p>N1 4BY</p><h2>Safer car parks</h2><p>Other lists</p>')
+    rows = hackney(path)
+    assert [r['name'] for r in rows] == ['Bentley Road', 'Amhurst Road car park']
+    assert rows[-1]['source_closed'] is True
+    assert all(r['tariff'] == r['lat'] == '' for r in rows)

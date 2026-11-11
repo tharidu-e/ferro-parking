@@ -80,6 +80,7 @@ Greenwich creation added two identity-only records; no Sheet changes were made.
 | Southwark | Two paid council sites only | 2 scoped | 2 | 0 in scoped list | 83 |
 | Kingston upon Thames | Both council directory pages | 12 | 12 | 0 | 76 |
 | Haringey | Council RingGo site codes | 11 | 10 separate, C grouped | 1 mapping hold | 68 |
+| Hackney | Eight listed plus Amhurst closed notice | 9 named | 9 | 0 named sites | 35 |
 | City of London | COMPASS layer 2 | 5 | 5 | 0 | 6 |
 
 Discovery uses current database rows and cached borough polygons. A shared
@@ -103,6 +104,8 @@ refresh resolves all 21 region exceptions by exact site-name review: `data/runs/
 
 Download batch: 18 of 25 pages saved under `data/raw/2026-11-11_112/official_lists/`;
 seven failed. Manifest: `data/runs/2026-11-11_112/official_downloads/download_results.json`.
+Hackney: eight listed sites plus one named closed site held, no identity gap.
+No retirement. Review: `data/runs/2026-11-11_142/coverage_hackney/`.
 Haringey: ten separate sites held; Stoneleigh C appears only in grouped
 PP-000383. A and B have separate records. RingGo returned unrelated Westminster
 content, so no C pin was inferred. Review: `data/runs/2026-11-11_140/coverage_haringey/`.
@@ -136,7 +139,6 @@ Counts remain unknown until reviewed. These links are download requests only.
 - Camden: [Contract car parks](https://www.camden.gov.uk/contract-parking), plus a current public/off-street list; this page has limited scope.
 - Kensington and Chelsea: [Guide to parking](https://www.rbkc.gov.uk/parking-permissions/visitor-parking-and-pay-phone/guide-parking), plus linked off-street site pages.
 - Lambeth: [Council-owned car parks](https://www.lambeth.gov.uk/lambeth-data-hub/council-owned-car-parks), plus its linked inventory.
-- Hackney: [Council car parks](https://www.hackney.gov.uk/parking-streets-and-transport/where-park/council-car-parks).
 - Hammersmith and Fulham: [Parking index](https://www.lbhf.gov.uk/parking), plus linked car park pages; robot-check response here.
 - Islington: [Short-stay parking](https://www.islington.gov.uk/parking/where-to-park/pay-for-short-stay-parking), plus the current off-street list or annual report linked from Parking; the page alone is not a full inventory.
 
