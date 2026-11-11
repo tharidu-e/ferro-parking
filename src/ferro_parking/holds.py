@@ -668,7 +668,9 @@ def merge(cases, reviews_a, reviews_b):
     the case or judging a case they were never sent."""
     rows, counts = [], {
         "cases": len(cases), "carried through from the rules": 0,
-        "merged from the reviewers": 0, "reviewer rows not used": 0,
+        "merged from the reviewers": 0,
+        "attachment cases, a separate plan": 0,
+        "reviewer rows not used": 0,
     }
     for verdict in VERDICTS:
         counts[f"final {verdict}"] = 0
@@ -678,6 +680,13 @@ def merge(cases, reviews_a, reviews_b):
         if case.decided_by != NO_RULE:
             verdict, decided_by, evidence = case.verdict, case.decided_by, case.evidence
             counts["carried through from the rules"] += 1
+        elif case.question == ATTACHMENT:
+            verdict, decided_by = "unresolved", ATTACHMENT
+            evidence = ("this case asks whether an OpenStreetMap venue is the "
+                        "same business as a place the database holds, which "
+                        "attaches an identity to an existing row. It is not a "
+                        "creation question and no creation reviewer judged it.")
+            counts["attachment cases, a separate plan"] += 1
         else:
             verdict, evidence = merge_verdict(review_a, review_b)
             decided_by = BY_REVIEWERS

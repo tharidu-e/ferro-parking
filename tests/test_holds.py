@@ -497,6 +497,19 @@ def test_a_car_park_row_wins_when_two_files_name_one_candidate():
     assert holds.merge_cases([venue], [car_park])[0].question == holds.CREATION
 
 
+def test_the_merge_names_an_attachment_case_instead_of_blaming_a_reviewer():
+    """184 attachment cases reach no creation reviewer by design. Reporting
+    them as cases a reviewer skipped would read as 184 lost reviewer rows."""
+    case = a_case("node/6402222390", "Canary Wharf", question=holds.ATTACHMENT,
+                  verdict="unresolved", decided_by=holds.NO_RULE)
+    rows, counts = holds.merge([case], {}, {})
+    assert rows[0]["verdict"] == "unresolved"
+    assert rows[0]["decided_by"] == holds.ATTACHMENT
+    assert "not a creation question" in rows[0]["evidence"]
+    assert counts["attachment cases, a separate plan"] == 1
+    assert counts["merged from the reviewers"] == 0
+
+
 # ---------------------------------------------------------------- the outputs
 
 def test_a_review_batch_holds_no_verdict_and_no_hint(cases, tmp_path):
