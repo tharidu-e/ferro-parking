@@ -367,8 +367,32 @@ def newham(location=None):
     return rows
 
 
+RICHMOND_URL = 'https://www.richmond.gov.uk/car_parks'
+
+
+def richmond_upon_thames(location=None):
+    """Read every council area page linked by the saved complete index."""
+    if not location or str(location).startswith(('http://', 'https://')):
+        raise ValueError('Richmond requires a local index and all linked area pages')
+    links = dict.fromkeys(re.findall(r'href="(/services/parking/car_parks/([a-z_]+_area_car_parks))"', read_input(location)))
+    if not links:
+        raise ValueError('Richmond index has no area inventory links')
+    rows = []
+    for url, slug in links:
+        page = read_input(Path(location).parent / f'richmond-upon-thames-{slug}.html')
+        area = []
+        for title, body in _heading_sections(page, 2):
+            detail = _plain_text(body)
+            if 'Postcode:' in detail and 'Map:' in detail:
+                area.append(_inventory_identity(title, 'https://www.richmond.gov.uk' + url, detail))
+        if not area:
+            raise ValueError('Richmond area page has no readable site inventory')
+        rows.extend(area)
+    return rows
+
+
 ADAPTERS = {'generic': generic, 'city-of-london': city_of_london,
             'barnet': barnet, 'hillingdon': hillingdon, 'bromley': bromley,
             'hounslow': hounslow, 'havering': havering, 'bexley': bexley,
             'croydon': croydon, 'greenwich': greenwich, 'redbridge': redbridge,
-            'waltham-forest': waltham_forest, 'newham': newham}
+            'waltham-forest': waltham_forest, 'newham': newham, 'richmond-upon-thames': richmond_upon_thames}

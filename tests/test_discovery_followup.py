@@ -489,3 +489,12 @@ def test_newham_requires_linked_areas_and_reads_exact_site_page(tmp_path):
     row = newham(index)[0]
     assert (row['name'], row['postcode']) == ('Example', 'E6 1HZ')
     assert row['tariff'] == row['lat'] == ''
+
+
+def test_richmond_reads_all_areas_and_excludes_tariffs_and_contact_sections(tmp_path):
+    from ferro_parking.sources import richmond_upon_thames
+    path = tmp_path / 'index.html'
+    path.write_text('<a href="/services/parking/car_parks/ham_area_car_parks">Ham</a>')
+    (tmp_path / 'richmond-upon-thames-ham_area_car_parks.html').write_text('<h2>Ham Street</h2><p>Postcode: TW10 7RS Map: Ham Street car park Tariffs: Free</p><h2>Contact us</h2><p>Town Hall</p>')
+    row = richmond_upon_thames(path)[0]
+    assert (row['name'], row['postcode'], row['tariff']) == ('Ham Street', 'TW10 7RS', '')
