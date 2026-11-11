@@ -67,10 +67,10 @@ def rank_names(source, hits):
     return hits
 
 
-def dedupe(source, rows):
+def dedupe(source, rows, non_identifying_urls=frozenset()):
     """Prefer decisive stages; keep unresolved multi-hit evidence while trying later stages."""
     place_id = str(source.get('place_id') or source.get('Place ID') or '').strip()
-    urls = source_urls(source.get('url', ''))
+    urls = source_urls(source.get('url', '')) - non_identifying_urls
     postcode = normalize_postcode(source.get('postcode', ''))
     name = normalize_name(source.get('name', ''))
     street = normalize_name(source.get('address', ''))
@@ -181,12 +181,17 @@ def run(source_rows, sheet_rows, output, london_filter):
     candidates, matches, exceptions = [], [], []
     in_london = 0
     seen = []
+    # A feed URL shared by the whole import identifies the list, not a site.
+    # One row alone cannot establish that a URL is shared.
+    non_identifying_urls = (set.intersection(*(source_urls(row.get('url', ''))
+                                             for row in source_rows))
+                            if len(source_rows) > 1 else set())
     for source, region in london_filter.classify(source_rows):
         if region != 'London':
             exceptions.append({'name': source.get('name', ''), 'reason': 'Outside London' if region else 'London region unresolved', 'source': json.dumps(source)})
             continue
         in_london += 1
-        hits, reason = dedupe(source, sheet_rows)
+        hits, reason = dedupe(source, sheet_rows, non_identifying_urls)
         if len(hits) > 1:
             exceptions.append({'name': source['name'], 'reason': f'Ambiguous {reason}', 'source': json.dumps(source)})
             continue
@@ -224,7 +229,7 @@ def run(source_rows, sheet_rows, output, london_filter):
                             'improvements': json.dumps(improvements), 'flags': row['flags'], 'source': json.dumps(source)})
         else:
             # Compare later listings against earlier new candidates as well as the sheet.
-            duplicate, method = dedupe(source, seen)
+            duplicate, method = dedupe(source, seen, non_identifying_urls)
             if duplicate:
                 exceptions.append({'name': source['name'], 'reason': f'Duplicate source listing: {method}', 'source': json.dumps(source)})
                 continue

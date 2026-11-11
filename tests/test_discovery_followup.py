@@ -246,3 +246,181 @@ def test_unique_strong_fuzzy_name_can_win():
     hits,method=discover.dedupe(src,[other,target])
     assert hits==[target]
     assert method=='postcode+name'
+
+
+def test_shared_city_feed_url_does_not_identify_minories(tmp_path):
+    """Regression for 2026-11-11_17/discover/exceptions.csv."""
+    from ferro_parking.sources import CITY_URL
+    minories = source(name='The Minories, Mansell Street', address='', postcode='',
+                      lat='51.510314495818264', lon='-0.07308898555678242',
+                      url=CITY_URL)
+    other = source(name='Baynard House, Queen Victoria Street', address='', postcode='',
+                   lat='51.511871776333777', lon='-0.10059747965261778', url=CITY_URL)
+    # Two unrelated records carry the feed URL. Neither is Minories.
+    unrelated = [sheet(**{'Place ID': f'PP-{index}', 'Location Name': name,
+                         'Postcode': '', 'Latitude': '51.6', 'Longitude': '0',
+                         'Source URLs (primary first)': CITY_URL})
+                 for index, name in enumerate(['London Wall', 'Smithfield'])]
+    target = sheet(**{'Place ID': 'PP-000194', 'Location Name': 'Minories Car Park',
+                      'Postcode': '', 'Latitude': minories['lat'],
+                      'Longitude': minories['lon'], 'Source URLs (primary first)': ''})
+    # With no nearby target, the old URL stage returned the saved ambiguity.
+    old_hits, old_method = discover.dedupe(minories, unrelated)
+    assert len(old_hits) == 2
+    assert old_method == 'Source URL'
+    result = discover.run([minories, other], unrelated + [target], tmp_path, London())
+    assert (result['matched'], result['new'], result['exceptions']) == (1, 1, 0)
+    with (tmp_path / 'matches.csv').open() as stream:
+        match = next(csv.DictReader(stream))
+    assert (match['Place ID'], match['method']) == ('PP-000194', 'pin within 50 m')
+    assert json.loads(match['source'])['url'] == CITY_URL
+
+
+def test_shared_feed_url_does_not_merge_distinct_new_listings(tmp_path):
+    rows = [source(name='North Car Park', postcode='', address=''),
+            source(name='South Car Park', postcode='', address='', lat='51.6')]
+    result = discover.run(rows, [], tmp_path, London())
+    assert (result['new'], result['exceptions']) == (2, 0)
+
+
+def test_single_listing_retains_source_url_match(tmp_path):
+    result = discover.run([source(postcode='', lat='', lon='')], [sheet()], tmp_path, London())
+    assert result['matched'] == 1
+    with (tmp_path / 'matches.csv').open() as stream:
+        assert next(csv.DictReader(stream))['method'] == 'Source URL'
+
+
+def test_barnet_historical_csv_preserves_names_without_parking_claims(tmp_path):
+    from ferro_parking.sources import barnet
+    path = tmp_path / 'barnet.csv'
+    path.write_text('Car Park,Type,Number of Free Parking Spaces \n Church Hill Road Car park ,Free Off Street Parking,68\n')
+    row = barnet(path)[0]
+    assert row['name'] == 'Church Hill Road Car park'
+    assert row['source_period'] == '2014-12'
+    assert row['official'] is True
+    assert all(row[key] == '' for key in ('lat', 'lon', 'tariff', 'hours', 'max_stay'))
+    assert discover.draft(row)[fill.CAN_PARK] == 'Unknown'
+
+
+@pytest.mark.parametrize('text', ['name,Type\nExample,Free\n', 'Car Park,Type\n,Free\n'])
+def test_barnet_rejects_wrong_header_or_blank_name(text, tmp_path):
+    from ferro_parking.sources import barnet
+    path = tmp_path / 'barnet.csv'
+    path.write_text(text)
+    with pytest.raises(ValueError, match='Barnet CSV'):
+        barnet(path)
+
+
+def test_hillingdon_point_inventory_is_identity_only(tmp_path):
+    from ferro_parking.sources import hillingdon
+    path = tmp_path / 'points.geojson'
+    path.write_text(json.dumps({'crs': {'properties': {'name': 'EPSG:4326'}},
+                               'features': [{'properties': {'CAR_PARK': 'Cedars', 'POSTCODE': 'UB8 1ND',
+                                                            'PRICES': 'free', 'MAX_STAY': '4 hours'},
+                                             'geometry': {'type': 'Point', 'coordinates': [-0.48, 51.54]}}]}))
+    row = hillingdon(path)[0]
+    assert (row['name'], row['lat'], row['lon'], row['postcode']) == ('Cedars', '51.54', '-0.48', 'UB8 1ND')
+    assert all(row[key] == '' for key in ('tariff', 'hours', 'max_stay'))
+
+
+@pytest.mark.parametrize('change', [{'error': {'message': 'bad'}}, {'exceededTransferLimit': True},
+                                   {'crs': {'properties': {'name': 'EPSG:27700'}}},
+                                   {'features': [{'properties': {'CAR_PARK': 'A'},
+                                                  'geometry': {'type': 'Polygon'}}]}])
+def test_hillingdon_rejects_failed_truncated_or_wrong_geometry(change, tmp_path):
+    from ferro_parking.sources import hillingdon
+    path = tmp_path / 'points.geojson'
+    path.write_text(json.dumps(change))
+    with pytest.raises(ValueError):
+        hillingdon(path)
+
+
+def test_bromley_reads_local_search_and_entry_pins(tmp_path):
+    from ferro_parking.sources import bromley
+    search = tmp_path / 'search.html'
+    search.write_text('<a class="list__link" href="/directory-record/152/example"><span class="list__link-text">Example &amp; Park</span></a>')
+    (tmp_path / 'bromley_car_park_152.html').write_text('<input id="map_marker_location_59" value="51.42,0.018">')
+    row = bromley(search)[0]
+    assert (row['name'], row['lat'], row['lon']) == ('Example & Park', '51.42', '0.018')
+    assert row['url'] == 'https://www.bromley.gov.uk/directory-record/152/example'
+    assert all(row[key] == '' for key in ('tariff', 'hours', 'max_stay'))
+
+
+@pytest.mark.parametrize('case', ['missing', 'challenge', 'paginated'])
+def test_bromley_refuses_incomplete_entry_downloads(tmp_path, case):
+    from ferro_parking.sources import bromley
+    search = tmp_path / 'search.html'
+    text = '<a class="list__link" href="/directory-record/152/example"><span class="list__link-text">Example</span></a>'
+    if case == 'paginated':
+        text += '<nav class="pagination">Next</nav>'
+    search.write_text(text)
+    if case == 'challenge':
+        (tmp_path / 'bromley_car_park_152.html').write_text('Pardon Our Interruption')
+    with pytest.raises((ValueError, FileNotFoundError)):
+        bromley(search)
+
+
+def test_hounslow_excludes_street_bays_and_payment_trial_lists(tmp_path):
+    from ferro_parking.sources import hounslow
+    path = tmp_path / 'hounslow.html'
+    path.write_text(''.join(f'<h4>Car parks</h4><ul><li>Park {i}</li></ul><h4>30 minutes free</h4><ul><li>Street bay</li></ul>' for i in range(5)) + '<h5>Car parks</h5><ul><li>Repeated trial site</li></ul>')
+    rows = hounslow(path)
+    assert [r['name'] for r in rows] == [f'Park {i}' for i in range(5)]
+    assert all(r['lat'] == r['lon'] == r['tariff'] == '' for r in rows)
+
+
+def test_hounslow_refuses_partial_or_challenge_page(tmp_path):
+    from ferro_parking.sources import hounslow
+    path = tmp_path / 'hounslow.html'
+    path.write_text('<h4>Car parks</h4><ul><li>A</li></ul>')
+    with pytest.raises(ValueError, match='all five'):
+        hounslow(path)
+
+
+def test_havering_imports_only_car_park_links_without_map_centres(tmp_path):
+    from ferro_parking.sources import havering
+    path = tmp_path / 'havering.html'
+    path.write_text('<li><a href="https://www.havering.gov.uk/car-parks-1/rex-close-car-park">Rex Close Car Park</a></li><li><a href="/parking">Parking</a></li><iframe src="https://www.google.com/maps/embed?pb=!2d0.1!3d51.5"></iframe>')
+    rows = havering(path)
+    assert len(rows) == 1
+    assert rows[0]['name'] == 'Rex Close Car Park'
+    assert rows[0]['lat'] == rows[0]['lon'] == ''
+
+
+def test_bexley_excludes_on_street_sections_and_keeps_postcode(tmp_path):
+    from ferro_parking.sources import bexley
+    path = tmp_path / 'bexley.html'
+    path.write_text('<h4 class="field--name-field-item-title">Felixstowe Road car park</h4><li>postcode SE2 9RH</li><h3>On-street parking bays</h3><h4 class="field--name-field-item-title">Abbey Wood</h4>')
+    rows = bexley(path)
+    assert len(rows) == 1
+    assert rows[0]['postcode'] == 'SE2 9RH'
+    assert rows[0]['name'] == 'Felixstowe Road car park'
+
+
+def test_bexley_refuses_missing_section_boundary(tmp_path):
+    from ferro_parking.sources import bexley
+    path = tmp_path / 'bexley.html'
+    path.write_text('Pardon Our Interruption')
+    with pytest.raises(ValueError):
+        bexley(path)
+
+
+def test_croydon_uses_all_map_markers_despite_paginated_visible_list(tmp_path):
+    from ferro_parking.sources import croydon
+    path = tmp_path / 'croydon.html'
+    markers = [{'title': f'Park {i}', 'type': 'point', 'lat': 51.37, 'lon': -0.1,
+                'popup': {'value': f'<a href="/parking/find-council-car-parks-croydon/park-{i}">Park {i}</a>'}}
+               for i in range(2)]
+    data = {'leaflet': {'leaflet-map-view-localgov-directory-channel-embed-map': {'features': markers}}}
+    path.write_text('<nav class="pager">Next page</nav><script type="application/json" data-drupal-selector="drupal-settings-json">' + json.dumps(data) + '</script>')
+    rows = croydon(path)
+    assert [r['name'] for r in rows] == ['Park 0', 'Park 1']
+    assert all(r['lat'] == '51.37' and r['tariff'] == '' for r in rows)
+
+
+def test_croydon_refuses_missing_map(tmp_path):
+    from ferro_parking.sources import croydon
+    path = tmp_path / 'croydon.html'
+    path.write_text('No map')
+    with pytest.raises(ValueError):
+        croydon(path)
