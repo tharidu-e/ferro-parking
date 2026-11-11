@@ -1,6 +1,7 @@
 # Ferro parking: rules for every session
 
-- Read docs/HANDOVER.md and docs/PP_rules_and_pilot.md (rules R1-R10) before working.
+- Read EXECUTION_CHECKLIST.md and docs/PP_rules_and_pilot.md (rules R1-R10) before working. docs/HANDOVER.md is historical and pending approved deletion.
+- Read docs/MAP.md before writing a new module; reuse the owner listed there.
 - Never delete, overwrite or move anything under data/runs/. Run folders are append-only. If a folder exists, create a new one with a suffix (_2, _3). Never run rm -rf, rm -r, or any recursive delete anywhere in the project. Deleting any file needs Deshan's explicit approval in the chat.
 - Never write to the Google Sheet without a dry run, an undo file saved first, Verification Result written last, and an independent re-export compare afterwards. Stop everything on any mismatch.
 - Never edit protected columns (Postcode Area, Confidence (1-5), Free Stay Countdown (mins), Ferro Autopay, Parking Charge (£), Total incl. Ferro Fee (£), Captured By, Date Captured, Latitude, Longitude, Place ID, every "(as captured)" column, Charges (as published), Enforcement Details). Never write to the "ALL LONDON" tab. Never touch rows where Verified By is "Tharidu" (hand-checked). Report their issues instead.
