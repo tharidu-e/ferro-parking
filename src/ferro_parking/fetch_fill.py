@@ -2,13 +2,15 @@
 
     python -m ferro_parking fetch-fill --key station --limit 20
     python -m ferro_parking fetch-fill --key puregym.com
+    python -m ferro_parking fetch-fill --key storelocator.asda.com
     python -m ferro_parking fetch-fill --key marksandspencer.com   (cache only)
 
 A dry run. It fetches pages, writes nothing to the sheet, and writes no change
 to the database except the pages table, which is the page cache itself.
 
-The report counts rows attempted, pages fetched, plan lines, silent pages and
-blocked pages, and saves ten example rows with the quote and the URL.
+The report counts rows attempted, pages fetched, plan lines, silent pages,
+blocked pages, network requests, cache hits, failed requests and the measured
+pages per minute, and saves ten example rows with the quote and the URL.
 
 A row the fetcher cannot answer stays unanswered. The next route run sends it
 to the bot, or to no_evidence, by the ordinary rules.
@@ -16,23 +18,49 @@ to the bot, or to no_evidence, by the ordinary rules.
 import argparse
 import csv
 import json
+import time
 
 from . import db, fill, page_fill, plan as plan_mod
 from .fill import LOCATION_NAME, PLACE_ID
 from .run_paths import new_run_dir, reserve_output
 from .sources.fetch import fetch, looks_like_a_challenge
 from .sources.station import StationFetcher, station_slug
-from .sources.venue import VenueFetcher
+from .sources.venue import StoreFetcher, VenueFetcher, official_store_urls
 
 # Fetcher E is cache only: the pages are fetched so the evidence gate can read
 # them, and no value is ever written from them.
 CACHE_ONLY = {"marksandspencer.com"}
+
+# Brand store fetchers. The routing source key of these rows is
+# openstreetmap.org, because the identity match is their only source url, so
+# the fetcher owns them by Brand instead, the way the station fetcher owns the
+# station rows it finds on the grok stage. The key is the host whose pages it
+# reads, and it never follows a url on another host.
+BRAND_HOSTS = {
+    "storelocator.asda.com": "Asda",
+    "www.lidl.co.uk": "Lidl",
+}
+
+# Measured on 11 November 2026 and not built. A probe of each host is in
+# data/runs/2026-11-11_29/probe/. Registering one of these would move its rows
+# off the grok stage to a fetcher that can answer nothing.
+SKIPPED_HOSTS = {
+    "stores.sainsburys.co.uk":
+        "the store page answers 200 with 15 characters of text, because it "
+        "renders in the browser. The only parking text the brand publishes is "
+        "chain-wide: most car parks, two hours free, see the signs in store. "
+        "Rules R7, R9 and R10 refuse that for one store.",
+    "www.tesco.com":
+        "every request answers 403 Access Denied with a bot challenge, "
+        "including robots.txt. A challenge is recorded, never worked around.",
+}
 
 REGISTRY = {
     "station": StationFetcher(),
     "better.org.uk": VenueFetcher("better.org.uk"),
     "thegymgroup.com": VenueFetcher("thegymgroup.com"),
     "puregym.com": VenueFetcher("puregym.com"),
+    **{host: StoreFetcher(brand, host) for host, brand in BRAND_HOSTS.items()},
 }
 
 EXAMPLE_HEADERS = ["key", "Place ID", "Location Name", "url", "http status", "outcome",
@@ -54,6 +82,10 @@ BOOKKEEPING_COLUMNS = frozenset({
     "Flag Status", "Verification Result", "Change Made (Yes/No)",
     fill.VERIFIED_BY, fill.VERIFIED_DATE, fill.SOURCE_URLS,
 })
+
+# A value that asserts nothing. The page did not state it, so it carries no
+# quote either: "Cost Type: Unknown" means this reader did not find a price.
+ABSTENTIONS = frozenset({"Unknown", "Not published", "Not applicable", "Not yet checked"})
 
 
 def rows_for(conn, key, stage_keys=True):
@@ -78,6 +110,9 @@ def rows_for(conn, key, stage_keys=True):
                 out.append((row, stage))
         elif route.source_key(row) == key:
             out.append((row, stage))
+        elif key in BRAND_HOSTS and stage == "grok" and (
+                row.get("Brand") or "").strip() == BRAND_HOSTS[key]:
+            out.append((row, stage))
     return out, run_id
 
 
@@ -98,7 +133,11 @@ def plan_lines(place_id, stage, values, notes, flags, row, quote, url, verified_
                retrieved_at="", page_hash=""):
     """(lines, blocked_reason). fill-shaped values turned into plan lines, with
     Notes and Review Flag appended rather than replaced, exactly as page_fill
-    does it."""
+    does it.
+
+    The quote, the url and the page metadata go only to a column the fetcher
+    itself read from the page. page_fill derives further columns, and those are
+    this pipeline's own reasoning rather than anything the page stated."""
     extracted = dict(values)
     if notes:
         extracted["_notes"] = list(notes)
@@ -129,7 +168,8 @@ def plan_lines(place_id, stage, values, notes, flags, row, quote, url, verified_
         value = new[column]
         if value is None or str(value).strip() == "":
             continue
-        stated = column not in BOOKKEEPING_COLUMNS
+        stated = (column in values and column not in BOOKKEEPING_COLUMNS
+                  and str(value).strip() not in ABSTENTIONS)
         lines.append({"place_id": place_id, "column": column, "new_value": str(value),
                        "quote": quote if stated else "",
                        "source_url": url if stated else "",
@@ -161,7 +201,10 @@ def run(conn, key, limit=None, today=None, fetcher=None):
     lines, examples, unresolved, blocked_rows = [], [], [], []
     counts = {"rows attempted": 0, "pages fetched": 0, "plan lines": 0,
               "silent pages": 0, "blocked pages": 0, "unresolved names": 0,
-              "rows with values": 0, "rows held for a person": 0}
+              "rows with values": 0, "rows held for a person": 0,
+              "network requests": 0, "cache hits": 0, "failed requests": 0,
+              "seconds": 0.0, "pages per minute": 0.0}
+    started = time.monotonic()
 
     from .category_default import load_osm_rows
     from .route import mapped_car_park_50m
@@ -184,7 +227,11 @@ def run(conn, key, limit=None, today=None, fetcher=None):
                                  "quote": "", "columns": ""})
             continue
 
-        status, text, _ = fetch(url, conn)
+        status, text, from_cache = fetch(url, conn)
+        counts["cache hits" if from_cache else "network requests"] += 1
+        # Status 0 means the request itself failed, so nothing was served.
+        if status == 0:
+            counts["failed requests"] += 1
         blocked = (status != 200 and status != 404) or (status == 200 and looks_like_a_challenge(text))
         if blocked:
             counts["blocked pages"] += 1
@@ -237,6 +284,9 @@ def run(conn, key, limit=None, today=None, fetcher=None):
                 "columns": ", ".join(sorted({line["column"] for line in row_lines})),
             })
 
+    counts["seconds"] = round(time.monotonic() - started, 1)
+    read = counts["network requests"] + counts["cache hits"]
+    counts["pages per minute"] = round(read / counts["seconds"] * 60, 1) if counts["seconds"] else 0.0
     return lines, {"key": key, "routing_run": run_id, "counts": counts,
                    "examples": sorted(examples, key=lambda e: (e["outcome"] != "values", e["outcome"] == "not National Rail"))[:10], "unresolved": unresolved,
                    "held": blocked_rows, "osm_source": osm_source}
@@ -251,9 +301,14 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     conn = db.connect(args.db)
+    if args.key in SKIPPED_HOSTS:
+        raise SystemExit(f"{args.key} is not built: {SKIPPED_HOSTS[args.key]}")
     if args.key == "station":
         from .sources.station_list import load
         REGISTRY["station"] = StationFetcher(load(conn))
+    if args.key in BRAND_HOSTS:
+        REGISTRY[args.key] = StoreFetcher(BRAND_HOSTS[args.key], args.key,
+                                          official_store_urls(conn, args.key))
     lines, report = run(conn, args.key, args.limit)
 
     out_dir = reserve_output(args.out) if args.out else new_run_dir("fetch_fill")

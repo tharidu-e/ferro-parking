@@ -80,6 +80,15 @@ AVAILABILITY = re.compile(
     r"|\bour (?:own )?car park\b"
     r"|\bdedicated (?:on-?site )?car park\b", re.I)
 
+# A supermarket store page states its car park as one entry in a facility list,
+# with no sentence around it: "Baby Changing | Car Park | Cash Machine". The
+# entry stands alone, so it is matched only as a whole line. "Disabled
+# Parking" and "Temporary Disabled Parking Pass" are entries of the same kind,
+# and accessible bays alone never establish a car park, which is the rule the
+# station reader already follows.
+FACILITY_CAR_PARK = re.compile(r"^(?:free\s+|customer\s+)?car park(?:ing)?$", re.I)
+ACCESSIBLE_ONLY = re.compile(r"\b(?:disabled|accessible|blue badge)\b", re.I)
+
 WORD_NUMBERS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6}
 
 PARKING_MENTION = re.compile(r"\bcar park\b|\bparking\b", re.I)
@@ -91,6 +100,16 @@ def sentences(text):
 
 def parking_sentences(text):
     return [sentence for sentence in sentences(text) if PARKING_MENTION.search(sentence)]
+
+
+def facility_car_park(found):
+    """The facility entry that states a car park at this store, or "".
+
+    An entry about accessible bays is never that entry."""
+    for sentence in found:
+        if FACILITY_CAR_PARK.match(sentence.strip()) and not ACCESSIBLE_ONLY.search(sentence):
+            return sentence.strip()
+    return ""
 
 
 def _minutes(value, unit):
@@ -210,9 +229,16 @@ class VenueFetcher:
         return url if host == self.key or host.endswith("." + self.key) else ""
 
     def quotes(self, text, row=None):
-        return [sentence for sentence in parking_sentences(text)
-                if FREE.search(sentence) or CHARGE.search(_without_pcn(sentence))
-                or SPACES.search(sentence) or MAX_STAY.search(sentence)]
+        found = parking_sentences(text)
+        quotes = [sentence for sentence in found
+                  if FREE.search(sentence) or CHARGE.search(_without_pcn(sentence))
+                  or SPACES.search(sentence) or MAX_STAY.search(sentence)]
+        # Keep this the same test values() uses, so a probe reports what the
+        # fetcher will actually read.
+        facility = facility_car_park(found)
+        if facility and facility not in quotes:
+            quotes.append(facility)
+        return quotes
 
     def values(self, text, row=None):
         """(new_values, notes, flags, quote). Empty values mean a silent page."""
@@ -237,6 +263,9 @@ class VenueFetcher:
                 break
         spaces_match, spaces_sentence = find(SPACES, found)
         available_match, available_sentence = find(AVAILABILITY, found)
+        if not available_match:
+            available_sentence = facility_car_park(found)
+            available_match = bool(available_sentence)
         # An explicit maximum can follow the parking statement, but a free
         # period alone never establishes a maximum stay.
         stay_candidates = found + _charge_candidates(text, found)
@@ -327,3 +356,50 @@ class VenueFetcher:
         quote = " | ".join(evidence)
         values["Evidence Detail (what the source shows)"] = quote
         return values, notes, flags, quote
+
+
+# ---------------------------------------------------- brand store pages
+
+STORE_TAGS = ("website", "contact:website")
+
+
+def official_store_urls(conn, host):
+    """{place_id: url} for store pages on one host, from the identity match.
+
+    The url is the one the OpenStreetMap anchor published, so no store finder
+    is guessed and no row name becomes a path. A place with more than one url
+    on that host is left out, the way the station list drops an ambiguous
+    name."""
+    from urllib.parse import urlsplit
+
+    found = {}
+    for row in conn.execute(
+            "SELECT place_id, quote FROM evidence WHERE field = 'Brand'"
+            " AND quote LIKE '%website=%' ORDER BY id"):
+        tags = dict(part.split("=", 1) for part in row["quote"].split("; ") if "=" in part)
+        for tag in STORE_TAGS:
+            url = (tags.get(tag) or "").strip()
+            if not url.startswith("http"):
+                continue
+            if (urlsplit(url).hostname or "").lower() != host:
+                continue
+            found.setdefault(row["place_id"], set()).add(url)
+    return {place_id: next(iter(urls)) for place_id, urls in found.items() if len(urls) == 1}
+
+
+class StoreFetcher(VenueFetcher):
+    """A supermarket brand's own store page, for rows the identity match named.
+
+    The page states the store's facilities, so it can say that the store has a
+    car park. It does not state who may park or what it costs, and a chain
+    parking policy page is never read here: it describes most stores, not this
+    one, and rules R7, R9 and R10 refuse Free, Anyone and a maximum stay
+    without evidence for the exact site."""
+
+    def __init__(self, brand, host, lookup=None, verified_by="Code (page fetch)"):
+        super().__init__(host, verified_by=verified_by, brand=brand)
+        self.host = host
+        self.lookup = lookup
+
+    def branch_url(self, row):
+        return (self.lookup or {}).get((row.get("Place ID") or "").strip(), "")

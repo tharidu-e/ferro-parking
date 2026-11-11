@@ -174,8 +174,11 @@ class SourceUrlFetcher:
     sheet already holds for that place, and the quotes are the page's own
     explicit parking statements.
 
-    A brand-specific fetcher replaces branch_url with a store finder lookup.
-    None is built yet, by design: the probe measures which brands are worth it.
+    A brand-specific fetcher replaces branch_url with a store page lookup.
+    `venue.StoreFetcher` does that for the Asda and Lidl stores, reading the
+    url the OpenStreetMap anchor published rather than guessing a path. The
+    registry is `fetch_fill.REGISTRY`, and `fetch_fill.SKIPPED_HOSTS` names
+    the brands whose pages a probe measured as unreadable.
     """
 
     def __init__(self, key):

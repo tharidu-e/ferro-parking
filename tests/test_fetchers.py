@@ -245,14 +245,78 @@ def test_the_saved_pages_for_each_key_still_give_values(key):
             assert values["Cost Type"] in ("Free", "Paid", "Free then paid", "Unknown")
 
 
+def test_the_saved_asda_store_pages_state_a_car_park_and_nothing_more():
+    fetcher = venue_mod.StoreFetcher("Asda", "storelocator.asda.com")
+    results = [fetcher.values(text)[0] for text in saved("storelocator.asda.com")]
+    assert results and all(results)
+    for values in results:
+        assert values[fill.CAN_PARK] == "Conditional"
+        assert values["Who Can Park"] == "Customers only"
+        assert values["Brand"] == "Asda"
+        assert values["Specificity"] == "Site-specific"
+        # The facility list says the store has a car park. It states no price,
+        # no maximum stay and no public access.
+        assert values["Cost Type"] == "Unknown"
+        assert "Max Stay (mins)" not in values
+        assert "Tariff Detail" not in values
+
+
+def test_the_saved_lidl_store_pages_list_only_accessible_bays():
+    """Accessible bays alone establish no car park, as the station rule says."""
+    fetcher = venue_mod.StoreFetcher("Lidl", "www.lidl.co.uk")
+    texts = saved("www.lidl.co.uk")
+    assert texts
+    # Three of the four saved pages list accessible bays and no car park. The
+    # fourth states no parking at all. Neither shape writes a value.
+    assert any("Disabled Parking" in text for text in texts)
+    assert not any("Car Park" in text for text in texts)
+    assert not any(fetcher.values(text)[0] for text in texts)
+
+
+@pytest.mark.parametrize("entry,read", [
+    ("Car Park", True), ("car parking", True), ("Free Car Park", True),
+    ("Disabled Parking", False), ("Temporary Disabled Parking Pass", False),
+    ("Accessible Car Park", False), ("Car Park Closed For Repairs", False)])
+def test_only_an_unqualified_facility_entry_counts_as_a_car_park(entry, read):
+    assert bool(venue_mod.facility_car_park([entry])) == read
+
+
+def test_a_store_page_url_comes_from_the_identity_match_not_the_name(conn):
+    conn.execute(
+        "INSERT INTO evidence (place_id, field, quote) VALUES (?, 'Brand', ?)",
+        ("PP-000002", "name=Asda; shop=supermarket; "
+                      "contact:website=https://storelocator.asda.com/london/sutton/x"))
+    # Two urls on the same host leave the place out, like an ambiguous station.
+    conn.execute(
+        "INSERT INTO evidence (place_id, field, quote) VALUES (?, 'Brand', ?)",
+        ("PP-000001", "name=Asda; website=https://storelocator.asda.com/a"))
+    conn.execute(
+        "INSERT INTO evidence (place_id, field, quote) VALUES (?, 'Brand', ?)",
+        ("PP-000001", "name=Asda; website=https://storelocator.asda.com/b"))
+    conn.commit()
+    lookup = venue_mod.official_store_urls(conn, "storelocator.asda.com")
+    assert lookup == {"PP-000002": "https://storelocator.asda.com/london/sutton/x"}
+    fetcher = venue_mod.StoreFetcher("Asda", "storelocator.asda.com", lookup)
+    assert fetcher.branch_url({"Place ID": "PP-000002"}).endswith("/london/sutton/x")
+    assert fetcher.branch_url({"Place ID": "PP-000001"}) == ""
+    assert fetcher.branch_url({"Place ID": "PP-000004", "Location Name": "Asda Acton"}) == ""
+
+
 def test_the_saved_marks_and_spencer_pages_are_cache_only():
     assert "marksandspencer.com" in fetch_fill.CACHE_ONLY
     assert "marksandspencer.com" not in fetch_fill.REGISTRY
 
 
-def test_the_registry_holds_only_the_four_approved_fetchers():
+def test_the_registry_holds_only_the_approved_fetchers():
     assert set(fetch_fill.REGISTRY) == {"station", "better.org.uk", "thegymgroup.com",
-                                        "puregym.com"}
+                                        "puregym.com", "storelocator.asda.com",
+                                        "www.lidl.co.uk"}
+
+
+def test_a_measured_unreadable_host_is_named_and_never_registered():
+    for host in fetch_fill.SKIPPED_HOSTS:
+        assert host not in fetch_fill.REGISTRY
+        assert fetch_fill.SKIPPED_HOSTS[host].strip()
 
 
 # ---------------------------------------------------------------- the runner

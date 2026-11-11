@@ -36,24 +36,14 @@ DETAIL_HEADERS = ["key", "Place ID", "Location Name", "url", "http status",
 
 
 def routed_rows_for_key(conn, key, limit=3):
-    """A few routed rows whose derived source key is this one."""
-    from . import route
+    """The routed rows the fetcher for this key owns.
 
-    run_id, routing = db.latest_routing(conn)
-    if run_id is None:
-        raise SystemExit("No routing run in the database. Run route first.")
-    skipped = {stage for stage in set(routing.values()) if stage.startswith("skip")}
-    _, rows = db.current_rows(conn)
-    out = []
-    for row in rows:
-        place_id = (row.get(PLACE_ID) or "").strip()
-        stage = routing.get(place_id)
-        if stage is None or stage in skipped:
-            continue
-        if route.source_key(row) != key:
-            continue
-        out.append(row)
-    return out
+    One selection rule, shared with fetch-fill, so a probe reads the same rows
+    the fetcher will. A brand store key owns its rows by Brand, because the
+    identity match is their only source url."""
+    from .fetch_fill import rows_for
+
+    return [row for row, _ in rows_for(conn, key)[0]]
 
 
 def fixture_name(key, place_id):
@@ -70,9 +60,23 @@ def save_fixture(key, place_id, text, fixture_dir=FIXTURE_DIR, limit=20000):
     return path
 
 
+def registered(conn, key):
+    """The fetcher this key already has, else the plain source-url reader.
+
+    A probe that used the plain reader for a registered key read whatever url
+    the row listed first, which for an identity row is its OpenStreetMap page
+    rather than the store page."""
+    from .fetch_fill import BRAND_HOSTS, REGISTRY
+    from .sources.venue import StoreFetcher, official_store_urls
+
+    if key in BRAND_HOSTS:
+        return StoreFetcher(BRAND_HOSTS[key], key, official_store_urls(conn, key))
+    return REGISTRY.get(key) or SourceUrlFetcher(key)
+
+
 def probe_key(conn, key, limit=3, fixture_dir=FIXTURE_DIR, fetcher=None):
     """(summary, details) for one key. Fetches at most `limit` pages."""
-    fetcher = fetcher or SourceUrlFetcher(key)
+    fetcher = fetcher or registered(conn, key)
     candidates = routed_rows_for_key(conn, key, limit)
     details = []
     for row in candidates:
