@@ -75,12 +75,14 @@ one of the five became an ambiguous exception.
 ## Owner decisions and holds
 
 - PP-008072, New Barnet Sainsbury's Car Park: proposed retirement only, awaiting owner approval.
-- PP-005457 and PP-000194 are the same car park held twice, 27 m apart, both
-  named Minories Car Park, both postcode EC3N 4DX, both Confirmed with the same
-  answers. The City of London official feed exposed the pair. PP-005457 carries
-  the OpenStreetMap reference and PP-000194 does not. Neither is personally
-  verified. Both are imported sheet rows, so retiring one is a Sheet decision
-  for the owner, recorded as duplicate metadata and never by moving a pin.
+- PP-005457 is recorded as a repeat of PP-000194, the Minories Car Park pair
+  the City of London feed exposed. PP-000194 stands because it carries the
+  published charges, an evidence level of Verified and the protected payment
+  columns. Nothing was deleted and the sheet export is unchanged, so PP-005457
+  still exists and now routes to skip_duplicate. Two follow-ups: attaching
+  PP-005457's OpenStreetMap reference node/1590148307 to PP-000194 needs its own
+  audited plan, and the two rows disagree about the borough, where PP-000194
+  says Tower Hamlets and the City of London feed implies City of London.
 - Eight weaker retirement proposals remain report-only.
 - 184 attachment cases need a separate audited plan:
   `data/runs/2026-11-11_6/holds/attachment_cases.csv`.
@@ -94,6 +96,6 @@ one of the five became an ambiguous exception.
 
 The created-record path, London OSM insertion and hold-list apply are complete.
 Created identities do not establish access, prices or time limits.
-The identity matcher generates plans only. The latest suite result is 1,509 passing tests.
+The identity matcher generates plans only. The latest suite result is 1,522 passing tests.
 Code ownership is in `docs/MAP.md`. Creation procedures are in `ADD_PLACES_RUNBOOK.md`.
 Keep this file current and short. Do not append historical run narratives.
