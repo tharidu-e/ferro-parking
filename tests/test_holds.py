@@ -474,6 +474,29 @@ def test_merge_counts_reviewer_rows_for_cases_it_was_not_given(tmp_path):
     assert counts["reviewer rows not used"] == 1
 
 
+def test_a_venue_row_is_an_attachment_case_and_never_reaches_a_creation_batch():
+    """The 2026-11-05 duplicate report carries 110 supermarkets, 22 gyms, 20
+    hotels, 15 stations, 15 DIY stores and 2 fast food outlets. None of them is
+    a car park, so none is a candidate for creation."""
+    rows = holds.read_possible_duplicates(POSSIBLE_DUPLICATES)
+    questions = {row.candidate_ref: row.question for row in rows}
+    assert questions
+    assert all(question in (holds.CREATION, holds.ATTACHMENT)
+               for question in questions.values())
+    venue = a_case("node/6402222390", "Canary Wharf", question=holds.ATTACHMENT)
+    car_park = a_case("node/26846355", "QPark Chinatown")
+    holds.decide([venue, car_park], {})
+    assert holds.review_cases([venue, car_park]) == [car_park]
+    assert holds.attachment_cases([venue, car_park]) == [venue]
+
+
+def test_a_car_park_row_wins_when_two_files_name_one_candidate():
+    """A merged case keeps the stricter question."""
+    venue = a_case("node/5", "Tesco Extra", question=holds.ATTACHMENT)
+    car_park = a_case("node/5", "Tesco Extra Car Park", question=holds.CREATION)
+    assert holds.merge_cases([venue], [car_park])[0].question == holds.CREATION
+
+
 # ---------------------------------------------------------------- the outputs
 
 def test_a_review_batch_holds_no_verdict_and_no_hint(cases, tmp_path):
@@ -484,7 +507,8 @@ def test_a_review_batch_holds_no_verdict_and_no_hint(cases, tmp_path):
     for entry in payload:
         assert set(entry) == {"case_id", "candidate_ref", "candidate_name",
                               "geometry", "area_m2", "latitude", "longitude",
-                              "tags", "near", "state", "created_place_id"}
+                              "tags", "near", "state", "created_place_id",
+                              "question"}
         for near in entry["near"]:
             assert set(near) == {"place_id", "name", "postcode", "geo_precision",
                                  "osm_id", "metres", "pin_inside_candidate"}

@@ -73,6 +73,19 @@ POSSIBLE_DUPLICATES = Path("data/runs/2026-11-05/discovery_new_places/possible_d
 HELD_STRICT = Path("data/runs/2026-11-05/discovery_new_places/held_car_parks_strict.csv")
 HELD_NAMES = Path("data/runs/2026-11-05/discovery_new_places/held_car_parks_names.csv")
 
+# Two different questions live in these files, and they have different safe
+# answers. A creation case asks whether a car park the database does not hold
+# is already in it under another row. An attachment case asks whether an
+# OpenStreetMap venue, a supermarket or a station, is the same business as a
+# place the database holds, which would attach an identity to an existing row.
+# The 2026-11-05 duplicate report carries 56 of the first and 184 of the second.
+CREATION = "creation"
+ATTACHMENT = "attachment"
+
+# The Category column of the 2026-11-05 duplicate report. Only a car park row
+# is a candidate for creation. Every other category names a venue.
+CREATION_CATEGORIES = {"car_park"}
+
 BATCH_SIZE = 25
 SAMPLE_SIZE = 60
 # A fixed seed, so the same bundle always draws the same sample for reference.
@@ -141,6 +154,7 @@ class HeldCase:
     candidate_ref: str
     candidate_name: str
     source_file: str
+    question: str = CREATION
     state: str = "pending"
     created_place_id: str = ""
     tags: dict = field(default_factory=dict)
@@ -172,11 +186,12 @@ def _number(value):
         return None
 
 
-def _new_case(path, ref, name, latitude=None, longitude=None, near=()):
+def _new_case(path, ref, name, latitude=None, longitude=None, near=(),
+              question=CREATION):
     stem = Path(path).stem
     return HeldCase(case_id=f"{stem}:{ref}", candidate_ref=ref, candidate_name=name,
-                    source_file=stem, latitude=latitude, longitude=longitude,
-                    near=list(near))
+                    source_file=stem, question=question, latitude=latitude,
+                    longitude=longitude, near=list(near))
 
 
 def read_held_all(path):
@@ -213,9 +228,12 @@ def read_possible_duplicates(path):
             near.append(NearPlace(place_id=place_id,
                                   name=_text(row, "Existing Location Name"),
                                   geo_precision=_text(row, "Existing Geo Precision")))
+        category = _text(row, "Category").lower()
+        question = CREATION if category in CREATION_CATEGORIES else ATTACHMENT
         cases.append(_new_case(path, ref, _text(row, "Name"),
                                latitude=_number(row.get("Lat")),
-                               longitude=_number(row.get("Lon")), near=near))
+                               longitude=_number(row.get("Lon")), near=near,
+                               question=question))
     return cases
 
 
@@ -254,6 +272,8 @@ def merge_cases(*groups):
             first.latitude, first.longitude = case.latitude, case.longitude
         if not first.candidate_name:
             first.candidate_name = case.candidate_name
+        if case.question == CREATION:
+            first.question = CREATION
     return [merged[ref] for ref in order]
 
 
@@ -563,7 +583,17 @@ def protected_cases(cases):
 
 
 def review_cases(cases):
-    return [case for case in cases if case.decided_by == NO_RULE]
+    """The creation cases two reviewers judge. An attachment case asks a
+    different question, so it never enters a creation batch."""
+    return [case for case in cases
+            if case.decided_by == NO_RULE and case.question == CREATION]
+
+
+def attachment_cases(cases):
+    """Candidates for attaching an OpenStreetMap identity to an existing row.
+    Reported separately. Attachment is its own audited plan, and a reviewer
+    asked a creation question about a supermarket answers the wrong question."""
+    return [case for case in cases if case.question == ATTACHMENT]
 
 
 # ---------------------------------------------------------------- the merge
@@ -676,7 +706,7 @@ def _review_text(review):
 # ---------------------------------------------------------------- the outputs
 
 VERDICT_HEADERS = ["case_id", "candidate_ref", "candidate_name", "source_file",
-                   "state", "created_place_id", "geometry", "area_m2",
+                   "question", "state", "created_place_id", "geometry", "area_m2",
                    "latitude", "longitude", "near places", "nearest metres",
                    "verdict", "decided_by", "evidence"]
 PROTECTED_HEADERS = ["case_id", "candidate_ref", "candidate_name",
@@ -707,7 +737,8 @@ def verdict_row(case):
     return {
         "case_id": case.case_id, "candidate_ref": case.candidate_ref,
         "candidate_name": case.candidate_name, "source_file": case.source_file,
-        "state": case.state, "created_place_id": case.created_place_id,
+        "question": case.question, "state": case.state, "created_place_id": case.created_place_id,
+        "question": case.question,
         "geometry": case.geometry, "area_m2": round(case.area_m2),
         "latitude": "" if case.latitude is None else f"{case.latitude:.6f}",
         "longitude": "" if case.longitude is None else f"{case.longitude:.6f}",
@@ -728,6 +759,7 @@ def review_payload(case):
         "area_m2": round(case.area_m2), "latitude": case.latitude,
         "longitude": case.longitude, "tags": case.tags,
         "state": case.state, "created_place_id": case.created_place_id,
+        "question": case.question,
         "near": [{"place_id": near.place_id, "name": near.name,
                   "postcode": near.postcode, "geo_precision": near.geo_precision,
                   "osm_id": near.osm_id, "metres": near.metres,
@@ -751,7 +783,13 @@ def counts_of(cases):
         counts[f"verdict {verdict}"] = sum(1 for case in cases if case.verdict == verdict)
     for name, _ in RULES:
         counts[f"decided by {name}"] = sum(1 for case in cases if case.decided_by == name)
-    counts[f"decided by {NO_RULE}"] = len(review_cases(cases))
+    for question in (CREATION, ATTACHMENT):
+        counts[f"question {question}"] = sum(1 for case in cases
+                                             if case.question == question)
+    counts[f"decided by {NO_RULE}"] = sum(1 for case in cases
+                                          if case.decided_by == NO_RULE)
+    counts["creation cases for the reviewers"] = len(review_cases(cases))
+    counts["attachment cases, a separate plan"] = len(attachment_cases(cases))
     counts["geometry absent from the extract"] = sum(
         1 for case in cases if case.geometry == "absent")
     for stem, tally in sorted(state_counts(cases).items()):
@@ -806,6 +844,9 @@ def write_outputs(cases, out_dir):
                 "evidence": case.evidence})
     _write_csv(out_dir / "protected_rows.csv", protected, PROTECTED_HEADERS)
     _write_counts(out_dir / "counts.csv", counts_of(cases))
+    _write_csv(out_dir / "attachment_cases.csv",
+               [verdict_row(case) for case in attachment_cases(cases)],
+               VERDICT_HEADERS)
     batches = write_review_batches(cases, out_dir)
     write_sample(cases, out_dir / "sample60.csv")
     return out_dir, batches
