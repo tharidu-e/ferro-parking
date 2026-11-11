@@ -590,8 +590,30 @@ def brent(location=None):
     return rows
 
 
+TOWER_HAMLETS_URL = 'https://www.towerhamlets.gov.uk/FAQs/Parking-Charges/Cashless-parking.aspx'
+
+
+def tower_hamlets(location=None):
+    """Read the current off-street named groups, excluding on-street zones."""
+    raw = read_input(location or TOWER_HAMLETS_URL)
+    if not any(title == 'Off Street Car Parks' for title, body in _heading_sections(raw, 2)):
+        raise ValueError('Tower Hamlets page has no off-street inventory heading')
+    rows = []
+    for title, body in _heading_sections(raw, 3):
+        if title.lower().endswith(' car parks'):
+            names = re.split(r',\s*|\s+and\s+', title[:-10])
+        elif title.lower().endswith(' car park'):
+            names = [title]
+        else:
+            continue
+        rows.extend(_inventory_identity(name.strip(), TOWER_HAMLETS_URL, title) for name in names)
+    if not rows:
+        raise ValueError('Tower Hamlets page has no named off-street sites')
+    return rows
+
+
 ADAPTERS = {'generic': generic, 'city-of-london': city_of_london,
             'barnet': barnet, 'hillingdon': hillingdon, 'bromley': bromley,
             'hounslow': hounslow, 'havering': havering, 'bexley': bexley,
             'croydon': croydon, 'greenwich': greenwich, 'redbridge': redbridge,
-            'waltham-forest': waltham_forest, 'newham': newham, 'richmond-upon-thames': richmond_upon_thames, 'ealing': ealing, 'merton': merton, 'harrow': harrow, 'southwark': southwark, 'kingston-upon-thames': kingston_upon_thames, 'haringey': haringey, 'hackney': hackney, 'brent': brent}
+            'waltham-forest': waltham_forest, 'newham': newham, 'richmond-upon-thames': richmond_upon_thames, 'ealing': ealing, 'merton': merton, 'harrow': harrow, 'southwark': southwark, 'kingston-upon-thames': kingston_upon_thames, 'haringey': haringey, 'hackney': hackney, 'brent': brent, 'tower-hamlets': tower_hamlets}

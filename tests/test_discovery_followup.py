@@ -577,3 +577,12 @@ def test_brent_uses_complete_council_directory_response_and_refuses_truncation(t
     path.write_text(json.dumps(data))
     with pytest.raises(ValueError, match='truncated'):
         brent(path)
+
+
+def test_tower_hamlets_expands_off_street_group_and_ignores_zone_tables(tmp_path):
+    from ferro_parking.sources import tower_hamlets
+    path = tmp_path / 'tower.html'
+    path.write_text('<h2>Off Street Car Parks</h2><h3>John Orwell, Haverfield Road and Victoria Park car parks</h3><p>Charges</p><h3>Roman Road Car Park</h3><p>Free first hour</p><h3>Title here</h3>')
+    rows = tower_hamlets(path)
+    assert [r['name'] for r in rows] == ['John Orwell', 'Haverfield Road', 'Victoria Park', 'Roman Road Car Park']
+    assert all(r['tariff'] == '' for r in rows)
