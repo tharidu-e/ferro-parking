@@ -1,0 +1,258 @@
+candidate_ref,verdict,decided_by,decided_on,evidence
+node/26846355,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+node/266898069,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+node/301014982,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+node/368044118,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+node/377017791,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+node/710656926,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+node/1129680387,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+node/1319513719,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+node/1360237597,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+node/1581891196,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+node/2056398295,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+node/2135411292,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+node/6239275279,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+node/11074231109,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+node/12162380305,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/2956184,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/4294306,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/4639830,duplicate,pin_inside_candidate_same_brand,2026-11-11,"the pin of place PP-002170 (Kew Gardens Car Park – Brentford Gate / Ferry Lane (RBG Kew)) falls inside candidate way/4639830 and the two names share the brand brentford, gate."
+way/4734008,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/4734010,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/8043665,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/14881320,duplicate,pin_inside_candidate_same_brand,2026-11-11,"the pin of place PP-000537 (Ruislip Lido Main Car Park (Hillingdon Council)) falls inside candidate way/14881320 and the two names share the brand lido, ruislip."
+way/22721236,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/23124922,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/23127265,duplicate,pin_inside_candidate_same_brand,2026-11-11,the pin of place PP-000547 (Malden Centre Car Park (Kingston Council)) falls inside candidate way/23127265 and the two names share the brand malden.
+way/23127282,duplicate,pin_inside_candidate_same_brand,2026-11-11,the pin of place PP-000542 (Blagdon Road Car Park (Kingston Council)) falls inside candidate way/23127282 and the two names share the brand blagdon.
+way/23655329,duplicate,pin_inside_candidate_same_brand,2026-11-11,"the pin of place PP-000515 (Long Drive Car Park (Hillingdon Council)) falls inside candidate way/23655329 and the two names share the brand drive, long."
+way/23899761,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/24217952,duplicate,pin_inside_candidate_same_brand,2026-11-11,"the pin of place PP-003457 (Bedfont Lakes Country Park – Bedfont Road Car Park) falls inside candidate way/24217952 and the two names share the brand bedfont, lakes."
+way/24533058,duplicate,pin_inside_candidate_same_brand,2026-11-11,the pin of place PP-001236 (Asda Isle of Dogs Superstore – customer car park) falls inside candidate way/24533058 and the two names share the brand asda.
+way/24862513,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/24905460,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/24905830,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/25553616,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/25970896,duplicate,pin_inside_candidate_same_brand,2026-11-11,the pin of place PP-000454 (Stanley Road Car Park (Waltham Forest Council)) falls inside candidate way/25970896 and the two names share the brand stanley.
+way/26254849,duplicate,pin_inside_candidate_same_brand,2026-11-11,the pin of place PP-000543 (Canbury Place Car Park (Kingston Council)) falls inside candidate way/26254849 and the two names share the brand canbury.
+way/26358367,duplicate,pin_inside_candidate_same_brand,2026-11-11,"the pin of place PP-000660 (Mill Hill Broadway Station – Station Car Park) falls inside candidate way/26358367 and the two names share the brand broadway, hill, mill."
+way/26505419,duplicate,pin_inside_candidate_same_brand,2026-11-11,the pin of place PP-004843 (Travelodge London Feltham) falls inside candidate way/26505419 and the two names share the brand feltham.
+way/26942108,duplicate,pin_inside_candidate_same_brand,2026-11-11,"the pin of place PP-000575 (York House Car Park (Richmond Council)) falls inside candidate way/26942108 and the two names share the brand house, york."
+way/29273985,duplicate,pin_inside_candidate_same_brand,2026-11-11,"the pin of place PP-002132 (Richmond Park – Roehampton Gate Car Park (The Royal Parks)) falls inside candidate way/29273985 and the two names share the brand gate, roehampton."
+way/30049485,duplicate,pin_inside_candidate_same_brand,2026-11-11,the pin of place PP-001296 (Morrisons Holloway – customer car park) falls inside candidate way/30049485 and the two names share the brand morrisons.
+way/30689703,duplicate,pin_inside_candidate_same_brand,2026-11-11,"the pin of place PP-002144 (Hampstead Heath – Jack Straw's Car Park (City of London)) falls inside candidate way/30689703 and the two names share the brand jack, s, straw."
+way/31863871,duplicate,pin_inside_candidate_same_brand,2026-11-11,the pin of place PP-004762 (Sainsbury's Stratford) falls inside candidate way/31863871 and the two names share the brand stratford.
+way/35323430,duplicate,pin_inside_candidate_same_brand,2026-11-11,the pin of place PP-000116 (Oaklands Car Park (Bexley Council)) falls inside candidate way/35323430 and the two names share the brand oaklands.
+way/44792888,duplicate,pin_inside_candidate_same_brand,2026-11-11,"the pin of place PP-000498 (Featherstone Terrace Car Park (Ealing Council, ref STH01)) falls inside candidate way/44792888 and the two names share the brand featherstone, terrace."
+way/45072654,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/87534406,duplicate,pin_inside_candidate_same_brand,2026-11-11,the pin of place PP-000549 (Rose Car Park (Kingston Council)) falls inside candidate way/87534406 and the two names share the brand rose.
+way/95689886,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/96887529,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/98180938,duplicate,pin_inside_candidate_same_brand,2026-11-11,the pin of place PP-000524 (Civic Centre Car Park (Hillingdon Council)) falls inside candidate way/98180938 and the two names share the brand civic.
+way/107521465,duplicate,pin_inside_candidate_same_brand,2026-11-11,the pin of place PP-000389 (Bentley Road Car Park (Hackney Council)) falls inside candidate way/107521465 and the two names share the brand bentley.
+way/111517012,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/116442729,duplicate,pin_inside_candidate_same_brand,2026-11-11,the pin of place PP-000510 (Green Lane Car Park (Hillingdon Council)) falls inside candidate way/116442729 and the two names share the brand green.
+way/126220295,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/130106170,duplicate,pin_inside_candidate_same_brand,2026-11-11,"the pin of place PP-000456 (Mission Grove Car Park (Waltham Forest Council)) falls inside candidate way/130106170 and the two names share the brand grove, mission."
+way/130110242,duplicate,pin_inside_candidate_same_brand,2026-11-11,the pin of place PP-000452 (Bedford Road Car Park (Waltham Forest Council)) falls inside candidate way/130110242 and the two names share the brand bedford.
+way/133548869,duplicate,pin_inside_candidate_same_brand,2026-11-11,"the pin of place PP-001869 (McDonald's Colindale (Drive-Thru)) falls inside candidate way/133548869 and the two names share the brand mcdonald, s."
+way/150852866,duplicate,pin_inside_candidate_same_brand,2026-11-11,the pin of place PP-000069 (Canons Park Station Car Park (TfL)) falls inside candidate way/150852866 and the two names share the brand canons.
+way/164682936,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/180996607,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/182835660,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/183069411,duplicate,pin_inside_candidate_same_brand,2026-11-11,"the pin of place PP-000379 (Crouch Hall Road Car Park (Haringey Council)) falls inside candidate way/183069411 and the two names share the brand crouch, hall."
+way/186617989,duplicate,pin_inside_candidate_same_brand,2026-11-11,the pin of place PP-002139 (Bushy Park – Clapperstile Gate (weekends only) Car Park (The Royal Parks)) falls inside candidate way/186617989 and the two names share the brand clapperstile.
+way/189748591,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/190469285,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/201224983,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/205821875,duplicate,pin_inside_candidate_same_brand,2026-11-11,the pin of place PP-001092 (The Brewery Romford Car Park (multi-storey & surface)) falls inside candidate way/205821875 and the two names share the brand brewery.
+way/206131360,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/208497830,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/232703624,duplicate,pin_inside_candidate_same_brand,2026-11-11,"the pin of place PP-000514 (St. Martins Approach Car Park (Hillingdon Council)) falls inside candidate way/232703624 and the two names share the brand approach, martins."
+way/244634553,duplicate,pin_inside_candidate_same_brand,2026-11-11,"the pin of place PP-001453 (Lidl Whitehorse Road, Croydon – customer car park) falls inside candidate way/244634553 and the two names share the brand lidl."
+way/255621031,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/270594838,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/296713162,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/314185251,duplicate,pin_inside_candidate_same_brand,2026-11-11,"the pin of place PP-001504 (Lidl Stag Island, Ripple Road 62-82, Greater London – customer car park) falls inside candidate way/314185251 and the two names share the brand lidl."
+way/316498892,duplicate,pin_inside_candidate_same_brand,2026-11-11,the pin of place PP-000562 (Friars Lane Car Park (Richmond Council)) falls inside candidate way/316498892 and the two names share the brand friars.
+way/319491954,duplicate,pin_inside_candidate_same_brand,2026-11-11,the pin of place PP-000521 (Brandville Road Car Park (Hillingdon Council)) falls inside candidate way/319491954 and the two names share the brand council.
+way/332400974,duplicate,pin_inside_candidate_same_brand,2026-11-11,the pin of place PP-000115 (Cinema Car Park (Bexley Council)) falls inside candidate way/332400974 and the two names share the brand cinema.
+way/387796591,duplicate,pin_inside_candidate_same_brand,2026-11-11,the pin of place PP-001040 (Wembley Park – Red Parking) falls inside candidate way/387796591 and the two names share the brand red.
+way/436769292,duplicate,pin_inside_candidate_same_brand,2026-11-11,"the pin of place PP-000345 (Fords Grove Car Park (Enfield Council)) falls inside candidate way/436769292 and the two names share the brand fords, grove."
+way/445073519,duplicate,pin_inside_candidate_same_brand,2026-11-11,the pin of place PP-000194 (Minories Car Park (City of London Corporation)) falls inside candidate way/445073519 and the two names share the brand minories.
+way/453808271,duplicate,pin_inside_candidate_same_brand,2026-11-11,the pin of place PP-000380 (Garman Road Car Park (Haringey Council)) falls inside candidate way/453808271 and the two names share the brand garman.
+way/477370216,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/488085278,duplicate,pin_inside_candidate_same_brand,2026-11-11,the pin of place PP-003812 (Victoria Car Park - Tower Hamlets (APCOA)) falls inside candidate way/488085278 and the two names share the brand victoria.
+way/586117499,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/600429696,duplicate,pin_inside_candidate_same_brand,2026-11-11,"the pin of place PP-000343 (Lodge Drive Car Park (Enfield Council)) falls inside candidate way/600429696 and the two names share the brand drive, lodge."
+way/653486157,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/656123808,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/680789272,distinct,reviewers,2026-11-11,both reviewers said distinct with high confidence.
+way/682019372,distinct,reviewers,2026-11-11,both reviewers said distinct with high confidence.
+way/683103496,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/708595414,duplicate,pin_inside_candidate_same_brand,2026-11-11,"the pin of place PP-000538 (Willow Lawn Car Park (Hillingdon Council)) falls inside candidate way/708595414 and the two names share the brand lawn, willow."
+way/744293217,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/747925514,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/783301953,duplicate,pin_inside_candidate_same_brand,2026-11-11,"the pin of place PP-001476 (Lidl South Road, London – customer car park) falls inside candidate way/783301953 and the two names share the brand lidl."
+way/820361028,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/847704109,duplicate,pin_inside_candidate_same_brand,2026-11-11,the pin of place PP-000385 (Westerfield Road Car Park (Haringey Council)) falls inside candidate way/847704109 and the two names share the brand westerfield.
+way/847790927,duplicate,pin_inside_candidate_same_brand,2026-11-11,the pin of place PP-000377 (Brunswick Road Car Park (Haringey Council)) falls inside candidate way/847790927 and the two names share the brand brunswick.
+way/854608320,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/869744068,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/875206073,duplicate,pin_inside_candidate_same_brand,2026-11-11,"the pin of place PP-001421 (Lidl Fencepiece Road 250-260, Greater London – customer car park) falls inside candidate way/875206073 and the two names share the brand lidl."
+way/881082829,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/888771182,duplicate,pin_inside_candidate_same_brand,2026-11-11,the pin of place PP-000529 (Grainges Yard Car Park (Hillingdon Council)) falls inside candidate way/888771182 and the two names share the brand grainges.
+way/890993603,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/911541383,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/912053805,duplicate,pin_inside_candidate_same_brand,2026-11-11,the pin of place PP-000578 (Scrubs Lane Car Park (H&F Council)) falls inside candidate way/912053805 and the two names share the brand scrubs.
+way/991872168,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/1011909661,duplicate,pin_inside_candidate_same_brand,2026-11-11,"the pin of place PP-000384 (Summerland Gardens Car Park (Haringey Council)) falls inside candidate way/1011909661 and the two names share the brand gardens, summerland."
+way/1024982899,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/1060239878,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/1061183674,distinct,reviewers,2026-11-11,both reviewers said distinct with high confidence.
+relation/14151490,duplicate,pin_inside_candidate_same_brand,2026-11-11,the pin of place PP-000526 (Kingsend North Car Park (Hillingdon Council)) falls inside candidate relation/14151490 and the two names share the brand kingsend.
+way/1092452950,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/1101513502,duplicate,pin_inside_candidate_same_brand,2026-11-11,the pin of place PP-000574 (Holly Road Car Park (Richmond Council)) falls inside candidate way/1101513502 and the two names share the brand holly.
+way/1103836835,duplicate,pin_inside_candidate_same_brand,2026-11-11,the pin of place PP-001304 (Morrisons Croydon – customer car park) falls inside candidate way/1103836835 and the two names share the brand morrisons.
+way/1123865384,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/1123865386,distinct,reviewers,2026-11-11,both reviewers said distinct with high confidence.
+way/1123932196,distinct,reviewers,2026-11-11,both reviewers said distinct with high confidence.
+way/1123932197,distinct,reviewers,2026-11-11,both reviewers said distinct with high confidence.
+way/1133462580,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/1150190968,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/1151211600,duplicate,pin_inside_candidate_same_brand,2026-11-11,"the pin of place PP-000394 (Spring Hill Recreation Ground Car Park (Hackney Council)) falls inside candidate way/1151211600 and the two names share the brand ground, hill, recreation, spring."
+relation/15927172,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/1191424171,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/1232988614,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/1237840312,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/1417698624,distinct,reviewers,2026-11-11,both reviewers said distinct with high confidence.
+way/3989907,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/22709933,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/52994805,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/52994806,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/146484516,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/155465077,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/166072549,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/166129314,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/208875733,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/448837483,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/460001114,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/654969554,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/667575665,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/763120881,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/828967774,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/853027177,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/955495283,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/961421325,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/1173719726,duplicate,reviewers,2026-11-11,both reviewers said duplicate with high confidence.
+way/23444176,duplicate,pin_inside_candidate_same_brand,2026-11-11,"the pin of place PP-000734 (Sainsbury's New Barnet – customer car park) falls inside candidate way/23444176 and the two names share the brand new, s, sainsbury."
+way/129582660,keep,reviewers,2026-11-11,"place PP-008489 already holds this candidate, and it is a separate car park from the places beside it: both reviewers said distinct with high confidence. The record stands and nothing is created."
+node/26866990,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-006925, created from OpenStreetMap reference node/26866990: there is nothing to create."
+node/282686477,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-006931, created from OpenStreetMap reference node/282686477: there is nothing to create."
+node/291675462,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-006933, created from OpenStreetMap reference node/291675462: there is nothing to create."
+node/293975551,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-006934, created from OpenStreetMap reference node/293975551: there is nothing to create."
+node/300500854,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-006935, created from OpenStreetMap reference node/300500854: there is nothing to create."
+node/306472064,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-006936, created from OpenStreetMap reference node/306472064: there is nothing to create."
+node/355416895,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-006937, created from OpenStreetMap reference node/355416895: there is nothing to create."
+node/452417804,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-006939, created from OpenStreetMap reference node/452417804: there is nothing to create."
+node/891483313,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-006943, created from OpenStreetMap reference node/891483313: there is nothing to create."
+node/931627514,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-006944, created from OpenStreetMap reference node/931627514: there is nothing to create."
+node/1109403559,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-006946, created from OpenStreetMap reference node/1109403559: there is nothing to create."
+node/1132689390,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-006947, created from OpenStreetMap reference node/1132689390: there is nothing to create."
+node/1180809788,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-006948, created from OpenStreetMap reference node/1180809788: there is nothing to create."
+node/1300766672,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-006949, created from OpenStreetMap reference node/1300766672: there is nothing to create."
+node/1319513721,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-006951, created from OpenStreetMap reference node/1319513721: there is nothing to create."
+node/1639176056,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-006954, created from OpenStreetMap reference node/1639176056: there is nothing to create."
+node/3089881265,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-006959, created from OpenStreetMap reference node/3089881265: there is nothing to create."
+node/3966382757,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-006962, created from OpenStreetMap reference node/3966382757: there is nothing to create."
+node/5793792857,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-006965, created from OpenStreetMap reference node/5793792857: there is nothing to create."
+node/5873264063,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-006966, created from OpenStreetMap reference node/5873264063: there is nothing to create."
+node/8201616200,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-006967, created from OpenStreetMap reference node/8201616200: there is nothing to create."
+way/3541789,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-006975, created from OpenStreetMap reference way/3541789: there is nothing to create."
+way/4038654,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-006976, created from OpenStreetMap reference way/4038654: there is nothing to create."
+way/4411324,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-006981, created from OpenStreetMap reference way/4411324: there is nothing to create."
+way/7848024,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-006985, created from OpenStreetMap reference way/7848024: there is nothing to create."
+way/9796993,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-006989, created from OpenStreetMap reference way/9796993: there is nothing to create."
+way/11847178,excluded,excluded_by_access,2026-11-11,"the tags describe lorry or coach parking, not car parking, so this is not a car park a driver may use."
+way/11847206,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-006991, created from OpenStreetMap reference way/11847206: there is nothing to create."
+way/14962041,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-006993, created from OpenStreetMap reference way/14962041: there is nothing to create."
+way/22317002,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-006996, created from OpenStreetMap reference way/22317002: there is nothing to create."
+way/22698869,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-006999, created from OpenStreetMap reference way/22698869: there is nothing to create."
+way/22767801,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007000, created from OpenStreetMap reference way/22767801: there is nothing to create."
+way/23023276,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007002, created from OpenStreetMap reference way/23023276: there is nothing to create."
+way/24250923,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007006, created from OpenStreetMap reference way/24250923: there is nothing to create."
+way/28444776,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007016, created from OpenStreetMap reference way/28444776: there is nothing to create."
+way/37976814,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007024, created from OpenStreetMap reference way/37976814: there is nothing to create."
+way/38424177,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007026, created from OpenStreetMap reference way/38424177: there is nothing to create."
+way/45875855,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007031, created from OpenStreetMap reference way/45875855: there is nothing to create."
+way/47651658,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-008331, created from OpenStreetMap reference way/47651658: there is nothing to create."
+way/48296089,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007032, created from OpenStreetMap reference way/48296089: there is nothing to create."
+way/52476902,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007034, created from OpenStreetMap reference way/52476902: there is nothing to create."
+way/60141525,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007038, created from OpenStreetMap reference way/60141525: there is nothing to create."
+way/66865698,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007040, created from OpenStreetMap reference way/66865698: there is nothing to create."
+way/70595049,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007042, created from OpenStreetMap reference way/70595049: there is nothing to create."
+way/91236761,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007046, created from OpenStreetMap reference way/91236761: there is nothing to create."
+way/92793027,excluded,excluded_by_access,2026-11-11,"access=staff excludes a driver from parking here, so this is not a car park a driver may use."
+way/93299816,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007047, created from OpenStreetMap reference way/93299816: there is nothing to create."
+way/93854229,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007048, created from OpenStreetMap reference way/93854229: there is nothing to create."
+way/93854231,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007049, created from OpenStreetMap reference way/93854231: there is nothing to create."
+way/95967457,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007050, created from OpenStreetMap reference way/95967457: there is nothing to create."
+way/111827858,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007055, created from OpenStreetMap reference way/111827858: there is nothing to create."
+way/134099555,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007063, created from OpenStreetMap reference way/134099555: there is nothing to create."
+way/144821326,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007066, created from OpenStreetMap reference way/144821326: there is nothing to create."
+way/146254686,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007067, created from OpenStreetMap reference way/146254686: there is nothing to create."
+way/151628011,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007069, created from OpenStreetMap reference way/151628011: there is nothing to create."
+way/153659731,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-008536, created from OpenStreetMap reference way/153659731: there is nothing to create."
+way/153914363,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007070, created from OpenStreetMap reference way/153914363: there is nothing to create."
+way/155138323,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007072, created from OpenStreetMap reference way/155138323: there is nothing to create."
+way/155421516,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007073, created from OpenStreetMap reference way/155421516: there is nothing to create."
+way/156526703,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-008553, created from OpenStreetMap reference way/156526703: there is nothing to create."
+way/156526711,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-008556, created from OpenStreetMap reference way/156526711: there is nothing to create."
+way/157956287,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007074, created from OpenStreetMap reference way/157956287: there is nothing to create."
+way/159678881,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007076, created from OpenStreetMap reference way/159678881: there is nothing to create."
+way/169137671,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007081, created from OpenStreetMap reference way/169137671: there is nothing to create."
+way/177218517,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007082, created from OpenStreetMap reference way/177218517: there is nothing to create."
+way/180935182,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007085, created from OpenStreetMap reference way/180935182: there is nothing to create."
+relation/2419635,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007086, created from OpenStreetMap reference relation/2419635: there is nothing to create."
+way/182439266,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007088, created from OpenStreetMap reference way/182439266: there is nothing to create."
+way/186756568,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007090, created from OpenStreetMap reference way/186756568: there is nothing to create."
+way/193103388,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007092, created from OpenStreetMap reference way/193103388: there is nothing to create."
+way/222336190,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007099, created from OpenStreetMap reference way/222336190: there is nothing to create."
+way/227763450,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007101, created from OpenStreetMap reference way/227763450: there is nothing to create."
+way/227887267,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007102, created from OpenStreetMap reference way/227887267: there is nothing to create."
+way/229065858,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007105, created from OpenStreetMap reference way/229065858: there is nothing to create."
+way/230576071,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007109, created from OpenStreetMap reference way/230576071: there is nothing to create."
+way/231644932,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007110, created from OpenStreetMap reference way/231644932: there is nothing to create."
+way/239446456,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007112, created from OpenStreetMap reference way/239446456: there is nothing to create."
+way/254938311,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007117, created from OpenStreetMap reference way/254938311: there is nothing to create."
+relation/4229092,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007134, created from OpenStreetMap reference relation/4229092: there is nothing to create."
+way/324170835,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007137, created from OpenStreetMap reference way/324170835: there is nothing to create."
+way/363415503,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007145, created from OpenStreetMap reference way/363415503: there is nothing to create."
+way/394142341,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007147, created from OpenStreetMap reference way/394142341: there is nothing to create."
+way/400675234,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007148, created from OpenStreetMap reference way/400675234: there is nothing to create."
+way/400675243,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007149, created from OpenStreetMap reference way/400675243: there is nothing to create."
+way/426531599,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007152, created from OpenStreetMap reference way/426531599: there is nothing to create."
+way/459804057,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007156, created from OpenStreetMap reference way/459804057: there is nothing to create."
+way/466198340,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007157, created from OpenStreetMap reference way/466198340: there is nothing to create."
+way/466198341,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007158, created from OpenStreetMap reference way/466198341: there is nothing to create."
+way/495480702,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007162, created from OpenStreetMap reference way/495480702: there is nothing to create."
+way/517706770,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007165, created from OpenStreetMap reference way/517706770: there is nothing to create."
+way/517706793,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007166, created from OpenStreetMap reference way/517706793: there is nothing to create."
+way/517706795,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007167, created from OpenStreetMap reference way/517706795: there is nothing to create."
+way/523870213,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007168, created from OpenStreetMap reference way/523870213: there is nothing to create."
+way/530034026,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007169, created from OpenStreetMap reference way/530034026: there is nothing to create."
+way/542851352,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007170, created from OpenStreetMap reference way/542851352: there is nothing to create."
+way/621654278,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007176, created from OpenStreetMap reference way/621654278: there is nothing to create."
+way/621729098,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007177, created from OpenStreetMap reference way/621729098: there is nothing to create."
+way/631703379,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007178, created from OpenStreetMap reference way/631703379: there is nothing to create."
+way/664467011,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007180, created from OpenStreetMap reference way/664467011: there is nothing to create."
+way/795478561,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007182, created from OpenStreetMap reference way/795478561: there is nothing to create."
+way/923287853,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007189, created from OpenStreetMap reference way/923287853: there is nothing to create."
+way/1156109908,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007200, created from OpenStreetMap reference way/1156109908: there is nothing to create."
+way/1156332709,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007201, created from OpenStreetMap reference way/1156332709: there is nothing to create."
+way/1201795878,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007204, created from OpenStreetMap reference way/1201795878: there is nothing to create."
+way/1241387281,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007205, created from OpenStreetMap reference way/1241387281: there is nothing to create."
+way/1267088276,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007207, created from OpenStreetMap reference way/1267088276: there is nothing to create."
+way/4076661,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-007903, created from OpenStreetMap reference way/4076661: there is nothing to create."
+way/37982796,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-008271, created from OpenStreetMap reference way/37982796: there is nothing to create."
+way/208436608,duplicate,already_same_ref,2026-11-11,"the database already holds this candidate as place PP-008767, created from OpenStreetMap reference way/208436608: there is nothing to create."

@@ -46,6 +46,7 @@ import re
 import sqlite3
 import tomllib
 from dataclasses import asdict, dataclass, field
+from datetime import date
 from pathlib import Path
 
 from shapely import wkt as shapely_wkt
@@ -75,6 +76,13 @@ BY_REVIEWERS = "reviewers"
 PROTECTED_BY = "Tharidu"
 
 # Default inputs, the four files that hold every known case.
+# Decisions already taken, under version control. A case whose reference is
+# recorded here is never asked again, which is what stops the hold list coming
+# back every time the extract is read.
+DECISIONS = CONFIG_DIR / "holds_decisions.csv"
+DECISION_FILE_HEADERS = ["candidate_ref", "verdict", "decided_by", "decided_on",
+                         "evidence"]
+
 HELD_ALL = Path("data/runs/2026-11-10_19/hold_list/held_all.csv")
 POSSIBLE_DUPLICATES = Path("data/runs/2026-11-05/discovery_new_places/possible_duplicates.csv")
 HELD_STRICT = Path("data/runs/2026-11-05/discovery_new_places/held_car_parks_strict.csv")
@@ -462,6 +470,7 @@ class Context:
     their polygons. Rule 5 compares one candidate against another."""
     cases: list = field(default_factory=list)
     polygons: dict = field(default_factory=dict)
+    decisions: dict = field(default_factory=dict)
 
 
 def is_postcode_centroid(near):
@@ -488,6 +497,22 @@ def excluded_by_access(case, context):
     if not key:
         return None
     return ("excluded", f"{reason}, so this is not a car park a driver may use.")
+
+
+def recorded_earlier(case, context):
+    """This case was decided and the decision is recorded under version
+    control. Asking again would spend two reviewers on a settled question and
+    could answer it differently. The access gate above still runs first,
+    because a decision taken before a rule existed cannot overrule the rule
+    that keeps a driver out of a car park they may not use."""
+    # Below the access gate and the hand check protection on purpose. A
+    # decision taken before a rule existed cannot overrule that rule.
+    recorded = context.decisions.get(case.candidate_ref)
+    if not recorded:
+        return None
+    return (recorded["verdict"],
+            f"decided on {recorded['decided_on']} by {recorded['decided_by']}: "
+            f"{recorded['evidence']}")
 
 
 def already_same_ref(case, context):
@@ -571,17 +596,49 @@ RULES = (
     ("excluded_by_access", excluded_by_access),
     ("already_same_ref", already_same_ref),
     ("protected_row", protected_row),
+    ("recorded_earlier", recorded_earlier),
     ("pin_inside_candidate_same_brand", pin_inside_candidate_same_brand),
     ("same_feature_twice", same_feature_twice),
 )
 
 
-def decide(cases, polygons=None):
+def read_decisions(path=DECISIONS):
+    """{candidate_ref: decision} from the recorded decision file, or {} when
+    there is none yet."""
+    path = Path(path)
+    if not path.exists():
+        return {}
+    recorded = {}
+    for row in _read_csv(path):
+        ref = _text(row, "candidate_ref")
+        verdict = _text(row, "verdict")
+        if not ref or verdict not in VERDICTS:
+            continue
+        recorded[ref] = {"verdict": verdict, "decided_by": _text(row, "decided_by"),
+                         "decided_on": _text(row, "decided_on"),
+                         "evidence": _text(row, "evidence")}
+    return recorded
+
+
+def write_decisions(rows, path, today=None):
+    """Record the decisions that act, so no run asks them again. A verdict of
+    unresolved is not recorded: nothing was decided, and the next run has every
+    reason to ask again with better evidence."""
+    today = today or date.today().isoformat()
+    keep = [{"candidate_ref": row["candidate_ref"], "verdict": row["verdict"],
+             "decided_by": row["decided_by"], "decided_on": today,
+             "evidence": row["evidence"]}
+            for row in rows if row["verdict"] != "unresolved"]
+    return _write_csv(path, keep, DECISION_FILE_HEADERS)
+
+
+def decide(cases, polygons=None, decisions=None):
     """Give every case a verdict, the rule that decided it and the evidence.
 
     No rule matching is not a failure. It is the common result and the honest
     one: the evidence on file does not settle the case, so two people read it."""
-    context = Context(cases=list(cases), polygons=dict(polygons or {}))
+    context = Context(cases=list(cases), polygons=dict(polygons or {}),
+                      decisions=dict(decisions or {}))
     for case in cases:
         for name, rule in RULES:
             result = rule(case, context)
@@ -701,6 +758,45 @@ def for_existing_record(case, verdict, evidence):
                     f"{evidence} The record stands and nothing is created.")
 
 
+# The radius the create path already calls a possible duplicate. Reused here so
+# retiring a record and holding a candidate mean the same thing by distance.
+from .create import DUPLICATE_RADIUS_M
+
+
+def strong_enough_to_retire(case, verdict, evidence):
+    """A duplicate verdict on a record the database already holds would retire
+    that record, and a wrong one loses a real car park.
+
+    A brand name shared at 227 m is evidence of one business with several car
+    parks, not of one car park entered twice. Westfield London Car Park C sits
+    227 m from a row called Westfield London Car Parks, and Tesco Hammersmith
+    244 m from Tesco Hammersmith Superstore. Retiring a record needs the pin
+    inside the candidate polygon, the same OpenStreetMap reference, or a
+    distance inside the radius the create path already treats as one spot.
+    Anything weaker becomes unresolved and is reported for a person."""
+    if case.state != "created" or verdict != "duplicate":
+        return verdict, evidence
+    others = [near for near in case.near if near.place_id != case.created_place_id]
+    if not others:
+        # The only place near is the record this candidate made. The verdict
+        # means the database already holds it, and nothing is retired.
+        return verdict, evidence
+    for near in others:
+        if near.pin_inside_candidate or (near.osm_id and near.osm_id == case.candidate_ref):
+            return verdict, evidence
+        if near.metres is not None and near.metres <= DUPLICATE_RADIUS_M:
+            return verdict, evidence
+    nearest = min((near.metres for near in others if near.metres is not None),
+                  default=None)
+    where = f"{nearest} m away" if nearest is not None else "at an unknown distance"
+    return ("unresolved", f"retiring place {case.created_place_id} would need the pin "
+                          f"inside the candidate or a distance inside "
+                          f"{round(DUPLICATE_RADIUS_M)} m. The nearest other place is "
+                          f"{where}, which is one business with several car parks as "
+                          f"readily as one car park entered twice. Reported for a "
+                          f"person. The earlier reading was: {evidence}")
+
+
 def merge(cases, reviews_a, reviews_b):
     """(rows, counts). A case the rules decided is carried through unchanged.
 
@@ -720,6 +816,7 @@ def merge(cases, reviews_a, reviews_b):
         review_a, review_b = reviews_a.get(case.case_id), reviews_b.get(case.case_id)
         if case.decided_by != NO_RULE:
             verdict, decided_by, evidence = case.verdict, case.decided_by, case.evidence
+            verdict, evidence = strong_enough_to_retire(case, verdict, evidence)
             counts["carried through from the rules"] += 1
         elif case.question == ATTACHMENT:
             verdict, decided_by = "unresolved", ATTACHMENT
@@ -731,6 +828,7 @@ def merge(cases, reviews_a, reviews_b):
         else:
             verdict, evidence = merge_verdict(review_a, review_b)
             verdict, evidence = for_existing_record(case, verdict, evidence)
+            verdict, evidence = strong_enough_to_retire(case, verdict, evidence)
             decided_by = BY_REVIEWERS
             counts["merged from the reviewers"] += 1
         if review_a is not None:
@@ -921,6 +1019,8 @@ def bundle_main(argv=None):
     parser.add_argument("--possible-duplicates", default=str(POSSIBLE_DUPLICATES))
     parser.add_argument("--held-strict", default=str(HELD_STRICT))
     parser.add_argument("--held-names", default=str(HELD_NAMES))
+    parser.add_argument("--decisions", default=str(DECISIONS),
+                        help="decisions already recorded, never asked again")
     args = parser.parse_args(argv)
     if not args.pbf and not args.bundle:
         parser.error("give --pbf to parse the extract or --bundle to reload one")
@@ -936,7 +1036,10 @@ def bundle_main(argv=None):
             print(f"{stem:34s} {tally['pending']} pending, {tally['created']} "
                   "already created")
         polygons = attach_extract(cases, args.pbf)
-    decide(cases, polygons)
+    decisions = read_decisions(args.decisions)
+    if decisions:
+        print(f"{len(decisions)} decisions already recorded in {args.decisions}")
+    decide(cases, polygons, decisions)
 
     out_dir = reserve_output(args.out) if args.out else new_run_dir("holds")
     if not args.bundle:
@@ -968,7 +1071,10 @@ def merge_main(argv=None):
     out_dir.mkdir(parents=True, exist_ok=True)
     _write_csv(out_dir / "decisions.csv", rows, DECISION_HEADERS)
     _write_counts(out_dir / "merge_counts.csv", counts)
+    write_decisions(rows, out_dir / "holds_decisions.csv")
     for name, value in counts.items():
         print(f"{name:34s} {value}")
     print(f"Report: {out_dir}")
+    print(f"Copy {out_dir / 'holds_decisions.csv'} to {DECISIONS} to stop "
+          "these cases being asked again.")
     return 0

@@ -119,6 +119,119 @@ def test_a_reviewer_cannot_answer_keep_or_excluded():
     assert "excluded" not in holds.REVIEW_VERDICTS
 
 
+def test_a_far_brand_match_does_not_retire_a_live_record():
+    """Westfield London Car Park C sits 227 m from a row called Westfield
+    London Car Parks. A shopping centre has several car parks."""
+    case = a_case("way/1", "Westfield London Car Park C", state="created",
+                  created_place_id="PP-007793", decided_by=holds.NO_RULE,
+                  verdict="unresolved",
+                  near=[holds.NearPlace(place_id="PP-001027",
+                                        name="Westfield London Car Parks",
+                                        metres=227.0)])
+    high = {case.case_id: {"case_id": case.case_id, "verdict": "duplicate",
+                           "confidence": "high", "evidence": "the brand matches.",
+                           "problems": []}}
+    rows, _ = holds.merge([case], high, high)
+    assert rows[0]["verdict"] == "unresolved"
+    assert "Reported for a person" in rows[0]["evidence"]
+
+
+def test_a_contained_pin_does_retire_a_live_record():
+    """Containment is the evidence a brand name at distance is not."""
+    case = a_case("way/2", "New Barnet Sainsburys Car Park", state="created",
+                  created_place_id="PP-008072", decided_by=holds.NO_RULE,
+                  verdict="unresolved",
+                  near=[holds.NearPlace(place_id="PP-000734", name="Sainsburys New Barnet",
+                                        metres=31.8, pin_inside_candidate=True)])
+    high = {case.case_id: {"case_id": case.case_id, "verdict": "duplicate",
+                           "confidence": "high", "evidence": "the pin is inside.",
+                           "problems": []}}
+    rows, _ = holds.merge([case], high, high)
+    assert rows[0]["verdict"] == "duplicate"
+
+
+def test_a_near_brand_match_inside_the_hold_radius_does_retire_a_live_record():
+    case = a_case("way/3", "Sydney Street Car Park", state="created",
+                  created_place_id="PP-007804", decided_by=holds.NO_RULE,
+                  verdict="unresolved",
+                  near=[holds.NearPlace(place_id="PP-005525", name="Sydney Street car park",
+                                        metres=12.0)])
+    high = {case.case_id: {"case_id": case.case_id, "verdict": "duplicate",
+                           "confidence": "high", "evidence": "same street, same name.",
+                           "problems": []}}
+    rows, _ = holds.merge([case], high, high)
+    assert rows[0]["verdict"] == "duplicate"
+
+
+def test_the_guard_leaves_an_already_created_record_alone():
+    """108 cases carry only their own record nearby. The verdict means the
+    database already holds the candidate, and nothing is retired."""
+    case = a_case("way/5", "Soho Cark Park", state="created",
+                  created_place_id="PP-C", verdict="duplicate",
+                  decided_by="already_same_ref", evidence="already held.",
+                  near=[holds.NearPlace(place_id="PP-C", name="Soho Car Park", metres=0.0)])
+    rows, _ = holds.merge([case], {}, {})
+    assert rows[0]["verdict"] == "duplicate"
+    assert rows[0]["decided_by"] == "already_same_ref"
+
+
+def test_the_guard_leaves_a_pending_duplicate_alone():
+    """A pending duplicate retires nothing, so it needs no extra evidence."""
+    case = a_case("way/4", "Tesco Hammersmith", decided_by=holds.NO_RULE,
+                  verdict="unresolved",
+                  near=[holds.NearPlace(place_id="PP-001177", name="Tesco Hammersmith",
+                                        metres=244.8)])
+    high = {case.case_id: {"case_id": case.case_id, "verdict": "duplicate",
+                           "confidence": "high", "evidence": "the brand matches.",
+                           "problems": []}}
+    rows, _ = holds.merge([case], high, high)
+    assert rows[0]["verdict"] == "duplicate"
+
+
+def test_a_recorded_decision_is_honoured_and_never_asked_again():
+    case = a_case("way/9", "Somewhere Wharf Car Park",
+                  near=[holds.NearPlace(place_id="PP-1", name="Somewhere Wharf", metres=9.0)])
+    recorded = {"way/9": {"verdict": "duplicate", "decided_by": "reviewers",
+                          "decided_on": "2026-11-11", "evidence": "both agreed."}}
+    holds.decide([case], {}, recorded)
+    assert (case.verdict, case.decided_by) == ("duplicate", "recorded_earlier")
+    assert "2026-11-11" in case.evidence
+
+
+def test_a_hand_checked_row_outranks_a_recorded_decision():
+    """A decision taken before a hand check must not overrule the person."""
+    case = a_case("way/10", "Salisbury Street Car Park",
+                  near=[holds.NearPlace(place_id="PP-000001", name="Salisbury Street Car Park",
+                                        verified_by="Tharidu", metres=5.0)])
+    recorded = {"way/10": {"verdict": "duplicate", "decided_by": "reviewers",
+                           "decided_on": "2026-11-11", "evidence": "both agreed."}}
+    holds.decide([case], {}, recorded)
+    assert (case.verdict, case.decided_by) == ("unresolved", "protected_row")
+
+
+def test_an_excluded_candidate_outranks_a_recorded_decision():
+    """A decision taken before the access rule existed cannot send a driver to
+    a car park they may not use."""
+    case = a_case("way/11", "Staff Parking", tags={"amenity": "parking", "access": "staff"})
+    recorded = {"way/11": {"verdict": "distinct", "decided_by": "reviewers",
+                           "decided_on": "2026-11-11", "evidence": "a separate car park."}}
+    holds.decide([case], {}, recorded)
+    assert (case.verdict, case.decided_by) == ("excluded", "excluded_by_access")
+
+
+def test_an_unresolved_case_is_never_recorded():
+    """Nothing was decided, so the next run must be free to ask again."""
+    rows = [{"candidate_ref": "way/12", "verdict": "unresolved",
+             "decided_by": "reviewers", "evidence": "no agreement."},
+            {"candidate_ref": "way/13", "verdict": "duplicate",
+             "decided_by": "reviewers", "evidence": "both agreed."}]
+    import tempfile
+    with tempfile.TemporaryDirectory() as folder:
+        path = holds.write_decisions(rows, Path(folder) / "d.csv", today="2026-11-11")
+        recorded = holds.read_decisions(path)
+    assert set(recorded) == {"way/13"}
+
+
 # ---------------------------------------------------------------- the loader
 
 def test_loader_normalizes_all_four_headers(cases):
