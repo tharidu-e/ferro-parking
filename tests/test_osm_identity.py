@@ -178,6 +178,17 @@ def test_open_way_geometry_is_collected(tmp_path):
     assert result.anchors[0]["tags"]["name"] == "Example"
 
 
+@pytest.mark.parametrize("tag,value,kept", [
+    ("street_vendor", "yes", False), ("building", "kiosk", False), ("building", "yes", True)])
+def test_stalls_are_never_anchors(tmp_path, tag, value, kept):
+    path = tmp_path / "stall.osm"
+    path.write_text(f'''<osm version="0.6">
+    <node id="1" lat="51.5" lon="-0.1"><tag k="amenity" v="fast_food"/>
+    <tag k="name" v="Snack Bar"/><tag k="{tag}" v="{value}"/></node>
+    </osm>''')
+    assert bool(identity.collect(path, CATEGORIES).anchors) == kept
+
+
 def test_automation_uses_existing_configuration(conn):
     row = {"Place ID": "PP-100000", "Verified By": "Code (page fetch)"}
     conn.execute("UPDATE created SET json=?", (json.dumps(row),))

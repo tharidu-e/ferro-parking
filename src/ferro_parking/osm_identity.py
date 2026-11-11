@@ -19,6 +19,10 @@ from .osm_places import is_parking
 from .run_paths import new_run_dir, reserve_output
 
 METHODS = ("inside the car park", "inside the site", "beside it")
+# A stall of this kind stands in somebody else's car park, so its name is never
+# the car park's identity. Observed on a street vendor and a kiosk in the
+# 2026-11-11 run, both named as the only anchor inside a car park.
+STALL_TAGS = (("street_vendor", "yes"), ("building", "kiosk"))
 PROPOSAL_HEADERS = ("place_id", "source_ref", "anchor_name", "anchor_category",
                     "method", "metres", "brand", "place_category")
 
@@ -55,8 +59,12 @@ class Collector(discovery.DiscoveryCollector):
         feature = self.features.pop()
         if is_parking(tags):
             self.parking[f"{kind}/{oid}"] = feature
-        elif category != "car_park" and tags.get("name", "").strip():
+        elif category != "car_park" and tags.get("name", "").strip() and not is_stall(tags):
             self.anchors.append(feature)
+
+
+def is_stall(tags):
+    return any(tags.get(key) == value for key, value in STALL_TAGS)
 
 
 def collect(path, categories):
