@@ -333,8 +333,42 @@ def waltham_forest(location=None):
     return rows
 
 
+NEWHAM_URL = 'https://www.newham.gov.uk/directory/2/car-parks-in-newham'
+
+
+def newham(location=None):
+    """Read every linked area and saved exact site page; never count the index."""
+    if not location or str(location).startswith(('http://', 'https://')):
+        raise ValueError('Newham requires the local index, area pages and site pages')
+    root = Path(location).parent
+    areas = dict.fromkeys(re.findall(r'href="/directory/2/car-parks-in-newham/category/(\d+)"', read_input(location)))
+    if not areas:
+        raise ValueError('Newham index has no area lists')
+    sites = {}
+    for area in areas:
+        page = read_input(root / f'newham-{area}.html')
+        links = re.findall(r'href="(/directory-record/(\d+)/[^"<>]+)"', page)
+        if not links:
+            raise ValueError('Newham area page has no car park entries')
+        sites.update((record_id, url) for url, record_id in links)
+    rows = []
+    for record_id, url in sites.items():
+        page = read_input(root / f'newham-site-{record_id}.html')
+        heading = re.search(r'<h1\b[^>]*>(.*?)</h1>', page, re.S)
+        if not heading or not _plain_text(heading[1]).endswith(' - Car parks in Newham'):
+            raise ValueError('Newham site page has no exact inventory title')
+        name = _plain_text(heading[1]).removesuffix(' - Car parks in Newham')
+        fields = {_plain_text(key): _plain_text(value) for key, value in re.findall(
+            r'<dt\b[^>]*>(.*?)</dt>\s*<dd\b[^>]*>(.*?)</dd>', page, re.S)}
+        address = fields.get('Address', '')
+        row = _inventory_identity(name, 'https://www.newham.gov.uk' + url, address)
+        row['address'] = address
+        rows.append(row)
+    return rows
+
+
 ADAPTERS = {'generic': generic, 'city-of-london': city_of_london,
             'barnet': barnet, 'hillingdon': hillingdon, 'bromley': bromley,
             'hounslow': hounslow, 'havering': havering, 'bexley': bexley,
             'croydon': croydon, 'greenwich': greenwich, 'redbridge': redbridge,
-            'waltham-forest': waltham_forest}
+            'waltham-forest': waltham_forest, 'newham': newham}

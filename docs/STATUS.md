@@ -72,6 +72,7 @@ Greenwich creation added two identity-only records; no Sheet changes were made.
 | Greenwich | Official directory markers | 17 | 17 | 0 | 153 |
 | Redbridge | Council site codes | 18 | 18 | 0 | 146 |
 | Waltham Forest | Council grouped site headings | 11 | 11 | 0 | 129 |
+| Newham | Five areas, eight site pages | 8 | 8 | 0 | 134 |
 | City of London | COMPASS layer 2 | 5 | 5 | 0 | 6 |
 
 Discovery uses current database rows and cached borough polygons. A shared
@@ -95,6 +96,7 @@ refresh resolves all 21 region exceptions by exact site-name review: `data/runs/
 
 Download batch: 18 of 25 pages saved under `data/raw/2026-11-11_112/official_lists/`;
 seven failed. Manifest: `data/runs/2026-11-11_112/official_downloads/download_results.json`.
+Newham: eight reviewed site names across all five areas, gap zero. Review: `data/runs/2026-11-11_126/coverage_newham/`.
 Waltham Forest: 11 reviewed site names, gap zero. Review: `data/runs/2026-11-11_124/coverage_waltham_forest/`.
 Redbridge: 18 exact name/site-code matches, gap zero. Review: `data/runs/2026-11-11_121/coverage_redbridge/`.
 Greenwich: 17 reviewed sites, two new identities, gap zero.
@@ -105,7 +107,6 @@ linked site/list pages in `data/raw/`; an index alone is not a site inventory.
 Counts remain unknown until reviewed. These links are download requests only.
 
 - Enfield: [Car parks](https://www.enfield.gov.uk/services/parking/car-parks), including the map data; HTTP 403 here.
-- Newham: [Car park directory](https://www.newham.gov.uk/directory/2/car-parks-in-newham), plus all five area lists and site pages.
 - Sutton: [Car parks](https://www.sutton.gov.uk/streets-transport-and-parking/parking/car-parks), plus linked site lists.
 - Richmond upon Thames: [Car parks](https://www.richmond.gov.uk/car_parks), plus all area lists.
 - Ealing: [Car parks in the borough](https://www.ealing.gov.uk/downloads/download/580/car_parks_in_the_borough), plus the linked charges/spaces list.

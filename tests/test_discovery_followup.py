@@ -478,3 +478,14 @@ def test_waltham_forest_splits_grouped_sites_and_excludes_street_bays(tmp_path):
     assert len(rows) == 5
     assert rows[-1]['name'] == 'Willow House Car Park E17'
     assert all(r['tariff'] == r['lat'] == '' for r in rows)
+
+
+def test_newham_requires_linked_areas_and_reads_exact_site_page(tmp_path):
+    from ferro_parking.sources import newham
+    index = tmp_path / 'index.html'
+    index.write_text('<a href="/directory/2/car-parks-in-newham/category/2">Area</a>')
+    (tmp_path / 'newham-2.html').write_text('<a href="/directory-record/42/example">Example</a>')
+    (tmp_path / 'newham-site-42.html').write_text('<h1>Example - Car parks in Newham</h1><dt>Address</dt><dd>Example Road, E6 1HZ</dd><dt>Charges</dt><dd>Free</dd>')
+    row = newham(index)[0]
+    assert (row['name'], row['postcode']) == ('Example', 'E6 1HZ')
+    assert row['tariff'] == row['lat'] == ''
