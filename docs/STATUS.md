@@ -67,7 +67,7 @@ No database or Sheet changes were made by these coverage reviews.
 | Bromley | 30 official site pages | 30 | 30 | 0 | 254 |
 | Croydon | Council map markers | 19 | 19 | 0 | 176 |
 | Havering | Council site links | 24 | 24 by name | 0 by name | 204 |
-| Hillingdon | Council points, prior review | 28 | 24 | Unresolved (4) | 259 |
+| Hillingdon | Council points, refreshed | 28 | 24 | Unresolved (4) | 259 |
 | Hounslow | Council lists, prior review | 21 | 21 by name | 0 by name | 229 |
 | City of London | COMPASS layer 2 | 5 | 5 | 0 | 6 |
 
@@ -84,12 +84,10 @@ Bromley and Croydon had zero exceptions. Croydon's Waddon PP-000214 has a
 Hall, Hayes Pool, Kingsend South short stay and Falling Lane; Cedars and Tesco
 are distinct sites. Prior review: `2026-11-11_27/coverage_review/hillingdon_review.csv`.
 
-Stopped at Havering for the owner: db-duplicate refuses active OSM-created
-PP-009347 (Slaney Road), keeping PP-000818, and points to retirement instead.
-No retirement is authorized. Dry run: `data/runs/2026-11-11_107/db_duplicate/report.json`.
-Awaiting the owner's decision on leaving it held while imports continue. Hillingdon and
-Hounslow await their fresh reimports after that decision. Discovery foundation
-is committed as `2f9b24c`; completed borough work is committed separately.
+Slaney Road PP-009347 remains held without retirement. PLAN.md explicitly
+allows coverage work to continue past OSM-created duplicate refusals.
+Hillingdon reimport: 28 listed, 24 reviewed held sites, four unchanged owner
+cases. Fresh review: `data/runs/2026-11-11_113/coverage_hillingdon/`. Hounslow refresh is next.
 
 Owner downloads still needed, one borough per line. Save complete HTML plus
 linked site/list pages in `data/raw/`; an index alone is not a site inventory.
