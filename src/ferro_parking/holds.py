@@ -51,13 +51,20 @@ from pathlib import Path
 from shapely import wkt as shapely_wkt
 from shapely.geometry import Point
 
-from . import db
+from . import db, osm_places
 from .create import _metres
 from .osm_match import osm_url
 from .run_paths import new_run_dir, reserve_output
 from .settings import CONFIG_DIR
 
-VERDICTS = ("duplicate", "distinct", "unresolved")
+# Five outcomes, one action each. "duplicate" means the database already holds
+# this car park: create nothing, and retire the record if the candidate made
+# one. "distinct" means create it. "keep" means the record the candidate
+# already made stands, so do nothing. "excluded" means a driver may not park
+# here, so never create it. "unresolved" means the evidence does not say, so
+# do nothing. A reviewer answers only the three they can judge.
+VERDICTS = ("duplicate", "distinct", "keep", "excluded", "unresolved")
+REVIEW_VERDICTS = ("duplicate", "distinct", "unresolved")
 
 # A case no rule settled. These, and only these, go to the reviewers.
 NO_RULE = "no rule matched"
@@ -100,6 +107,9 @@ GENERIC_WORDS = {
     "free", "main", "upper", "lower", "north", "south", "east", "west",
     "street", "road", "lane", "avenue", "close", "way", "place", "square",
     "court", "yard", "estate", "retail", "shopping",
+    # "Car park (unnamed)" is what this project calls a car park with no name
+    # in the extract. Two of them shared the token and read as one place.
+    "unnamed", "unknown", "none",
 }
 
 
@@ -359,7 +369,6 @@ def attach_extract(cases, pbf_path):
 
     A reference the extract does not hold keeps geometry "absent" and no tags.
     That is evidence too: it means the hold list is older than the extract."""
-    from . import osm_places
     handler = osm_places.collect(pbf_path)
     features = {f"{feature['type']}/{feature['id']}": feature
                 for feature in handler.features}
@@ -466,6 +475,21 @@ def distance_near(case):
     return [near for near in case.near if not is_postcode_centroid(near)]
 
 
+def excluded_by_access(case, context):
+    """A driver may not park here. The 2026-11-05 hold lists were written
+    before some of these rules existed, so a candidate on them can still carry
+    a tag that excludes it today. One such candidate reached a creation verdict
+    in the first run: way/92793027, tagged access=staff and named Staff
+    Parking. Writing it as parkable sends a driver to a place that fines them,
+    which is the first gate in the execution checklist."""
+    if not case.tags:
+        return None
+    key, reason = osm_places.creation_excluded(case.tags)
+    if not key:
+        return None
+    return ("excluded", f"{reason}, so this is not a car park a driver may use.")
+
+
 def already_same_ref(case, context):
     """A place already carries this exact OpenStreetMap reference, so there is
     nothing to create and no distance to measure.
@@ -544,6 +568,7 @@ def same_feature_twice(case, context):
 # "distinct": creating a car park is a decision two reviewers make, never one
 # a geometry test makes on its own.
 RULES = (
+    ("excluded_by_access", excluded_by_access),
     ("already_same_ref", already_same_ref),
     ("protected_row", protected_row),
     ("pin_inside_candidate_same_brand", pin_inside_candidate_same_brand),
@@ -614,9 +639,9 @@ def read_reviews(path):
         verdict = _text(row, "verdict").lower()
         confidence = _text(row, "confidence").lower()
         problems = []
-        if verdict not in VERDICTS:
+        if verdict not in REVIEW_VERDICTS:
             problems.append(f"verdict {verdict or '(blank)'!r} is not one of "
-                            f"{', '.join(VERDICTS)}")
+                            f"{', '.join(REVIEW_VERDICTS)}")
         if confidence not in CONFIDENCES:
             problems.append(f"confidence {confidence or '(blank)'!r} is not "
                             "high or low")
@@ -660,6 +685,22 @@ def merge_verdict(review_a, review_b):
     return verdict, f"both reviewers said {verdict} with high confidence."
 
 
+def for_existing_record(case, verdict, evidence):
+    """A case the database already holds can never become a creation.
+
+    The reviewers judge whether the candidate is the older place beside it, and
+    "distinct" is the right answer to that question. It is the wrong action:
+    the record exists, so creating it again would repeat it. way/129582660,
+    Queens Hospital Surface, is a separate car park from the multi-storey 72 m
+    away and is already place PP-008489. The verdict becomes "keep", which
+    does nothing."""
+    if case.state != "created" or verdict != "distinct":
+        return verdict, evidence
+    return ("keep", f"place {case.created_place_id} already holds this candidate, "
+                    "and it is a separate car park from the places beside it: "
+                    f"{evidence} The record stands and nothing is created.")
+
+
 def merge(cases, reviews_a, reviews_b):
     """(rows, counts). A case the rules decided is carried through unchanged.
 
@@ -689,6 +730,7 @@ def merge(cases, reviews_a, reviews_b):
             counts["attachment cases, a separate plan"] += 1
         else:
             verdict, evidence = merge_verdict(review_a, review_b)
+            verdict, evidence = for_existing_record(case, verdict, evidence)
             decided_by = BY_REVIEWERS
             counts["merged from the reviewers"] += 1
         if review_a is not None:

@@ -115,6 +115,33 @@ def lorry_only(tags):
     return False
 
 
+# Why a parking feature is not a candidate for creation. The key names the
+# counter, the text names the reason for a report.
+EXCLUSION_COUNTS = {
+    "parking type": "excluded_parking_type",
+    "lorry or coach": "excluded_lorry_or_coach",
+    "access": "excluded_access",
+}
+
+
+def creation_excluded(tags):
+    """(key, reason), or ("", "") when the feature is a creation candidate.
+
+    Both the proposer and the hold list read this. An older hold list was
+    written before some of these rules existed, so a candidate on it can still
+    carry a tag that excludes it today. One function means the two can never
+    disagree about what a driver is allowed to park in."""
+    parking = str(tags.get("parking", "")).lower()
+    if parking in EXCLUDED_PARKING:
+        return "parking type", f"parking={parking} is street side, lane or kerb parking"
+    if lorry_only(tags):
+        return "lorry or coach", "the tags describe lorry or coach parking, not car parking"
+    access = str(tags.get("access", "")).strip().lower()
+    if access in EXCLUDED_ACCESS:
+        return "access", f"access={access} excludes a driver from parking here"
+    return "", ""
+
+
 def qualifier(tags, area_m2):
     """Why a feature with no usable access tag is still a candidate identity,
     or "" when nothing qualifies it. This is never a claim of public access."""
@@ -273,16 +300,11 @@ def propose(pbf_path, today=None):
         tags = feature["tags"]
         counts["amenity_parking"] += 1
         counts["kind_" + feature["type"]] += 1
-        if str(tags.get("parking", "")).lower() in EXCLUDED_PARKING:
-            counts["excluded_parking_type"] += 1
-            continue
-        if lorry_only(tags):
-            counts["excluded_lorry_or_coach"] += 1
+        key, _ = creation_excluded(tags)
+        if key:
+            counts[EXCLUSION_COUNTS[key]] += 1
             continue
         access = str(tags.get("access", "")).strip().lower()
-        if access in EXCLUDED_ACCESS:
-            counts["excluded_access"] += 1
-            continue
         point_ll, precision = point_for(None, feature["geom_ll"])
         if not london.contains(point_ll):
             counts["excluded_outside_greater_london"] += 1

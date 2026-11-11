@@ -52,6 +52,73 @@ def verdict_of(case, polygons=None, others=()):
     return case.verdict, case.decided_by
 
 
+# ---------------------------------------------------------------- the gates
+# Three defects the 11 November 2026 Codex audit found in the first run. Each
+# one would have changed the database.
+
+def test_a_staff_only_candidate_is_excluded_and_never_created():
+    """way/92793027, named Staff Parking and tagged access=staff, reached a
+    creation verdict in the first run. Writing it as parkable sends a driver to
+    a place that fines them."""
+    case = a_case("way/92793027", "Staff Parking",
+                  tags={"amenity": "parking", "access": "staff", "name": "Staff Parking"})
+    assert verdict_of(case) == ("excluded", "excluded_by_access")
+    assert "access=staff" in case.evidence
+
+
+def test_the_exclusion_rules_come_from_one_function():
+    """The hold list and the proposer read the same function, so an old hold
+    list cannot carry a candidate today's rules would reject."""
+    from ferro_parking import osm_places
+    for tags in ({"amenity": "parking", "access": "private"},
+                 {"amenity": "parking", "parking": "street_side"},
+                 {"amenity": "parking", "parking": "lorry"}):
+        assert osm_places.creation_excluded(tags)[0]
+        assert verdict_of(a_case("way/1", "Somewhere", tags=tags))[0] == "excluded"
+    assert osm_places.creation_excluded({"amenity": "parking", "access": "yes"}) == ("", "")
+
+
+def test_an_unnamed_car_park_shares_no_brand_with_another_unnamed_one():
+    """Two car parks both called "Car park (unnamed)" shared the token
+    "unnamed" and read as one place. The word names no business."""
+    assert not holds.brands_overlap("Car park (unnamed)", "Car park (unnamed)")
+    assert not holds.brands_overlap("Car park (unnamed)", "Parking (unnamed)")
+    assert holds.brands_overlap("Lidl Catford", "Lidl Rushey Green")
+
+
+def test_a_record_that_exists_is_never_offered_as_a_new_one():
+    """way/129582660, Queens Hospital Surface, is a separate car park from the
+    multi-storey 72 m away and is already place PP-008489. Both reviewers were
+    right, and creating it again would repeat it."""
+    case = a_case("way/129582660", "Queens Hospital Surface", state="created",
+                  created_place_id="PP-008489", decided_by=holds.NO_RULE,
+                  verdict="unresolved")
+    high = {case.case_id: {"case_id": case.case_id, "verdict": "distinct",
+                           "confidence": "high", "evidence": "a separate car park.",
+                           "problems": []}}
+    rows, counts = holds.merge([case], high, high)
+    assert rows[0]["verdict"] == "keep"
+    assert "PP-008489" in rows[0]["evidence"]
+    assert counts["final keep"] == 1
+
+
+def test_a_pending_case_still_becomes_a_creation():
+    """The guard must not block a real new car park."""
+    case = a_case("way/777", "Somewhere Wharf Car Park", decided_by=holds.NO_RULE,
+                  verdict="unresolved")
+    high = {case.case_id: {"case_id": case.case_id, "verdict": "distinct",
+                           "confidence": "high", "evidence": "a separate car park.",
+                           "problems": []}}
+    rows, _ = holds.merge([case], high, high)
+    assert rows[0]["verdict"] == "distinct"
+
+
+def test_a_reviewer_cannot_answer_keep_or_excluded():
+    """Those two words are actions the merge decides, not judgments."""
+    assert "keep" not in holds.REVIEW_VERDICTS
+    assert "excluded" not in holds.REVIEW_VERDICTS
+
+
 # ---------------------------------------------------------------- the loader
 
 def test_loader_normalizes_all_four_headers(cases):
