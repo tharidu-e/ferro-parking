@@ -208,6 +208,13 @@ reference on Can Park? for 104 of 104. Supported accuracy reads 0 percent of
 104, because a fresh replay has no attestation for its own answers until a
 reviewer reads them.
 
+`default-fill` classified none of the 233 default-stage rows, so there is no
+plan to apply. 226 rows are not a recognised chain format or small venue
+pattern, and 7 have no Brand, which a Conditional row needs. The run is
+`data/runs/2026-11-11_101/default_fill/`. The largest groups are 102
+large-format supermarkets, 38 hotels and 26 shopping centres. Rules R1 and R10
+refuse to guess a chain policy for them, which is the cautious direction.
+
 A structural weakness to fix next: `validate_rows` sees only the plan's own
 columns, so a planner has to restate a row's existing values as context. That
 is why the rows above fail on text somebody else wrote. Pass the row to the validator as context. That
