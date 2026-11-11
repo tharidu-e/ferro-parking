@@ -45,6 +45,16 @@ BLOCKED_HEADERS = ["key", "Place ID", "Location Name", "url", "reason"]
 CONTEXT_COLUMNS = ("Brand", "Place Category")
 DASHES = ("\u2013", "\u2014")
 
+# This pipeline's own bookkeeping. The page does not state any of it, so these
+# columns carry no quote, no URL and no page metadata, and the evidence table
+# then holds one row per field a page actually stated.
+BOOKKEEPING_COLUMNS = frozenset({
+    "Source Tier", "Specificity", "Evidence Type", "Evidence Level", "Evidence Age",
+    "Rules Stated", "Prices Stated", "Conflict", "Decision Reason", "Review Flag",
+    "Flag Status", "Verification Result", "Change Made (Yes/No)",
+    fill.VERIFIED_BY, fill.VERIFIED_DATE, fill.SOURCE_URLS,
+})
+
 
 def rows_for(conn, key, stage_keys=True):
     """The routed rows this fetcher owns: the station stage for the station
@@ -71,7 +81,21 @@ def rows_for(conn, key, stage_keys=True):
     return out, run_id
 
 
-def plan_lines(place_id, stage, values, notes, flags, row, quote, url, verified_by, today):
+def page_metadata(conn, url):
+    """(retrieved_at, page_hash) for the cached page, or two blanks.
+
+    The pages table is keyed by URL and a later fetch replaces the row, so the
+    values are copied into each plan line while they still describe the page
+    the quote came from."""
+    row = conn.execute(
+        "SELECT fetched_at, text_hash FROM pages WHERE url = ?", (url,)).fetchone()
+    if row is None:
+        return "", ""
+    return row["fetched_at"] or "", row["text_hash"] or ""
+
+
+def plan_lines(place_id, stage, values, notes, flags, row, quote, url, verified_by, today,
+               retrieved_at="", page_hash=""):
     """(lines, blocked_reason). fill-shaped values turned into plan lines, with
     Notes and Review Flag appended rather than replaced, exactly as page_fill
     does it."""
@@ -105,9 +129,13 @@ def plan_lines(place_id, stage, values, notes, flags, row, quote, url, verified_
         value = new[column]
         if value is None or str(value).strip() == "":
             continue
+        stated = column not in BOOKKEEPING_COLUMNS
         lines.append({"place_id": place_id, "column": column, "new_value": str(value),
-                       "quote": quote, "source_url": url, "stage": stage,
-                       "verified_by": verified_by})
+                       "quote": quote if stated else "",
+                       "source_url": url if stated else "",
+                       "stage": stage, "verified_by": verified_by,
+                       "retrieved_at": retrieved_at if stated else "",
+                       "page_hash": page_hash if stated else ""})
     return lines, ""
 
 
@@ -188,9 +216,11 @@ def run(conn, key, limit=None, today=None, fetcher=None):
 
         row_lines = []
         if values:
+            retrieved_at, page_hash = page_metadata(conn, url)
             row_lines, held = plan_lines(
                 place_id, stage, values, notes, flags, row, quote, url,
-                getattr(fetcher, "verified_by", "Code (page fetch)"), today)
+                getattr(fetcher, "verified_by", "Code (page fetch)"), today,
+                retrieved_at, page_hash)
             if held:
                 counts["rows with values"] -= 1
                 counts["rows held for a person"] += 1

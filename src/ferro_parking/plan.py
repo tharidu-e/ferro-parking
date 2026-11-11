@@ -51,6 +51,11 @@ VERIFICATION_RESULT = fill.VERIFICATION_RESULT
 OWNER_COLUMNS = set(db.SHEET_OWNED_COLUMNS.values())
 
 LINE_FIELDS = ("place_id", "column", "new_value", "quote", "source_url", "stage", "verified_by")
+# Page metadata pins the page version a quote came from, so a later fetch of
+# the same URL cannot silently restate what the evidence claims. Only a page
+# fetch can supply it, so a line carries these two fields only when it has
+# them, and a planner that reads no page writes neither.
+PAGE_FIELDS = ("retrieved_at", "page_hash")
 REJECT_HEADERS = ["Place ID", "column", "new value", "reason"]
 PLAN_HEADERS = ["Place ID", "column", "current value", "new value", "stage", "verified by"]
 
@@ -73,7 +78,9 @@ def read_plan(path):
         missing = {"place_id", "column", "new_value"} - set(line)
         if missing:
             raise ValueError(f"{path} line {number}: missing {sorted(missing)}")
-        lines.append({field: line.get(field, "") for field in LINE_FIELDS})
+        entry = {field: line.get(field, "") for field in LINE_FIELDS}
+        entry.update({field: line[field] for field in PAGE_FIELDS if line.get(field)})
+        lines.append(entry)
     return lines
 
 
@@ -82,8 +89,9 @@ def write_plan(path, lines):
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("x", encoding="utf-8") as stream:
         for line in lines:
-            stream.write(json.dumps({field: line.get(field, "") for field in LINE_FIELDS},
-                                     ensure_ascii=True, sort_keys=True) + "\n")
+            entry = {field: line.get(field, "") for field in LINE_FIELDS}
+            entry.update({field: line[field] for field in PAGE_FIELDS if line.get(field)})
+            stream.write(json.dumps(entry, ensure_ascii=True, sort_keys=True) + "\n")
     return len(lines)
 
 
@@ -289,10 +297,12 @@ def apply_plan(conn, lines, run_id, apply=False):
             if line["quote"] or line["source_url"]:
                 conn.execute(
                     "INSERT INTO evidence (run_id, place_id, field, value, quote, source_url,"
-                    " source_tier, stage, recorded_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    " source_tier, stage, recorded_at, retrieved_at, page_hash)"
+                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (run_id, entry["place_id"], column, line["new_value"], line["quote"],
                      line["source_url"], _entry_value(entry["_lines"], row, "Source Tier"),
-                     line["stage"], now))
+                     line["stage"], now, line.get("retrieved_at", ""),
+                     line.get("page_hash", "")))
                 report["evidence"] += 1
     conn.commit()
     db.rebuild(conn)

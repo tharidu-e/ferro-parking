@@ -425,6 +425,60 @@ def test_the_plan_a_fetcher_writes_passes_db_apply(conn, monkeypatch):
     assert report["rejected"] == [], report["rejected"]
 
 
+def cache_page(conn, url="https://example.org/branch",
+               fetched_at="2026-11-11T09:00:00+00:00", text_hash="abc123"):
+    conn.execute("INSERT OR REPLACE INTO pages (url, fetched_at, http_status, text_hash,"
+                 " text_path) VALUES (?, ?, 200, ?, '')", (url, fetched_at, text_hash))
+    conn.commit()
+
+
+def test_page_metadata_goes_only_to_the_fields_the_page_states(conn, monkeypatch):
+    monkeypatch.setattr(fetch_fill, "fetch", fake_fetch(
+        {"https://example.org/branch": (200, "No parking spaces")}))
+    cache_page(conn)
+    lines, _ = fetch_fill.run(conn, "station", today=TODAY, fetcher=FakeFetcher(values={
+        fill.CAN_PARK: "No", "Source Tier": "Operator / council site",
+        "Specificity": "Site-specific"}))
+    by_column = {entry["column"]: entry for entry in lines}
+    stated = by_column[fill.CAN_PARK]
+    assert stated["quote"] == "the quote"
+    assert stated["source_url"] == "https://example.org/branch"
+    assert stated["retrieved_at"] == "2026-11-11T09:00:00+00:00"
+    assert stated["page_hash"] == "abc123"
+    for column in ("Source Tier", "Specificity", fill.VERIFIED_BY, fill.SOURCE_URLS):
+        book = by_column[column]
+        assert (book["quote"], book["source_url"]) == ("", ""), column
+        assert (book["retrieved_at"], book["page_hash"]) == ("", ""), column
+
+
+def test_an_uncached_url_reports_no_page_metadata(conn):
+    assert fetch_fill.page_metadata(conn, "https://example.org/missing") == ("", "")
+
+
+def test_evidence_rows_keep_the_page_version_and_skip_bookkeeping(conn, monkeypatch):
+    monkeypatch.setattr(fetch_fill, "fetch", fake_fetch(
+        {"https://example.org/branch": (200, "No parking spaces")}))
+    cache_page(conn)
+    from ferro_parking import page_fill
+    values = {fill.CAN_PARK: "No", "Source Tier": "Operator / council site",
+              "Specificity": "Site-specific", "Evidence Level": "Verified",
+              "Evidence Type": "Official site: clear answer",
+              "Evidence Detail (what the source shows)": "No parking spaces",
+              "Rules Stated": "Yes", "Prices Stated": "No",
+              "Decision Reason": "Route A: National Rail station page, visible text"}
+    values.update({column: "Not applicable"
+                   for column in page_fill.NOT_APPLICABLE_IF_NO_PARKING})
+    lines, _ = fetch_fill.run(conn, "station", today=TODAY,
+                               fetcher=FakeFetcher(values=values))
+    plan.apply_plan(conn, lines, "run-meta", apply=True)
+    rows = {row["field"]: row for row in conn.execute(
+        "SELECT field, retrieved_at, page_hash FROM evidence WHERE run_id = 'run-meta'")}
+    assert rows[fill.CAN_PARK]["retrieved_at"] == "2026-11-11T09:00:00+00:00"
+    assert rows[fill.CAN_PARK]["page_hash"] == "abc123"
+    assert "Source Tier" not in rows
+    assert "Decision Reason" not in rows
+
+
 def test_the_runner_writes_no_change_to_the_database(conn, monkeypatch, tmp_path):
     monkeypatch.setattr(fetch_fill, "fetch", fake_fetch(
         {"https://example.org/branch": (200, "Free parking is available.")}))

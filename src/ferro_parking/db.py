@@ -121,7 +121,8 @@ CREATE TABLE IF NOT EXISTS parking (
 CREATE TABLE IF NOT EXISTS evidence (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     run_id TEXT, place_id TEXT NOT NULL, field TEXT, value TEXT, quote TEXT,
-    source_url TEXT, source_tier TEXT, stage TEXT, recorded_at TEXT
+    source_url TEXT, source_tier TEXT, stage TEXT, recorded_at TEXT,
+    retrieved_at TEXT, page_hash TEXT
 );
 CREATE INDEX IF NOT EXISTS evidence_place_id ON evidence(place_id);
 CREATE TABLE IF NOT EXISTS pages (
@@ -161,6 +162,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS created_source_ref ON created(source, source_r
 """
 
 
+# Columns added after the first databases existed. CREATE TABLE IF NOT EXISTS
+# leaves an older table alone, so each one is added in place instead.
+ADDED_COLUMNS = (("evidence", "retrieved_at", "TEXT"), ("evidence", "page_hash", "TEXT"))
+
+
 def connect(path=DB_PATH):
     """Open the database, creating the file and the schema if needed."""
     path = Path(path)
@@ -169,6 +175,11 @@ def connect(path=DB_PATH):
     conn = sqlite3.connect(str(path))
     conn.row_factory = sqlite3.Row
     conn.executescript(SCHEMA)
+    for table, column, kind in ADDED_COLUMNS:
+        held = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+        if column not in held:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {kind}")
+    conn.commit()
     return conn
 
 
