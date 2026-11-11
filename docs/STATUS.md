@@ -78,6 +78,7 @@ Greenwich creation added two identity-only records; no Sheet changes were made.
 | Merton | Council site-by-area table | 13 | 13 | 0 | 110 |
 | Harrow | Named council car park sections | 14 | 14 | 0 | 101 |
 | Southwark | Two paid council sites only | 2 scoped | 2 | 0 in scoped list | 83 |
+| Kingston upon Thames | Both council directory pages | 12 | 12 | 0 | 76 |
 | City of London | COMPASS layer 2 | 5 | 5 | 0 | 6 |
 
 Discovery uses current database rows and cached borough polygons. A shared
@@ -101,6 +102,7 @@ refresh resolves all 21 region exceptions by exact site-name review: `data/runs/
 
 Download batch: 18 of 25 pages saved under `data/raw/2026-11-11_112/official_lists/`;
 seven failed. Manifest: `data/runs/2026-11-11_112/official_downloads/download_results.json`.
+Kingston: both pages, 12 reviewed site names, gap zero. Review: `data/runs/2026-11-11_138/coverage_kingston/`.
 Southwark: both paid-inventory sites held; park facilities remain outside this
 list. Review: `data/runs/2026-11-11_136/coverage_southwark/`.
 Harrow: 14 reviewed site names, gap zero. Review: `data/runs/2026-11-11_134/coverage_harrow/`.
@@ -125,7 +127,6 @@ Counts remain unknown until reviewed. These links are download requests only.
 - Barking and Dagenham: [Parking index](https://www.lbbd.gov.uk/parking), plus the linked current car park inventory; index is blocked here.
 - Southwark parks: separate park car park inventory still needed; the imported pay-to-park list explicitly excludes these facilities.
 - Lewisham: [Council-managed car parks](https://lewisham.gov.uk/myservices/parking/carparks/car-parks-managed-by-the-council).
-- Kingston upon Thames: [Car parks](https://www.kingston.gov.uk/parking/car-parks), plus site pages.
 - Wandsworth: [Parking tariffs](https://www.wandsworth.gov.uk/parking/parking-bays/paying-to-park/parking-tariffs/), including the car park section.
 - Haringey: [Council car parks](https://www.haringey.gov.uk/parking/car-parks), blocked here.
 - Westminster: [Visitor parking](https://www.westminster.gov.uk/parking/visitor-parking-information), plus linked off-street operators; this page is not a full site inventory.

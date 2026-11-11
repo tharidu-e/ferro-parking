@@ -495,8 +495,32 @@ def southwark(location=None):
     return rows
 
 
+KINGSTON_URL = 'https://www.kingston.gov.uk/parking/car-parks'
+
+
+def kingston_upon_thames(location=None):
+    """Read every saved page of the council's paginated car park directory."""
+    if not location or str(location).startswith(('http://', 'https://')):
+        raise ValueError('Kingston requires a saved index and all directory pages')
+    raw = read_input(location)
+    page_count = max([0] + [int(n) for n in re.findall(r'href="\?page=(\d+)"', raw)]) + 1
+    rows = []
+    for page in range(page_count):
+        text = raw if page == 0 else read_input(Path(location).parent / f'kingston-page-{page + 1}.html')
+        if any(int(n) >= page_count for n in re.findall(r'href="\?page=(\d+)"', text)):
+            raise ValueError('Kingston directory has more pages than the saved index')
+        links = re.findall(r'<a href="(/parking/car-parks/[^"<>]+)"[^>]*class="teaser-link"[^>]*>.*?<h2>(.*?)</h2>.*?</a>', text, re.S)
+        if not links:
+            raise ValueError('Kingston directory page has no readable car park entries')
+        rows.extend(_inventory_identity(_plain_text(name), 'https://www.kingston.gov.uk' + url)
+                    for url, name in links)
+    if len({r['url'] for r in rows}) != len(rows):
+        raise ValueError('Kingston pages repeat a site; check the saved pagination')
+    return rows
+
+
 ADAPTERS = {'generic': generic, 'city-of-london': city_of_london,
             'barnet': barnet, 'hillingdon': hillingdon, 'bromley': bromley,
             'hounslow': hounslow, 'havering': havering, 'bexley': bexley,
             'croydon': croydon, 'greenwich': greenwich, 'redbridge': redbridge,
-            'waltham-forest': waltham_forest, 'newham': newham, 'richmond-upon-thames': richmond_upon_thames, 'ealing': ealing, 'merton': merton, 'harrow': harrow, 'southwark': southwark}
+            'waltham-forest': waltham_forest, 'newham': newham, 'richmond-upon-thames': richmond_upon_thames, 'ealing': ealing, 'merton': merton, 'harrow': harrow, 'southwark': southwark, 'kingston-upon-thames': kingston_upon_thames}

@@ -537,3 +537,11 @@ def test_southwark_counts_heading_once_and_excludes_season_ticket_section(tmp_pa
     rows = southwark(path)
     assert len(rows) == 1
     assert rows[0]['postcode'] == 'SE15 4RB'
+
+
+def test_kingston_reads_second_page_before_counting_complete_inventory(tmp_path):
+    from ferro_parking.sources import kingston_upon_thames
+    path = tmp_path / 'kingston.html'
+    path.write_text('<a href="?page=1">Next</a><a href="/parking/car-parks/ashdown" class="teaser-link"><h2>Ashdown</h2></a>')
+    (tmp_path / 'kingston-page-2.html').write_text('<a href="/parking/car-parks/rose" class="teaser-link"><h2>Rose</h2></a>')
+    assert [r['name'] for r in kingston_upon_thames(path)] == ['Ashdown', 'Rose']
