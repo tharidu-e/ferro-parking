@@ -68,7 +68,7 @@ No database or Sheet changes were made by these coverage reviews.
 | Croydon | Council map markers | 19 | 19 | 0 | 176 |
 | Havering | Council site links | 24 | 24 by name | 0 by name | 204 |
 | Hillingdon | Council points, refreshed | 28 | 24 | Unresolved (4) | 259 |
-| Hounslow | Council lists, prior review | 21 | 21 by name | 0 by name | 229 |
+| Hounslow | Council lists, refreshed | 21 | 21 | 0 | 229 |
 | City of London | COMPASS layer 2 | 5 | 5 | 0 | 6 |
 
 Discovery uses current database rows and cached borough polygons. A shared
@@ -87,7 +87,8 @@ are distinct sites. Prior review: `2026-11-11_27/coverage_review/hillingdon_revi
 Slaney Road PP-009347 remains held without retirement. PLAN.md explicitly
 allows coverage work to continue past OSM-created duplicate refusals.
 Hillingdon reimport: 28 listed, 24 reviewed held sites, four unchanged owner
-cases. Fresh review: `data/runs/2026-11-11_113/coverage_hillingdon/`. Hounslow refresh is next.
+cases. Fresh review: `data/runs/2026-11-11_113/coverage_hillingdon/`. Hounslow
+refresh resolves all 21 region exceptions by exact site-name review: `data/runs/2026-11-11_114/coverage_hounslow/`.
 
 Owner downloads still needed, one borough per line. Save complete HTML plus
 linked site/list pages in `data/raw/`; an index alone is not a site inventory.
