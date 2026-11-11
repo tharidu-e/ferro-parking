@@ -23,11 +23,17 @@ rule cannot settle is unresolved, never a guess.
 
 Rules run in a fixed order and the first match wins. Rule 1 reads a fact: a
 place already carries this exact OpenStreetMap reference. Rule 2 stops on a row
-a person hand checked, which no automated rule may overrule. Rule 3 throws out
-a distance measured from a postcode centroid, because that pin is the middle of
-a postcode and not the car park. Rules 4 and 5 read geometry: a pin inside the
-candidate polygon, or one candidate area containing another candidate point,
-each confirmed by a shared brand token in the two names.
+a person hand checked, which no automated rule may overrule. Rules 3 and 4 read
+geometry: a pin inside the candidate polygon, or one candidate area containing
+another candidate point, each confirmed by a shared brand token in the two
+names.
+
+A distance measured to a postcode centroid is thrown out by distance_near, so
+no rule can call two places the same car park on the strength of it. The case
+itself still goes to the reviewers, because a name and a tag are evidence that
+a distance of no value does not cancel. An earlier version ended such a case as
+unresolved on the spot, and that discarded 311 cases, 222 of which shared a
+brand token with the place beside them.
 
 OSM data (c) OpenStreetMap contributors, ODbL.
 """
@@ -475,20 +481,6 @@ def protected_row(case, context):
     return None
 
 
-def pin_is_postcode_centroid(case, context):
-    """Every near place is geocoded to a postcode centroid, so no distance in
-    this case is evidence and nothing is left to measure against."""
-    dropped = [near for near in case.near if is_postcode_centroid(near)]
-    if not dropped:
-        return None
-    if distance_near(case):
-        return None
-    names = ", ".join(sorted(near.place_id for near in dropped))
-    return ("unresolved", f"every near place ({names}) is geocoded to a postcode "
-                          "centroid, so its distance from this candidate proves "
-                          "nothing about whether they are the same car park.")
-
-
 def pin_inside_candidate_same_brand(case, context):
     """An existing place's own pin falls inside this candidate's polygon, and
     the two names share a brand token. Inside plus the same brand is the same
@@ -528,11 +520,12 @@ def same_feature_twice(case, context):
 
 # Ordered. The first match wins. Rule 1 reads a recorded fact and settles the
 # case before any judgment is needed. Rule 2 then stops every hand checked row,
-# so no geometry rule below it can overrule a person.
+# so no geometry rule below it can overrule a person. No rule returns
+# "distinct": creating a car park is a decision two reviewers make, never one
+# a geometry test makes on its own.
 RULES = (
     ("already_same_ref", already_same_ref),
     ("protected_row", protected_row),
-    ("pin_is_postcode_centroid", pin_is_postcode_centroid),
     ("pin_inside_candidate_same_brand", pin_inside_candidate_same_brand),
     ("same_feature_twice", same_feature_twice),
 )

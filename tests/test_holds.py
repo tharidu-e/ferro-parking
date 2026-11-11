@@ -217,10 +217,12 @@ def test_a_recorded_fact_still_outranks_a_protected_row(cases):
 # ---------------------------------------------------------------- rule 3
 
 def test_a_postcode_centroid_near_place_never_produces_a_duplicate(cases):
-    """The pin is the middle of a postcode, so its distance is not evidence."""
+    """The pin is the middle of a postcode, so its distance is not evidence.
+    The case still reaches the reviewers: a name and a tag are evidence that a
+    worthless distance does not cancel."""
     case = by_ref(cases, "node/777001")
-    assert verdict_of(case) == ("unresolved", "pin_is_postcode_centroid")
-    assert "postcode centroid" in case.evidence
+    assert holds.distance_near(case) == []
+    assert verdict_of(case) == ("unresolved", holds.NO_RULE)
 
 
 def test_a_postcode_centroid_is_dropped_but_a_usable_near_place_survives():
@@ -246,8 +248,7 @@ def test_a_postcode_centroid_cannot_satisfy_the_pin_inside_rule():
                                         geo_precision="Postcode centroid")])
     holds.attach_distances([case], {"way/555004": polygon})
     assert case.near[0].pin_inside_candidate is True
-    assert verdict_of(case, {"way/555004": polygon}) == (
-        "unresolved", "pin_is_postcode_centroid")
+    assert verdict_of(case, {"way/555004": polygon}) == ("unresolved", holds.NO_RULE)
 
 
 # ---------------------------------------------------------------- rule 4
