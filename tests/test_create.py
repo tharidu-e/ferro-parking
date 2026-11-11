@@ -444,6 +444,107 @@ def test_a_reviewed_reference_does_not_pass_a_hold_against_another_candidate(con
     assert report["held"][0]["near place_id"] == create.IN_THIS_PLAN
 
 
+def test_a_cleared_neighbour_does_not_hide_an_uncleared_sibling(conn):
+    """The real case: both Belvedere Medical Centre candidates sit 22 to 25 m
+    from a Co-op car park the review cleared, and 26 m from each other. Reading
+    only the closest place let each one hide behind the Co-op, and both would
+    have been brought back for one car park."""
+    _, rows = db.current_rows(conn)
+    twin = next(row for row in rows
+                if str(row.get("Latitude", "")).strip()
+                and str(row.get("Longitude", "")).strip())
+    lat, lon = float(twin["Latitude"]), float(twin["Longitude"])
+    plan = [record(source_ref="way/196",
+                   row={"Latitude": f"{lat + 0.00018:.6f}", "Longitude": f"{lon:.6f}",
+                        "OSM ID": "way/196"}),
+            record(source_ref="way/197",
+                   row={"Latitude": f"{lat + 0.00022:.6f}", "Longitude": f"{lon:.6f}",
+                        "OSM ID": "way/197"})]
+    report = create.apply_plan(conn, plan, "create-test", apply=True,
+                               reviewed={"way/196", "way/197"})
+    assert report["created"] == 1
+    assert len(report["held"]) == 1
+    assert report["held"][0]["near place_id"] == create.IN_THIS_PLAN
+
+
+def test_within_returns_every_place_inside_the_radius(conn):
+    _, rows = db.current_rows(conn)
+    twin = next(row for row in rows
+                if str(row.get("Latitude", "")).strip()
+                and str(row.get("Longitude", "")).strip())
+    lat, lon = float(twin["Latitude"]), float(twin["Longitude"])
+    places = create.ExistingPlaces(rows)
+    found = places.within(lat, lon, create.DUPLICATE_RADIUS_M)
+    assert found
+    assert found == sorted(found, key=lambda item: item[2])
+    assert all(metres <= create.DUPLICATE_RADIUS_M for _, _, metres in found)
+    assert places.within(lat, lon, 0.0)[0][2] == 0.0
+
+
+def test_a_repeated_reactivation_does_not_let_a_held_sibling_in(conn):
+    """The gate the checklist names: a repeated apply creates no second record.
+
+    Two candidates 26 m apart, both cleared against the places around them. The
+    first run brings one back and holds the other against it. On the second run
+    the first is already active, and it must still block the second. Leaving an
+    active record out of the index let the held one through."""
+    _, rows = db.current_rows(conn)
+    twin = next(row for row in rows
+                if str(row.get("Latitude", "")).strip()
+                and str(row.get("Longitude", "")).strip())
+    lat, lon = float(twin["Latitude"]), float(twin["Longitude"])
+    plan = [record(source_ref="way/196",
+                   row={"Latitude": f"{lat + 0.00018:.6f}", "Longitude": f"{lon:.6f}",
+                        "OSM ID": "way/196"}),
+            record(source_ref="way/197",
+                   row={"Latitude": f"{lat + 0.00022:.6f}", "Longitude": f"{lon:.6f}",
+                        "OSM ID": "way/197"})]
+    cleared = {"way/196", "way/197"}
+    # Both records exist and both are deactivated, which is the state the hold
+    # list is in: an early run created them before the guards existed, and the
+    # run was undone. One run each, because the guards now stop one plan
+    # holding two records on one spot.
+    for number, one in enumerate(plan):
+        run_id = f"create-sibling-{number}"
+        assert create.apply_plan(conn, [one], run_id, apply=True,
+                                 reviewed=cleared)["created"] == 1
+        create.undo_run(conn, run_id, apply=True)
+
+    first = create.reactivate_run(conn, apply=True, only=cleared, reviewed=cleared)
+    assert first["reactivated"] == 1
+    assert len(first["held"]) == 1
+
+    repeat = create.reactivate_run(conn, apply=True, only=cleared, reviewed=cleared)
+    assert repeat["reactivated"] == 0
+    assert repeat["already_active"] == 1
+    assert len(repeat["held"]) == 1
+    assert repeat["held"][0]["source ref"] == first["held"][0]["source ref"]
+
+
+def test_an_undo_can_retire_one_record_by_its_reference(conn):
+    """A reactivation can be chosen by reference, so an undo has to be too."""
+    report = run(conn, [record(source_ref="way/500", row={
+        "Latitude": "51.400000", "Longitude": "-0.400000", "OSM ID": "way/500"})])
+    assert report["created"] == 1
+    place_id = report["rows"][0]["Place ID"]
+    undo = create.undo_run(conn, apply=True, only=["way/500"])
+    assert undo["deactivated"] == 1
+    _, rows = db.current_rows(conn)
+    assert place_id not in {str(r.get("Place ID") or "").strip() for r in rows}
+    again = create.undo_run(conn, apply=True, only=["way/nothing"])
+    assert any("no created record" in line["reason"] for line in again["refused"])
+
+
+def test_a_place_that_is_itself_a_cleared_candidate_never_clears_a_hold(conn):
+    """The reviewers judged each candidate against the places that existed when
+    they looked. A place that is itself a cleared candidate was not one."""
+    _, rows = db.current_rows(conn)
+    twin = next(row for row in rows if str(row.get("OSM ID") or "").strip())
+    found = create.reviewed_place_ids(rows, {twin["OSM ID"]})
+    assert found == {twin["Place ID"]}
+    assert create.reviewed_place_ids(rows, set()) == set()
+
+
 def test_only_the_word_distinct_clears_a_reference(tmp_path):
     """A duplicate, a keep, an excluded or an unresolved decision clears
     nothing, so a wrong word in the file cannot create a car park."""

@@ -108,6 +108,21 @@ class ExistingPlaces:
     def same_osm_feature(self, osm_id):
         return self.by_osm_id.get((osm_id or "").strip()) if osm_id else None
 
+    def within(self, lat, lon, radius):
+        """Every place inside radius, closest first. nearest answers with one
+        place, which is not enough once a review can clear a place: a cleared
+        neighbour would hide an uncleared sibling standing behind it."""
+        found = []
+        key_lat, key_lon = round(lat, 3), round(lon, 3)
+        for step_lat in (-GRID_DEGREES, 0.0, GRID_DEGREES):
+            for step_lon in (-GRID_DEGREES, 0.0, GRID_DEGREES):
+                cell = (round(key_lat + step_lat, 3), round(key_lon + step_lon, 3))
+                for place_id, name, other_lat, other_lon in self.grid.get(cell, ()):
+                    metres = _metres(lat, lon, other_lat, other_lon)
+                    if metres <= radius:
+                        found.append((place_id, name, metres))
+        return sorted(found, key=lambda item: item[2])
+
     def nearest(self, lat, lon):
         """(place_id, name, metres) for the closest place, or None."""
         best, best_metres = None, None
@@ -122,6 +137,42 @@ class ExistingPlaces:
         if best is None:
             return None
         return best[0], best[1], best_metres
+
+
+def reviewed_place_ids(rows, reviewed):
+    """The places whose own OpenStreetMap reference a review cleared.
+
+    These are siblings, not independent existing places. The reviewers judged
+    each candidate against the places that existed when they looked, and a
+    place that is itself a cleared candidate was not one of them. Treating one
+    as an ordinary existing place let a repeat run bring back a record the
+    first run held: the sibling was active by then, so the review cleared it."""
+    reviewed = set(reviewed)
+    if not reviewed:
+        return set()
+    found = set()
+    for row in rows:
+        if str(row.get("OSM ID") or "").strip() in reviewed:
+            place_id = str(row.get(PLACE_ID) or "").strip()
+            if place_id:
+                found.add(place_id)
+    return found
+
+
+def proximity_hold(places, lat, lon, cleared, siblings):
+    """(place_id, name, metres) for the place that blocks this record, or None.
+
+    cleared is True when two reviewers judged this candidate a separate car
+    park from the places around it. A review clears an existing place. It never
+    clears a sibling, because nobody was asked whether two candidates are each
+    other, and one car park is often mapped twice."""
+    found = places.within(lat, lon, DUPLICATE_RADIUS_M)
+    for blocker in found:
+        if blocker[0] in siblings:
+            return blocker
+    if found and not cleared:
+        return found[0]
+    return None
 
 
 def read_plan(path):
@@ -162,6 +213,7 @@ def check_plan(conn, records, reviewed=()):
     inactive = {row["place_id"] for row in conn.execute(
         "SELECT place_id FROM created WHERE active = 0")}
     places = ExistingPlaces(rows, exclude=inactive)
+    siblings = {IN_THIS_PLAN} | reviewed_place_ids(rows, reviewed)
     accepted, skipped, held, rejected = [], [], [], []
     seen_refs = {}
     existing = {}
@@ -222,16 +274,17 @@ def check_plan(conn, records, reviewed=()):
                 bad = True
         if bad:
             continue
-        near = places.nearest(float(str(row["Latitude"]).strip()),
-                              float(str(row["Longitude"]).strip()))
-        cleared = ref in reviewed and near and near[0] != IN_THIS_PLAN
-        if near and near[2] <= DUPLICATE_RADIUS_M and not cleared:
+        blocker = proximity_hold(places,
+                                 float(str(row["Latitude"]).strip()),
+                                 float(str(row["Longitude"]).strip()),
+                                 ref in reviewed, siblings)
+        if blocker:
             held.append({"source": source, "source ref": ref,
                          "Location Name": row.get("Location Name", ""),
-                         "near place_id": near[0], "near name": near[1],
-                         "metres": round(near[2]),
-                         "reason": f"within {round(near[2])} m of place {near[0]}: "
-                                   "a possible duplicate, not proof"})
+                         "near place_id": blocker[0], "near name": blocker[1],
+                         "metres": round(blocker[2]),
+                         "reason": f"within {round(blocker[2])} m of place "
+                                   f"{blocker[0]}: a possible duplicate, not proof"})
             continue
         seen_refs[(source, ref)] = True
         places.add(IN_THIS_PLAN, row.get("Location Name", ""),
@@ -290,17 +343,35 @@ def _row_summary(record):
             "Latitude": row.get("Latitude", ""), "Longitude": row.get("Longitude", "")}
 
 
-def undo_run(conn, run_id, apply=False):
+def undo_run(conn, run_id=None, apply=False, only=None):
     """Deactivate every record one create run made. Nothing is deleted and no
     Place ID is freed. A record another run has since changed is refused, so an
-    undo never discards newer evidence."""
-    records = [dict(row) for row in conn.execute(
-        "SELECT place_id, source, source_ref, active FROM created WHERE run_id = ?"
-        " ORDER BY rowid", (run_id,))]
+    undo never discards newer evidence.
+
+    only names the source references to deactivate, instead of a whole run. A
+    reactivation can be chosen by reference, so an undo has to be too, or a
+    record brought back by mistake could only be retired by undoing every
+    record its original run made."""
+    if only is not None:
+        refs = sorted(set(only))
+        if not refs:
+            records = []
+        else:
+            marks = ",".join("?" for _ in refs)
+            records = [dict(row) for row in conn.execute(
+                "SELECT place_id, source, source_ref, active FROM created"
+                f" WHERE source_ref IN ({marks}) ORDER BY rowid", refs)]
+        run_id = run_id or "(chosen by reference)"
+    else:
+        records = [dict(row) for row in conn.execute(
+            "SELECT place_id, source, source_ref, active FROM created WHERE run_id = ?"
+            " ORDER BY rowid", (run_id,))]
     report = {"run_id": run_id, "records": len(records), "deactivated": 0,
               "already_inactive": 0, "refused": [], "rows": []}
     if not records:
-        report["refused"].append({"place_id": "", "reason": f"no create run {run_id!r}"})
+        reason = ("no created record for any reference given" if only is not None
+                  else f"no create run {run_id!r}")
+        report["refused"].append({"place_id": "", "reason": reason})
         return report
     changed = {row["place_id"] for row in conn.execute(
         "SELECT DISTINCT place_id FROM changes WHERE place_id IN ("
@@ -337,30 +408,68 @@ def undo_run(conn, run_id, apply=False):
     return report
 
 
-def reactivate_run(conn, run_id, apply=False):
-    """Bring back the records one create run made, after an undo and a fix.
+def reactivate_run(conn, run_id=None, apply=False, only=None, reviewed=()):
+    """Bring back records a create run made, after an undo and a fix.
 
     The guards run again, so a record that now duplicates a place the database
     holds stays deactivated. Each record keeps the Place ID it already has, so
-    nothing is allocated twice and the audit trail stays in one row."""
-    records = [dict(row) for row in conn.execute(
-        "SELECT place_id, source, source_ref, json, active FROM created"
-        " WHERE run_id = ? ORDER BY rowid", (run_id,))]
+    nothing is allocated twice and the audit trail stays in one row.
+
+    only names the source references to bring back, instead of a whole run.
+    Every hold list case from step 2 is a record of this kind: it was created,
+    the run was undone, and the fixed guards held it. A reviewer who calls it a
+    separate car park is asking for that record back, not for a new one, so its
+    Place ID is the one it already has.
+
+    reviewed names the references two reviewers judged a separate car park from
+    the places around them. Such a reference passes the hold against an
+    existing place, and never the hold against another record in this batch."""
+    reviewed = set(reviewed)
+    if only is not None:
+        refs = sorted(set(only))
+        if not refs:
+            records = []
+        else:
+            marks = ",".join("?" for _ in refs)
+            records = [dict(row) for row in conn.execute(
+                "SELECT place_id, source, source_ref, json, active FROM created"
+                f" WHERE source_ref IN ({marks}) ORDER BY rowid", refs)]
+        run_id = run_id or "(chosen by reference)"
+    else:
+        records = [dict(row) for row in conn.execute(
+            "SELECT place_id, source, source_ref, json, active FROM created"
+            " WHERE run_id = ? ORDER BY rowid", (run_id,))]
     report = {"run_id": run_id, "records": len(records), "reactivated": 0,
               "already_active": 0, "skipped": [], "held": [], "rows": []}
     if not records:
+        reason = ("no created record for any reference given" if only is not None
+                  else f"no create run {run_id!r}")
         report["skipped"].append({"source": "", "source ref": "", "place_id": "",
-                                  "reason": f"no create run {run_id!r}"})
+                                  "reason": reason})
         return report
     headers, rows = db.current_rows(conn)
     mine = {record["place_id"] for record in records}
     places = ExistingPlaces(rows, exclude=mine)
+    added = reviewed_place_ids(rows, reviewed)
     todo = []
     for record in records:
-        if record["active"]:
-            report["already_active"] += 1
-            continue
         row = json.loads(record["json"])
+        if record["active"]:
+            # An active record is a real place, and every later record in this
+            # batch has to respect it. The index was built without these
+            # records so that none is compared against itself, so an active one
+            # goes back in here. Leaving it out let a repeat run bring back a
+            # record the first run held against it.
+            report["already_active"] += 1
+            try:
+                places.add(record["place_id"], row.get("Location Name", ""),
+                           (row.get("OSM ID") or "").strip(),
+                           float(str(row.get("Latitude", "")).strip()),
+                           float(str(row.get("Longitude", "")).strip()))
+                added.add(record["place_id"])
+            except ValueError:
+                pass
+            continue
         osm_id = (row.get("OSM ID") or "").strip()
         twin = places.same_osm_feature(osm_id)
         if twin:
@@ -377,17 +486,19 @@ def reactivate_run(conn, run_id, apply=False):
                 "source": record["source"], "source ref": record["source_ref"],
                 "place_id": record["place_id"], "reason": "no usable coordinate"})
             continue
-        near = places.nearest(lat, lon)
-        if near and near[2] <= DUPLICATE_RADIUS_M:
+        blocker = proximity_hold(places, lat, lon,
+                                 record["source_ref"] in reviewed, added)
+        if blocker:
             report["held"].append({
                 "source": record["source"], "source ref": record["source_ref"],
                 "Location Name": row.get("Location Name", ""),
-                "near place_id": near[0], "near name": near[1],
-                "metres": round(near[2]),
-                "reason": f"within {round(near[2])} m of place {near[0]}: "
+                "near place_id": blocker[0], "near name": blocker[1],
+                "metres": round(blocker[2]),
+                "reason": f"within {round(blocker[2])} m of place {blocker[0]}: "
                           "a possible duplicate, not proof"})
             continue
         places.add(record["place_id"], row.get("Location Name", ""), osm_id, lat, lon)
+        added.add(record["place_id"])
         todo.append(record)
         report["rows"].append({"Place ID": record["place_id"],
                                "source": record["source"],
@@ -488,13 +599,28 @@ def main(argv=None):
 
 def redo_main(argv=None):
     parser = argparse.ArgumentParser(prog="db-create-redo")
-    parser.add_argument("--run", required=True)
+    parser.add_argument("--run", default=None,
+                        help="bring back every record this create run made")
+    parser.add_argument("--reviewed", default=None,
+                        help="a holds_decisions.csv. Bring back the records its "
+                             "distinct decisions name, keeping each Place ID, "
+                             "and let those references pass the hold against an "
+                             "existing place")
     parser.add_argument("--db", default=str(db.DB_PATH))
     parser.add_argument("--out", default=None)
     parser.add_argument("--apply", action="store_true")
     args = parser.parse_args(argv)
+    if not args.run and not args.reviewed:
+        parser.error("give --run for a whole create run or --reviewed for the "
+                     "records two reviewers cleared")
+    reviewed = read_reviewed(args.reviewed) if args.reviewed else set()
+    if reviewed:
+        print(f"{len(reviewed)} references cleared as a separate car park by two "
+              f"reviewers, from {args.reviewed}")
     conn = db.connect(args.db)
-    report = reactivate_run(conn, args.run, apply=args.apply)
+    report = reactivate_run(conn, args.run, apply=args.apply,
+                            only=reviewed if args.reviewed else None,
+                            reviewed=reviewed)
     out_dir = Path(args.out) if args.out else new_run_dir("db_create_redo")
     out_dir.mkdir(parents=True, exist_ok=True)
     _write_csv(out_dir / "plan.csv", report["rows"], PLAN_HEADERS)
@@ -505,7 +631,7 @@ def redo_main(argv=None):
     (out_dir / "report.json").write_text(json.dumps(
         {k: v for k, v in report.items() if k != "rows"}, indent=2), encoding="utf-8")
     mode = "applied" if args.apply else "dry run"
-    print(f"{mode}: run {args.run}, {report['records']} records, "
+    print(f"{mode}: run {report['run_id']}, {report['records']} records, "
           f"{len(report['rows'])} eligible, {report['reactivated']} reactivated, "
           f"{report['already_active']} already active, "
           f"{len(report['skipped'])} skipped, "
@@ -516,14 +642,22 @@ def redo_main(argv=None):
 
 def undo_main(argv=None):
     parser = argparse.ArgumentParser(prog="db-create-undo")
-    parser.add_argument("--run", required=True)
+    parser.add_argument("--run", default=None,
+                        help="deactivate every record this create run made")
+    parser.add_argument("--ref", action="append", default=None,
+                        help="deactivate the record for this source reference. "
+                             "Repeatable. Use it to retire one record a "
+                             "reference-chosen reactivation brought back")
     parser.add_argument("--db", default=str(db.DB_PATH))
     parser.add_argument("--apply", action="store_true")
     args = parser.parse_args(argv)
+    if not args.run and not args.ref:
+        parser.error("give --run for a whole create run or --ref for one record")
     conn = db.connect(args.db)
-    report = undo_run(conn, args.run, apply=args.apply)
+    report = undo_run(conn, args.run, apply=args.apply,
+                      only=args.ref if args.ref else None)
     mode = "applied" if args.apply and not report["refused"] else "dry run"
-    print(f"{mode}: run {args.run}, {report['records']} records, "
+    print(f"{mode}: run {report['run_id']}, {report['records']} records, "
           f"{report['deactivated']} deactivated, "
           f"{report['already_inactive']} already inactive, "
           f"{len(report['refused'])} refused")
