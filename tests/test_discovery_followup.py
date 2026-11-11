@@ -564,3 +564,16 @@ def test_hackney_keeps_named_closed_site_without_retiring_or_copying_terms(tmp_p
     assert [r['name'] for r in rows] == ['Bentley Road', 'Amhurst Road car park']
     assert rows[-1]['source_closed'] is True
     assert all(r['tariff'] == r['lat'] == '' for r in rows)
+
+
+def test_brent_uses_complete_council_directory_response_and_refuses_truncation(tmp_path):
+    from ferro_parking.sources import brent
+    path = tmp_path / 'brent.json'
+    doc = {'brentItemTitle': 'Barham Park car park', 'brentItemUrl': '/parking-roads-and-travel/parking/where-you-can-park/car-parks/barham-park', 'brentItemGeoLocation': {'type': 'Point', 'coordinates': [-0.31, 51.55]}}
+    data = {'totalCount': 1, 'results': [{'document': doc}]}
+    path.write_text(json.dumps(data))
+    assert brent(path)[0]['lat'] == '51.55'
+    data['totalCount'] = 2
+    path.write_text(json.dumps(data))
+    with pytest.raises(ValueError, match='truncated'):
+        brent(path)

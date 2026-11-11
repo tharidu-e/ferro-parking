@@ -81,6 +81,7 @@ Greenwich creation added two identity-only records; no Sheet changes were made.
 | Kingston upon Thames | Both council directory pages | 12 | 12 | 0 | 76 |
 | Haringey | Council RingGo site codes | 11 | 10 separate, C grouped | 1 mapping hold | 68 |
 | Hackney | Eight listed plus Amhurst closed notice | 9 named | 9 | 0 named sites | 35 |
+| Brent | Complete public directory response | 11 | 11 | 0 | 91 |
 | City of London | COMPASS layer 2 | 5 | 5 | 0 | 6 |
 
 Discovery uses current database rows and cached borough polygons. A shared
@@ -104,6 +105,8 @@ refresh resolves all 21 region exceptions by exact site-name review: `data/runs/
 
 Download batch: 18 of 25 pages saved under `data/raw/2026-11-11_112/official_lists/`;
 seven failed. Manifest: `data/runs/2026-11-11_112/official_downloads/download_results.json`.
+Brent: public endpoint returned 11 complete named sites; all held, gap zero.
+Review: `data/runs/2026-11-11_144/coverage_brent/`.
 Hackney: eight listed sites plus one named closed site held, no identity gap.
 No retirement. Review: `data/runs/2026-11-11_142/coverage_hackney/`.
 Haringey: ten separate sites held; Stoneleigh C appears only in grouped
@@ -130,7 +133,6 @@ Counts remain unknown until reviewed. These links are download requests only.
 - Enfield: [Car parks](https://www.enfield.gov.uk/services/parking/car-parks), including the map data; HTTP 403 here.
 - Sutton: [Car parks](https://www.sutton.gov.uk/streets-transport-and-parking/parking/car-parks), plus linked site lists.
 - Tower Hamlets: [Cashless parking](https://www.towerhamlets.gov.uk/FAQs/Parking-Charges/Cashless-parking.aspx), plus a complete current off-street list; this FAQ alone is not a denominator.
-- Brent: [Public car parks](https://brent.gov.uk/parking-roads-and-travel/parking/where-you-can-park/car-parks).
 - Barking and Dagenham: [Parking index](https://www.lbbd.gov.uk/parking), plus the linked current car park inventory; index is blocked here.
 - Southwark parks: separate park car park inventory still needed; the imported pay-to-park list explicitly excludes these facilities.
 - Lewisham: [Council-managed car parks](https://lewisham.gov.uk/myservices/parking/carparks/car-parks-managed-by-the-council).

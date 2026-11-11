@@ -562,8 +562,36 @@ def hackney(location=None):
     return rows
 
 
+BRENT_SITE_PREFIX = '/parking-roads-and-travel/parking/where-you-can-park/car-parks/'
+
+
+def brent(location=None):
+    """Read the complete public search response used by the council directory."""
+    if not location:
+        raise ValueError('Brent requires a saved council directory search response')
+    data = json.loads(read_input(location))
+    results = data.get('results', [])
+    if not results or data.get('totalCount') != len(results):
+        raise ValueError('Brent council search is empty, failed or truncated')
+    rows = []
+    for result in results:
+        doc = result['document']
+        geometry = doc.get('brentItemGeoLocation') or {}
+        url, name = doc.get('brentItemUrl') or '', doc.get('brentItemTitle') or ''
+        if geometry.get('type') != 'Point' or not url.startswith(BRENT_SITE_PREFIX) or not name:
+            raise ValueError('Brent site lacks an exact name, car park URL or point')
+        lon, lat = geometry['coordinates'][:2]
+        row = _inventory_identity(_plain_text(name), 'https://brent.gov.uk' + url)
+        row.update({'lat': str(lat), 'lon': str(lon), 'address': doc.get('brentItemAddress') or '',
+                    'postcode': doc.get('brentItemPostcode') or ''})
+        rows.append(row)
+    if len({r['url'] for r in rows}) != len(rows):
+        raise ValueError('Brent council search repeats a car park URL')
+    return rows
+
+
 ADAPTERS = {'generic': generic, 'city-of-london': city_of_london,
             'barnet': barnet, 'hillingdon': hillingdon, 'bromley': bromley,
             'hounslow': hounslow, 'havering': havering, 'bexley': bexley,
             'croydon': croydon, 'greenwich': greenwich, 'redbridge': redbridge,
-            'waltham-forest': waltham_forest, 'newham': newham, 'richmond-upon-thames': richmond_upon_thames, 'ealing': ealing, 'merton': merton, 'harrow': harrow, 'southwark': southwark, 'kingston-upon-thames': kingston_upon_thames, 'haringey': haringey, 'hackney': hackney}
+            'waltham-forest': waltham_forest, 'newham': newham, 'richmond-upon-thames': richmond_upon_thames, 'ealing': ealing, 'merton': merton, 'harrow': harrow, 'southwark': southwark, 'kingston-upon-thames': kingston_upon_thames, 'haringey': haringey, 'hackney': hackney, 'brent': brent}
