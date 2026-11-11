@@ -74,7 +74,7 @@ and passed with `--input`.
 | Hounslow | Council area lists | 21 | 21 by name | 0 by name | 229 |
 | Enfield | Not imported | Unknown | Unknown | Unknown | 209 |
 | Havering | Council car park links | 24 | 24 by name | 0 by name | 204 |
-| Bexley | Council sections | 19 listed, 18 headline | 19 by name | Count conflict | 176 |
+| Bexley | Council sections | 19 listed, 18 headline | 19 | 0 of 19 listed | 176 |
 | Croydon | Council map markers | 19 | 19 by name | 0 by name | 176 |
 | Greenwich | Not imported | Unknown | Unknown | Unknown | 153 |
 | Redbridge | Not imported | Unknown | Unknown | Unknown | 146 |
@@ -107,6 +107,10 @@ not brand counts or a Sheet export. Snapshot:
 `data/runs/2026-11-11_25/coverage/borough_order.csv`.
 Official inventories cover their stated council lists, not every private site.
 Unknown is not zero. OSM-derived identities do not establish parking permission.
+
+Bexley reimport: all 19 region exceptions resolved by exact site-name and
+borough review against PP-000105 to PP-000123. No place needs creation or a
+duplicate mark. The page headline still says 18. Review: `data/runs/2026-11-11_62/coverage_bexley/`.
 
 Discovery ignores URLs shared by every row of a multi-row import when matching
 identities, including duplicates within the import. Evidence keeps the URLs.
