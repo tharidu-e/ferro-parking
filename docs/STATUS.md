@@ -13,9 +13,9 @@ Historical documents remain available in Git history. Run evidence stays under `
 | Needs on-site check | 1,176 |
 | Active OSM-created records | 3,951 |
 
-The latest saved route is `route-20261111T204717Z`.
-Its 6,244 routed rows comprise 4,822 Grok, 901 no_evidence, 233 default,
-175 website reader and 113 station rows. 5,314 rows are skipped, of which 47
+The latest saved route is `route-20261111T210324Z`.
+Its 6,244 routed rows comprise 4,807 Grok, 901 no_evidence, 233 default,
+190 website reader and 113 station rows. 5,314 rows are skipped, of which 47
 are personal locks and 1,175 need an on-site check.
 A filled verification result does not prove that every parking detail is known.
 For current counts, run the read-only example in README.md. Saved routing can lag behind data changes.
@@ -30,10 +30,14 @@ For current counts, run the read-only example in README.md. Saved routing can la
 
 Legacy counts read the sheet's own cells, through `readiness.counts` over a
 `db-export`. Evidence-supported means the `evidence` table holds a quote for
-Can Park?, Who Can Park and Cost Type on that place. It holds a quote for no
-parking answer at all: 2,903 are for Place Category and 703 for Brand. Every
-legacy answer predates the evidence table. Do not read 1,450 as 1,450 checked
-car parks.
+Can Park?, Who Can Park and Cost Type on that place. No row reaches that bar.
+The quoted evidence covers Place Category 2,903 times, Brand 703 times, and
+Can Park? and Who Can Park 15 times each, from the Asda run. Every legacy
+answer predates the evidence table. Do not read 1,450 as 1,450 checked car
+parks.
+
+The 15 Asda rows are not legacy showable, because their Cost Type reads
+Unknown. The store page states a car park and no price.
 
 ## Next work, in order
 
@@ -42,10 +46,7 @@ car parks.
    with the reason in `fetch_fill.SKIPPED_HOSTS`.
    The full brand list is `data/runs/2026-11-11_20/osm_identity/counts.csv`.
    Make sure that the optional TfL endpoint and its terms allow use. Missing credentials mean skip that source.
-2. Decide the Asda plan. `data/runs/2026-11-11_40/fetch_fill/plan.jsonl` fills
-   15 blank rows with Can Park? Conditional, Who Can Park Customers only and
-   Cost Type Unknown. The dry run refuses nothing. Nothing is applied.
-3. Complete publication dry runs for new-row appends before any Sheet approval.
+2. Complete publication dry runs for new-row appends before any Sheet approval.
    Cover fresh identity, drift, duplicate IDs, missing imported IDs, protected fields,
    formulas, grid growth and partial-write recovery. Test the six controls offline.
    Make sure that OSM attribution and licensing agree with primary sources. Produce a full dry run
@@ -139,6 +140,20 @@ retirement instead. Zero changes were applied. Report:
 Greenwich is the next borough after this decision.
 No OSM fallback is applied until absence of a machine-readable list is established.
 No commits until the coverage task is finished, as requested by the owner.
+
+## Applied research
+
+The Asda plan is applied, with the owner's approval. The run is
+`apply-20261111T210308Z` and `db-undo --run apply-20261111T210308Z` restores
+all 240 values. It filled 15 rows with Can Park? Conditional, Who Can Park
+Customers only and Cost Type Unknown. Nothing was refused. 30 lines restated
+the value already there.
+
+45 evidence rows carry the quote, the store url, the retrieval time and the
+cached page hash. They cover Can Park?, Who Can Park and Evidence Detail only,
+because the store page states nothing else. The 15 rows now route to
+`fetcher:storelocator.asda.com` instead of Grok, because their Source URLs
+hold the store page.
 
 ## Applied identity
 
