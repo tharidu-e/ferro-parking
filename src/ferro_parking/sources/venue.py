@@ -86,7 +86,7 @@ PARKING_MENTION = re.compile(r"\bcar park\b|\bparking\b", re.I)
 
 
 def sentences(text):
-    return [part.strip() for part in re.split(r"(?<=[.!?])\s+|\n+", text) if part.strip()]
+    return [part.strip() for part in re.split(r"(?<=[.!?;])\s+|\n+", text) if part.strip()]
 
 
 def parking_sentences(text):
@@ -104,18 +104,59 @@ def _without_pcn(text):
     return PCN_WORDING.sub(" penalty ", text)
 
 
+# Require a parking subject or an explicit continuation, rather than treating
+# proximity to a parking sentence as proof that a price buys parking.
+PARKING_CHARGE = re.compile(
+    r"\b(?:car park|parking)(?:\s+(?:is|charges?|costs?|fees?|payment|rate|tariff|of|are|apply|additional))*"
+    r"\s*(?:£|paid\b|payable\b|charges?\b|costs?\b|fees?\b)"
+    r"|\b(?:charge to park|paid parking|pay and display|pay on exit)\b", re.I)
+CONTINUATION = re.compile(
+    r"^(?:after that|beyond that|if you plan to stay beyond|a charge applies after|the max(?:imum)? stay)\b", re.I)
+DENIAL = re.compile(
+    r"\b(?:no|not)\s+(?:(?:free|customer|member|car)\s+)*parking\b"
+    r"|\bparking (?:is )?not available\b", re.I)
+
+
 def _charge_candidates(text, found):
-    """The parking sentences, then the sentence after each of them."""
+    """Explicit parking clauses and narrowly linked following statements.
+
+    A bare price or 'must pay' elsewhere on a branch page proves nothing.
+    Clauses about a different service are deliberately left for a person.
+    """
     every = sentences(text)
-    out = list(found)
-    for sentence in found:
-        try:
-            index = every.index(sentence)
-        except ValueError:
-            continue
-        if index + 1 < len(every):
-            out.append(every[index + 1])
+    out = []
+    for index, sentence in enumerate(every):
+        if PARKING_CHARGE.search(sentence):
+            out.append(sentence)
+        elif (index and every[index - 1] in found
+              and CONTINUATION.search(sentence)
+              and not re.search(r"\b(?:training|membership|classes?|sessions?|gym access)\b", sentence, re.I)):
+            out.append(sentence)
     return out
+
+
+def _parking_hourly(sentence):
+    """Only format a rate whose own clause assigns it to parking.
+
+    A mixed sentence can state parking charges and an unrelated hourly price.
+    Unrecognised wording stays Unknown rather than borrowing that price.
+    """
+    match = HOURLY.search(sentence)
+    if not match:
+        return None
+    prefix = sentence[:match.start()].strip()
+    parking_subject = re.fullmatch(
+        r"(?:additional )?(?:car park|parking)"
+        r"(?:\s+(?:charges?|costs?|fees?|rates?|tariff|is|are|of|at|apply|then|pay))*\s*:?",
+        prefix, re.I)
+    continuation = re.fullmatch(
+        r"(?:after that|beyond that)[, ]+(?:(?:customers|members|you)\s+)?"
+        r"(?:must\s+)?pay", prefix, re.I)
+    # Text after the rate may describe its purpose, so accept only the end of
+    # the statement. More complex tariffs need a person to read them.
+    if (parking_subject or continuation) and sentence[match.end():].strip() in ("", ".", ";"):
+        return match
+    return None
 
 
 QUOTE_LIMIT = 220
@@ -179,20 +220,14 @@ class VenueFetcher:
         if not found:
             return {}, [], [], ""
 
-        # Negated free parking is not evidence of free parking or availability.
-        found = [s for s in found if not re.search(r"\b(?:no|not)\s+(?:free\s+)?(?:car\s+)?parking|\bparking (?:is )?not available", s, re.I)]
-        if not found:
+        # Conflicting availability claims cannot safely establish permission.
+        if any(DENIAL.search(sentence) for sentence in found):
             return {}, [], [], ""
         free_match, free_sentence = find(FREE, found)
-        # A charge is often written in the sentence after the parking one
-        # ("Parking is free for 60 mins. After that you must pay £2.50 per
-        # hour."), which names no car park itself. Only the sentence straight
-        # after a parking sentence is read, so a price elsewhere on the page
-        # is never mistaken for a parking charge.
         charge_match, charge_sentence = None, ""
-        # Free is allowed only when the page contains no charge mention.
+        # Free is allowed only when no associated parking charge is stated.
         # Ignore penalties and explicit statements that no charge applies.
-        for sentence in sentences(text):
+        for sentence in _charge_candidates(text, found):
             charge_text = _without_pcn(sentence)
             charge_text = re.sub(r"(?:pcn|penalty charge)[^.]*", "", charge_text, flags=re.I)
             charge_text = re.sub(r"\b(?:no|without)\s+(?:additional\s+)?(?:charge|charges|cost|fee|fees)\b|\bfree of charge\b", "", charge_text, flags=re.I)
@@ -202,11 +237,12 @@ class VenueFetcher:
                 break
         spaces_match, spaces_sentence = find(SPACES, found)
         available_match, available_sentence = find(AVAILABILITY, found)
-        # A maximum stay is often written in its own sentence, which names no
-        # car park, so this one reads the whole page.
-        stay_match, stay_sentence = find(MAX_STAY, sentences(text))
+        # An explicit maximum can follow the parking statement, but a free
+        # period alone never establishes a maximum stay.
+        stay_candidates = found + _charge_candidates(text, found)
+        stay_match, stay_sentence = find(MAX_STAY, stay_candidates)
 
-        parking_charge = any(CHARGE.search(_without_pcn(sentence)) for sentence in found)
+        parking_charge = charge_match is not None
         if not (free_match or parking_charge or spaces_match or stay_match
                 or available_match):
             return {}, [], [], ""
@@ -241,7 +277,7 @@ class VenueFetcher:
             values["Price Status"] = "Published"
             values["Prices Stated"] = "Yes"
         elif charge_match:
-            hourly = HOURLY.search(charge_sentence) or HOURLY.search(" ".join(found))
+            hourly = _parking_hourly(charge_sentence)
             period = FREE_PERIOD.search(free_sentence) if free_match else None
             if free_match and period and hourly:
                 value = period.group(1) or period.group(3)
