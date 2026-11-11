@@ -101,8 +101,8 @@ and the full defect list. This section covers only what is in flight.
 
 Step 3, the hold list, is resolved and applied. The database holds 11,558
 places, up from 11,552. Six records came back, each keeping the Place ID it
-already had. Nothing reached the Google Sheet. Test suite: 1,461 passed. The
-last commit is `678538a`. The main working tree is clean.
+already had. Nothing reached the Google Sheet. Test suite: 1,477 passed. The
+last commit is `cf52c25`. The main working tree is clean.
 
 New commands:
 
@@ -121,11 +121,18 @@ from that file alone.
 
 ### In flight: two parallel halves
 
-1. Codex owns step 4, items 1 and 2, on branch `codex/extractors`, in the
-   worktree at the session scratchpad. It was mid-task when the session ended,
-   with uncommitted changes to `src/ferro_parking/sources/venue.py` and two new
-   test files. Its brief is in the session scratchpad as `codex_brief.md`. Check
-   the branch, finish or restart that work, then merge it.
+1. Step 4, items 1 and 2, are done and merged. Codex fixed the charge
+   association in `src/ferro_parking/sources/venue.py`, so a price whose own
+   clause does not name parking can no longer become a parking tariff, and a
+   free period can no longer become a maximum stay. 16 offline fixtures cover
+   the negative, ambiguous, contradictory, unrelated-price and blocked-page
+   cases. The fixtures are synthetic and are not claims about any real branch.
+   One behaviour change to know about: a page whose parking sentences conflict
+   now yields no values at all, where the earlier code dropped the denial
+   sentence and kept the rest. That writes fewer values, which is the safe
+   direction. Step 4 items 3 to 7 are still open: the station guards, the
+   page-fetch metadata, the finished-row and personal-verification locks, and
+   the replay evaluation.
 2. The identity matcher is specified and not built. The brief is
    `docs/OSM_IDENTITY_BRIEF.md`. Build that next.
 
