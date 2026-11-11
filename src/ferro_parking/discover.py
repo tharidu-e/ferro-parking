@@ -10,7 +10,7 @@ from pathlib import Path
 
 from . import fill, rules
 from .formats import parse_tariff, parse_hours, parse_stay
-from .london import LondonFilter
+from .london import BoroughFilter, LondonFilter
 from .run_paths import new_run_dir, reserve_output
 from .sources import ADAPTERS
 from .sync import normalize_name, normalize_postcode, haversine_m
@@ -274,6 +274,14 @@ def main(argv=None):
                              'record, so prefer the database')
     parser.add_argument('--db', default=None)
     parser.add_argument('--out')
+    parser.add_argument('--boroughs-from', default=None,
+                        help='an OpenStreetMap extract. Build the borough '
+                             'polygon cache from it once, then every later run '
+                             'tests London membership offline')
+    parser.add_argument('--postcode-lookup', action='store_true',
+                        help='classify London by postcodes.io instead of borough '
+                             'geometry. Needs network access, and a postcode is '
+                             'not a boundary test')
     parser.add_argument('--cache', default='data/cache/postcodes')
     args = parser.parse_args(argv)
     if args.source == 'generic' and not args.input:
@@ -282,7 +290,13 @@ def main(argv=None):
     sheet, against = existing_rows(args.sheet_csv, args.db)
     print(f'deduplicating {len(sources)} source rows against {len(sheet)} '
           f'places from the {against}')
+    if args.postcode_lookup:
+        london = LondonFilter(args.cache)
+        print('London membership by postcodes.io lookup')
+    else:
+        london = BoroughFilter(args.boroughs_from)
+        print(f'London membership by borough polygon, {len(london.boroughs)} boroughs')
     output = reserve_output(args.out) if args.out else new_run_dir('discover')
-    print(json.dumps(run(sources, sheet, output, LondonFilter(args.cache)), indent=2))
+    print(json.dumps(run(sources, sheet, output, london), indent=2))
     print(f'Outputs: {output}')
     return 0

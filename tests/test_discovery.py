@@ -388,3 +388,50 @@ def test_an_empty_database_is_refused_rather_than_deduplicating_against_nothing(
     db.connect(path).close()
     with _pytest.raises(ValueError, match="run db-import first"):
         discover.existing_rows(db_path=path)
+
+
+# ------------------------------------------------- London membership offline
+
+def _borough_cache(tmp_path, polygon_coords, name="Sutton"):
+    import json
+    path = tmp_path / "boroughs.geojson"
+    path.write_text(json.dumps({
+        "type": "FeatureCollection",
+        "features": [{"type": "Feature", "properties": {"name": name},
+                      "geometry": {"type": "Polygon", "coordinates": [polygon_coords]}}]}),
+        encoding="utf-8")
+    return path
+
+
+def test_borough_geometry_decides_london_without_a_network_request(tmp_path):
+    """The checklist says a postcode is not a boundary test, and postcodes.io
+    cannot be reached from every environment. A point inside a borough polygon
+    is in London, and the borough is named."""
+    from ferro_parking.london import BoroughFilter
+
+    square = [[-0.2, 51.3], [-0.1, 51.3], [-0.1, 51.4], [-0.2, 51.4], [-0.2, 51.3]]
+    london = BoroughFilter(cache=_borough_cache(tmp_path, square))
+    inside = {"name": "Inside", "lat": "51.35", "lon": "-0.15"}
+    outside = {"name": "Outside", "lat": "52.00", "lon": "-1.00"}
+    result = dict((row["name"], region) for row, region in london.classify([inside, outside]))
+    assert result == {"Inside": "London", "Outside": None}
+    assert inside["borough"] == "Sutton"
+    assert "borough" not in outside
+
+
+def test_a_row_with_no_coordinate_is_unresolved_not_london(tmp_path):
+    """The answer has to come from geometry, and there is none to test."""
+    from ferro_parking.london import BoroughFilter
+
+    square = [[-0.2, 51.3], [-0.1, 51.3], [-0.1, 51.4], [-0.2, 51.4], [-0.2, 51.3]]
+    london = BoroughFilter(cache=_borough_cache(tmp_path, square))
+    for row in ({"name": "No coordinate"}, {"name": "Bad", "lat": "x", "lon": "y"}):
+        assert london.classify([row])[0][1] is None
+
+
+def test_no_borough_polygon_is_refused_rather_than_guessed(tmp_path):
+    from ferro_parking.london import BoroughFilter
+    import pytest as _pytest
+
+    with _pytest.raises(ValueError, match="no borough polygon"):
+        BoroughFilter(cache=tmp_path / "missing.geojson")
