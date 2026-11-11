@@ -410,6 +410,54 @@ def test_a_pin_within_thirty_metres_of_an_existing_place_is_held(conn):
     assert "not proof" in report["held"][0]["reason"]
 
 
+def test_a_reviewed_reference_passes_the_hold_against_an_existing_place(conn):
+    """Two reviewers judged this candidate a separate car park from the place
+    beside it, and the decision is recorded. That is the question they answered,
+    so the proximity hold no longer applies to it."""
+    _, rows = db.current_rows(conn)
+    twin = next(row for row in rows
+                if str(row.get("Latitude", "")).strip()
+                and str(row.get("Longitude", "")).strip())
+    plan = [record(source_ref="way/900", row={
+        "Latitude": twin["Latitude"], "Longitude": twin["Longitude"],
+        "OSM ID": "way/900"})]
+    report = create.apply_plan(conn, plan, "create-test", apply=True,
+                               reviewed={"way/900"})
+    assert report["held"] == []
+    assert report["created"] == 1
+
+
+def test_a_reviewed_reference_does_not_pass_a_hold_against_another_candidate(conn):
+    """Nobody was asked whether two candidates are each other, and one car park
+    is often mapped twice. The two Belvedere Medical Centre candidates sit 26 m
+    apart and both were judged a separate car park from their near place."""
+    plan = [record(source_ref="way/1123932196",
+                   row={"Latitude": "51.490000", "Longitude": "0.020000",
+                        "OSM ID": "way/1123932196"}),
+            record(source_ref="way/1123932197",
+                   row={"Latitude": "51.490100", "Longitude": "0.020100",
+                        "OSM ID": "way/1123932197"})]
+    report = create.apply_plan(conn, plan, "create-test", apply=True,
+                               reviewed={"way/1123932196", "way/1123932197"})
+    assert report["created"] == 1
+    assert len(report["held"]) == 1
+    assert report["held"][0]["near place_id"] == create.IN_THIS_PLAN
+
+
+def test_only_the_word_distinct_clears_a_reference(tmp_path):
+    """A duplicate, a keep, an excluded or an unresolved decision clears
+    nothing, so a wrong word in the file cannot create a car park."""
+    path = tmp_path / "holds_decisions.csv"
+    path.write_text("candidate_ref,verdict,decided_by,decided_on,evidence\n"
+                    "way/1,distinct,reviewers,2026-11-11,separate\n"
+                    "way/2,duplicate,reviewers,2026-11-11,the same\n"
+                    "way/3,keep,reviewers,2026-11-11,it stands\n"
+                    "way/4,excluded,rules,2026-11-11,staff only\n"
+                    "way/5,unresolved,reviewers,2026-11-11,no agreement\n",
+                    encoding="utf-8")
+    assert create.read_reviewed(path) == {"way/1"}
+
+
 def test_a_held_record_does_not_block_the_rest_of_the_plan(conn):
     _, rows = db.current_rows(conn)
     twin = next(row for row in rows

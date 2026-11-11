@@ -57,6 +57,10 @@ PLAN_HEADERS = ["Place ID", "source", "source ref", "Location Name", "Borough",
                 "Place Category", "Latitude", "Longitude"]
 REJECT_HEADERS = ["source", "source ref", "column", "value", "reason"]
 SKIP_HEADERS = ["source", "source ref", "place_id", "reason"]
+# The Place ID stand-in for a candidate this plan has already accepted. A hold
+# against one of these is never cleared by a review.
+IN_THIS_PLAN = "(this plan)"
+
 HELD_HEADERS = ["source", "source ref", "Location Name", "near place_id",
                 "near name", "metres", "reason"]
 
@@ -136,13 +140,21 @@ def read_plan(path):
     return records
 
 
-def check_plan(conn, records):
+def check_plan(conn, records, reviewed=()):
     """(accepted, skipped, held, rejected). A non-empty rejected list blocks the
     whole plan. skipped lists records the database already holds, by this
     source's own reference or by the OpenStreetMap reference on an existing
     place. held lists records whose pin lands within DUPLICATE_RADIUS_M of a
     place the database already holds, which is a possible duplicate and needs a
-    person. Neither skipped nor held blocks the plan, and neither is created."""
+    person. Neither skipped nor held blocks the plan, and neither is created.
+
+    reviewed names the references two reviewers judged to be a separate car
+    park from the places around them, recorded in config/holds_decisions.csv.
+    Such a reference passes the hold against an existing place, because that is
+    the question the reviewers answered. It does not pass the hold against
+    another candidate in the same plan: nobody was asked whether two candidates
+    are each other, and one car park is often mapped twice."""
+    reviewed = set(reviewed)
     headers, rows = db.current_rows(conn)
     if not headers:
         raise ValueError("nothing imported yet: run db-import first")
@@ -212,7 +224,8 @@ def check_plan(conn, records):
             continue
         near = places.nearest(float(str(row["Latitude"]).strip()),
                               float(str(row["Longitude"]).strip()))
-        if near and near[2] <= DUPLICATE_RADIUS_M:
+        cleared = ref in reviewed and near and near[0] != IN_THIS_PLAN
+        if near and near[2] <= DUPLICATE_RADIUS_M and not cleared:
             held.append({"source": source, "source ref": ref,
                          "Location Name": row.get("Location Name", ""),
                          "near place_id": near[0], "near name": near[1],
@@ -221,7 +234,7 @@ def check_plan(conn, records):
                                    "a possible duplicate, not proof"})
             continue
         seen_refs[(source, ref)] = True
-        places.add("(this plan)", row.get("Location Name", ""),
+        places.add(IN_THIS_PLAN, row.get("Location Name", ""),
                    row.get("OSM ID", ""),
                    float(str(row["Latitude"]).strip()),
                    float(str(row["Longitude"]).strip()))
@@ -235,8 +248,8 @@ def _allocate(conn, count):
     return [f"PP-{start + offset:06d}" for offset in range(count)]
 
 
-def apply_plan(conn, records, run_id, apply=False):
-    accepted, skipped, held, rejected = check_plan(conn, records)
+def apply_plan(conn, records, run_id, apply=False, reviewed=()):
+    accepted, skipped, held, rejected = check_plan(conn, records, reviewed)
     report = {"run_id": run_id, "records": len(records), "accepted": len(accepted),
               "skipped": skipped, "held": held, "rejected": rejected,
               "created": 0, "rows": []}
@@ -410,6 +423,20 @@ def _write_csv(path, rows, fieldnames):
         writer.writerows(rows)
 
 
+def read_reviewed(path):
+    """The references a recorded decision calls a separate car park. Only the
+    word "distinct" clears a reference. A duplicate, a keep, an excluded or an
+    unresolved decision clears nothing."""
+    cleared = set()
+    with open(path, newline="", encoding="utf-8-sig") as stream:
+        for row in csv.DictReader(stream):
+            if str(row.get("verdict") or "").strip() == "distinct":
+                ref = str(row.get("candidate_ref") or "").strip()
+                if ref:
+                    cleared.add(ref)
+    return cleared
+
+
 def _run_id(prefix):
     return f"{prefix}-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
 
@@ -420,12 +447,21 @@ def main(argv=None):
     parser.add_argument("--db", default=str(db.DB_PATH))
     parser.add_argument("--out", default=None)
     parser.add_argument("--apply", action="store_true")
+    parser.add_argument("--reviewed", default=None,
+                        help="a holds_decisions.csv. A reference recorded there "
+                             "as distinct passes the hold against an existing "
+                             "place, and never the hold against another "
+                             "candidate in the same plan")
     args = parser.parse_args(argv)
 
     records = read_plan(args.plan)
+    reviewed = read_reviewed(args.reviewed) if args.reviewed else set()
+    if reviewed:
+        print(f"{len(reviewed)} references cleared as a separate car park by two "
+              f"reviewers, from {args.reviewed}")
     conn = db.connect(args.db)
     run_id = _run_id("create")
-    report = apply_plan(conn, records, run_id, apply=args.apply)
+    report = apply_plan(conn, records, run_id, apply=args.apply, reviewed=reviewed)
     out_dir = Path(args.out) if args.out else new_run_dir("db_create")
     out_dir.mkdir(parents=True, exist_ok=True)
     _write_csv(out_dir / "plan.csv", report["rows"], PLAN_HEADERS)
