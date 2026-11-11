@@ -91,6 +91,7 @@ Ambiguous matches are held. Evidence stays in the plan and review reports.
 |---|---|
 | Agent safety and development rules | [AGENTS.md](AGENTS.md) |
 | Priorities, blockers and last measured counts | [STATUS.md](docs/STATUS.md) |
+| Batch order, code-change gate and reporting | [PLAN.md](docs/PLAN.md) |
 | Find existing code before adding a module | [MAP.md](docs/MAP.md) |
 | Parking evidence, cell restrictions and publication controls | [Parking rules](docs/PP_rules_and_pilot.md) |
 | Create, undo or restore places | [Creation runbook](ADD_PLACES_RUNBOOK.md) |

@@ -41,16 +41,28 @@ The store page states a car park and no price.
 
 ## Next work, in order
 
-1. Build source adapters from identity counts. Asda and Lidl are built.
-   Sainsbury's 33, Tesco 17 and Tesco Express 19 are measured and skipped,
-   with the reason in `fetch_fill.SKIPPED_HOSTS`.
-   The full brand list is `data/runs/2026-11-11_20/osm_identity/counts.csv`.
-   Make sure that the optional TfL endpoint and its terms allow use. Missing credentials mean skip that source.
-2. Complete publication dry runs for new-row appends before any Sheet approval.
-   Cover fresh identity, drift, duplicate IDs, missing imported IDs, protected fields,
-   formulas, grid growth and partial-write recovery. Test the six controls offline.
-   Make sure that OSM attribution and licensing agree with primary sources. Produce a full dry run
-   and a selectable 20-row pilot. Stop for the owner's explicit go before publication.
+Follow `docs/PLAN.md` for batch steps and the engineering gate. The next work is
+supported parking answers on existing places, using the readers already built.
+
+1. Start with the 15 held M&S records whose official pages mention parking.
+   Review the missing store categories with `propose-categories` and `category-plan`.
+   Save only categories supported by the exact store page, then rerun the existing
+   M&S reader. Save parking answers that pass the existing checks. Leave uncertain
+   categories, prices and stay limits unknown unless the source supports them.
+2. Report how many of those 15 records improved, how many remain blocked and why,
+   with five before-and-after examples. Then select the next batch of up to 25
+   unfinished, unlocked records with useful pages. Recorded reader plans are
+   already applied; do not repeat unchanged work.
+3. Change code only for a reproduced blocker in the selected batch. The station
+   context issue is an exception task, not a reason to redesign all validation.
+4. Import Grok when its results arrive. Missing results do not block other readers.
+   Grok apply and every Sheet write still require the owner's explicit go.
+5. Resume coverage only when new usable input or evidence can resolve a gap.
+   Prepare publication from accepted batches with the existing controls.
+
+Report places checked, places improved, supported answers added, newly showable
+places and held cases. Include five reviewed examples. Partial supported answers
+count as progress; they do not count as showable until that bar is met.
 
 ## Source imports
 
@@ -228,10 +240,11 @@ pattern, and 7 have no Brand, which a Conditional row needs. The run is
 large-format supermarkets, 38 hotels and 26 shopping centres. Rules R1 and R10
 refuse to guess a chain policy for them, which is the cautious direction.
 
-A structural weakness to fix next: `validate_rows` sees only the plan's own
+Engineering exception for a selected blocked batch: `validate_rows` sees only the plan's own
 columns, so a planner has to restate a row's existing values as context. That
-is why the rows above fail on text somebody else wrote. Pass the row to the validator as context. That
-removes the need for `CONTEXT_COLUMNS` and for the kept-back lines.
+is why the rows above fail on existing text. Reproduce an affected row first,
+then make the smallest context fix and rerun that batch. Keep every validation
+rule and lock. Defer broader cleanup.
 
 ## Applied identity
 

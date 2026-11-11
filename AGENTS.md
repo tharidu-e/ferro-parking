@@ -3,7 +3,7 @@
 Ferro parking serves real drivers. Accuracy takes priority over coverage.
 
 - Read only documents needed for the task. Do not scan every document at startup.
-- For priorities or remaining work, read `docs/STATUS.md`.
+- Read `docs/STATUS.md` for current work, then `docs/PLAN.md` for batch order and the code-change gate.
 - Before proposing or building any capability, run `python -m ferro_parking --help`.
   It lists every command with one line each, generated from the code, so it cannot go stale.
   A capability already there is never rebuilt. This rule exists because an agent proposed
@@ -18,6 +18,6 @@ Ferro parking serves real drivers. Accuracy takes priority over coverage.
 - Keep `data/runs/` append-only. Never delete, overwrite or move its contents. Never run a recursive delete.
 - File deletion, history rewriting and force-push require explicit owner approval.
 - Use plain hyphens, never en or em dashes, in files, cells and messages.
-- Fix bugs in the package with regression tests. Add tests for new rules.
+- Fix package bugs with regression tests. Test changed rules and new reader behaviour; reuse existing checks for unchanged paths.
 - Run `python -m pytest tests/ -q` before reporting done. Commit each finished task separately.
 - End with a file-by-file summary. Keep current work in STATUS.md, not new handovers or session prompts.

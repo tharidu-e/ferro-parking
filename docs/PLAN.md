@@ -1,97 +1,159 @@
-# Plan to fill the database with London parking places
+# Plan to fill London parking information
 
-Written 11 November 2026. This file is the standing plan for every AI session.
-Read `AGENTS.md` first, then `docs/STATUS.md` for current counts, then this file.
-Do not ask the owner for the next step. Pick the first unblocked step in your track below.
-Do not rebuild anything that `python -m ferro_parking --help` already lists.
+Updated 11 November 2026. Read `AGENTS.md`, `docs/STATUS.md`, then this plan.
+STATUS.md owns current counts, inputs and holds. This file owns execution order.
+Use `python -m ferro_parking --help` and subcommand help before changing code.
+Take the first unblocked task in your track. Continue past held cases without
+asking the owner for next steps. Read only the documents that task needs.
 
-## The goal and what "done" means
+## Goal and progress
 
-The goal is one database record for every car park in Greater London. Each record carries
-evidence-backed parking answers: Can Park?, Who Can Park and Cost Type. Every record is
-published to the Sheet.
+The goal remains one record for every London car park, supported parking
+answers, and approved Sheet publication. Keep these three measures in STATUS.md:
 
-Done is measured by three numbers in `docs/STATUS.md`, and nothing else:
+1. Coverage: 33 borough rows with official counts and zero or owner-accepted gaps.
+   Unknown counts, old lists and limited lists remain explicit limits.
+2. Evidence: evidence-supported showable records, separate from legacy counts.
+   A showable record needs supported Can Park?, Who Can Park and Cost Type.
+   Remaining evidence gaps stay on-site, no_evidence or locked.
+3. Publication: applied changes published after approval, with zero mismatches
+   on independent re-export. An unperformed comparison is not zero mismatches.
 
-1. Coverage: every one of the 33 boroughs has a row in the Source imports table.
-   Each row shows an official count, a held count and a gap of 0 or an owner-accepted gap.
-2. Evidence: the Evidence-supported showable count equals the number of records a
-   reader can reach, and every other record is marked on-site, no_evidence or locked.
-3. Publication: every applied change is on the Sheet after an owner-approved pilot and
-   full write, with zero mismatches on independent re-export.
+A supported partial answer is useful progress before a record becomes showable.
+For example, save supported parking availability while price and stay remain
+unknown. Partial progress does not lower the final evidence or publication bar.
+The rules and cell controls in `docs/PP_rules_and_pilot.md` still apply.
 
-Accuracy takes priority over coverage. A blank cell is better than a guessed one.
+## Working order
 
-## How each session works
+1. Run `git status`. Preserve and report unrelated work. Commit only your files.
+2. Read the owner holds. Leave them unchanged and continue with other records.
+3. Use existing commands on a small batch first. Default to 25 places per batch
+   and one source, so outcomes are easy to inspect. Adjust to the source size.
+4. Review the batch, save its outcome and undo, update STATUS.md and commit the
+   finished task. Repeat until your remaining tasks are done or blocked.
+5. Keep exceptions separate from routine processing. A refusal blocks that plan,
+   not other valid plans. Use the existing checks to prepare a fresh accepted
+   plan when needed. Never bypass a refusal or apply a rejected plan.
 
-1. Run `git status`. Commit or report any uncommitted work before you start.
-2. Read the Owner decisions section below. Skip any step that waits on one.
-3. Take the first unblocked step in your track. Finish it, run `python -m pytest tests/ -q`,
-   commit it on its own, and update `docs/STATUS.md`.
-4. Repeat until every step in your track is blocked or done. Then report with a
-   file-by-file summary and the three numbers above.
-5. Never write to the Sheet. Never delete, move or overwrite anything under `data/runs/`.
-   Never run a recursive delete. Keep Grok payment fields blank.
+Keep source files, quotes and run evidence. Keep `data/runs/` append-only.
+Keep Grok payment fields blank. No retirement or deletion without owner approval.
+Sheet writes always require the existing six controls and the owner's explicit go.
 
-Two agents run at once. Codex owns coverage. Claude owns evidence and publication.
-Codex does not touch `osm_identity.py`, `fill.py`, `plan.py`, `fetch_fill.py`,
+## Ownership
+
+Codex owns Track A. Claude owns Tracks B and C unless the owner reassigns them.
+Codex does not edit `osm_identity.py`, `fill.py`, `plan.py`, `fetch_fill.py`,
 `publish.py`, `sources/fetch.py`, `sources/venue.py` or `evaluation.py`.
-Claude does not touch `discover.py`, `sources/__init__.py`, `gaps.py`, `osm_places.py`,
-`create.py` or the Source imports table.
+Claude does not edit `discover.py`, `sources/__init__.py`, `gaps.py`,
+`osm_places.py`, `create.py` or the Source imports table.
+Both agents keep shared status edits small. Commit with explicit file paths.
 
-## Track A: coverage (Codex)
+## Track A: coverage
 
-For each borough, in the order of the Source imports table in `docs/STATUS.md`:
+Coverage work resumes when a usable new list, changed extract or new evidence
+can resolve a gap. Counting an existing site is coverage progress, not a new
+place or a filled parking answer. Keep these counts separate.
 
-1. If `data/raw/` has no official list for it, skip it. The owner downloads lists by hand
-   because https fails on this machine. The download links are in `docs/STATUS.md`.
-2. If no adapter exists in `sources/__init__.py`, add one that follows `city_of_london`.
-3. Run `discover --source <borough> --input <file>`. Read `summary.json`, `matches.csv`
-   and `exceptions.csv`.
-4. For an exception that is the same place as a record we hold, run `db-duplicate` after
-   a dry run. If `db-duplicate` refuses because the record is OSM-created, leave it held,
-   add it to Owner decisions, and continue.
-5. For an official site we do not hold, create it with `db-create` after a dry run.
-   Create it as identity only, with the official page as source URL. Before creation,
-   make sure that the name or the coordinates match the official entry.
-6. Add or update the borough row in the Source imports table. Commit.
+1. Use local official lists first. Try a missing official download once and
+   save its response. A blocked response or incomplete index is an input hold.
+   Retry only when new input or a changed access method gives a reason.
+2. Reuse an existing adapter or generic import. Add an adapter only when the
+   actual input format prevents import. Read MAP.md and the owning module first.
+3. Run `discover`. Read its summary, matches and exceptions. Review exact site
+   names, coordinates and source URLs. A shared postcode alone is not identity.
+4. Resolve an existing-site match in the review. Use `db-duplicate` only for
+   two database records proved to be the same place. If an OSM-created record
+   refuses that command, leave it held, record the owner decision and continue.
+5. Use `db-create` only after an exact name or coordinate review and accepted
+   dry run. Create identity only, with the official source URL. Invent no pin.
+6. Update the borough's count, scope, gap and OSM-derived column. Commit separately.
 
-When every downloaded borough is done, run `osm-gaps` and `osm-places` over
-`data/raw/greater-london-latest.osm.pbf` for the boroughs with no official list.
-Create the identity-only records that the dry run accepts. Record them in the OSM-derived
-column, never in the official column.
+Reuse saved OSM candidates when the extract and eligibility rules are unchanged.
+Run the existing creation dry run against the current database. Re-extract with
+`osm-gaps` and `osm-places` when their inputs or rules change. Apply only accepted
+reviewed identities. Never reactivate an inactive reference to increase coverage.
 
-## Track B: evidence (Claude)
+## Track B: parking answers
 
-1. Grok import. When a results CSV appears in `data/raw/`, run
-   `grok-import --results-csv <file>`. Report mapped, rejected and skipped counts in
-   `docs/STATUS.md`. Apply the plan with `db-apply --apply` and a saved undo only after
-   the owner says go. The Grok bot runs outside this project. The queue is
-   `data/runs/2026-11-11_48/grok_queue/grok_queue.csv`.
-2. Categories for held rows. Run `propose-categories` and `category-plan` over the 15
-   held M&S rows and the 7 default rows with no Brand. Apply what the dry run accepts.
-   Then rerun `fetch-fill` for marksandspencer.com.
-3. Validator context. Pass the existing row to `validate_rows` as context. A planner
-   then no longer restates a row's own values. The 19 held station rows in
-   `data/runs/2026-11-11_94/fetch_fill/held.csv` can then be planned. Add a test. Then
-   rerun the station fetcher.
-4. New readers. Read `data/runs/2026-11-11_20/osm_identity/counts.csv` and the
-   no_evidence routing bucket. Pick each source key with 10 or more rows, no fetcher
-   and no entry in `fetch_fill.SKIPPED_HOSTS`. Run `probe` on it and save fixtures.
-   If the page states a car park for one site, build a fetcher. Apply each accepted plan.
-5. Large formats. The 233 default rows are mostly large supermarkets, hotels and shopping
-   centres with no chain rule. Do not guess. Route each one to a reader built in step 4
-   or leave it blank.
-6. After each step, run `route` and `readiness`. Report legacy and evidence-supported
-   readiness separately.
+The default task is to fill existing places from usable exact-site sources.
+A new reader, a category fix or a refactor is an exception to that routine.
+Missing Grok results do not block work through existing readers.
 
-## Track C: publication (Claude, after Track B step 1)
+1. Start with the named batch and prerequisites in STATUS.md. After that batch,
+   select up to 25 unfinished, unlocked places with missing supported answers
+   and a usable registered reader. Use current database rows and routing.
+   Refresh `route` when database changes make the saved routing stale.
+2. Run `fetch-fill --key <registered-key> --limit 25`. Reuse cached pages when
+   suitable. Skip already processed unchanged pages and measured blocked or
+   silent sources. Rerun them when evidence, input or reader behaviour changes.
+3. Review every proposed answer against its exact-site quote and page. Retain
+   the quote, URL, retrieval time and page hash. Apply only supported fields.
+   Missing price or stay does not withhold a supported availability answer.
+   Follow the existing field mapping. Parking existence alone proves neither
+   public access nor free parking. Silence never proves Can Park? No.
+4. Use the existing validation and `db-apply` dry run. Apply an accepted reader
+   plan within existing authorization, with its saved undo. Keep finished rows,
+   personal locks and protected columns unchanged. Hold unsafe rows separately.
+5. Record the batch outcome, refresh routing after applied changes and measure
+   readiness. Count supported partial answers as well as newly showable places.
+   Move to the next useful batch instead of repeatedly reading unchanged failures.
+6. If a specific data gap blocks a useful batch, use existing tools to resolve
+   it. Use `propose-categories` and `category-plan` for supported category gaps,
+   then rerun the affected reader. Inspect current data before assuming an old
+   hold remains open. Leave unsupported categories and Brand blank.
+7. If no existing reader can advance the next batch, use the engineering gate
+   below. Probe at most five exact-site pages first. A blocked or silent source
+   stays held. One stated fact supports that field only, not a complete record.
 
-1. Rerun the 20-row pilot in `publish` on current data. Stop and ask the owner for go.
-2. After the pilot is written and re-exported with zero mismatches, run the full
-   `publish` dry run for updates. Then run the `tranche1-write` dry run for the created
-   records that the Sheet does not hold. Stop and ask the owner for go before each write.
-3. After every write, re-export, compare, and record the result in `docs/STATUS.md`.
+When Grok results arrive in `data/raw/`, import them as a separate batch with
+`grok-import --results-csv <file>`. Report mapped, rejected and skipped counts.
+Grok apply still needs the owner's go and a saved undo. The external bot queue is
+`data/runs/2026-11-11_48/grok_queue/grok_queue.csv`. Do not manufacture results.
+
+## Engineering gate for all tracks
+
+1. Name the affected places, the failed operation and the next batch it blocks.
+   Reproduce the failure from saved input before changing package code.
+2. Check the command index, MAP.md and owning module. Reuse the existing path.
+   Choose the smallest fix that lets the affected batch proceed.
+3. For a new reader, first show exact-site facts on saved pages and a measured
+   batch that can use it. Reuse the fetch, evidence and apply controls.
+4. Add a regression test for a reproduced bug. Test changed rules or new reader
+   behaviour with real failure cases. Reuse existing tests for unchanged paths.
+   Documentation edits and routine data batches need no new test files.
+5. Run focused checks during the change and `python -m pytest tests/ -q` before
+   reporting the finished task. Repeat the full suite only after another change,
+   a failure or a concurrent update makes the previous result insufficient.
+6. Rerun the affected batch and report the useful answers unlocked. If it still
+   makes no progress, record the blocker and continue elsewhere. Broader cleanup
+   waits for a separate task. Correctly withholding an unsupported claim is valid.
+
+The validator-context issue belongs here only when it blocks a selected batch.
+Its current example is the 19 held station rows in STATUS.md. Preserve the same
+validation rules and locks. A code change is complete only after batch replay.
+
+## Track C: publication
+
+Prepare publication when a reviewed batch is ready. It does not depend on all
+Grok work or all parking fields being complete. An unknown field stays unknown.
+
+1. Use the existing `publish` dry run for updates and `tranche1-write` dry run
+   for new records. Keep these plans separate. Prepare a selectable 20-row pilot.
+2. Keep the six checks, saved undo and independent second reading. Show counts,
+   five examples and refusals. Wait for the owner's explicit go for each write.
+3. After an approved write, independently re-export and require zero mismatches.
+   Stop on a mismatch. Record results in STATUS.md before any further write.
+
+## Reporting
+
+Lead each batch report with places checked, distinct places improved, supported
+answers added, newly showable places and cases held. Include failed requests
+and unchanged places. Unknown fallbacks, no-op writes and repeated evidence do
+not count as new supported answers. Separate new places from improved records.
+Show five reviewed examples and the main refusal reasons. Keep detailed rows
+in the run files. The owner does not need to inspect code or tests to follow work.
+End each task with the three goal measures, test result and file-by-file summary.
 
 ## Owner decisions
 
@@ -113,7 +175,8 @@ An agent never decides these. Leave the item unchanged and continue with the nex
 
 ## What the owner does
 
-1. Download the borough lists linked in `docs/STATUS.md` into `data/raw/`.
+1. Supply the borough inputs still blocked in `docs/STATUS.md`, if available.
+   Save downloaded lists in `data/raw/`.
 2. Run the Grok bot over the queue file and put the results CSV in `data/raw/`.
 3. Answer the Owner decisions above, one line each, in a message to the agent.
 4. Say go for each Sheet write after reading the dry run.
