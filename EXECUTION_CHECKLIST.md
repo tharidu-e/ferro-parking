@@ -386,3 +386,110 @@ created, no record was deactivated, and no identity was attached. The 184
 attachment cases need their own prompt and their own audited plan. The 2 hand
 checked rows are in
 `data/runs/2026-11-11_3/holds/protected_rows.csv` and need Deshan.
+
+## Run record: step 3 applied, 11 November 2026
+
+A read only Codex audit of the first run found three faults. Every claim it
+made that could be checked was true. Each fix carries a regression test.
+
+1. way/92793027 is tagged access=staff and named Staff Parking, and it reached
+   a creation verdict. The 2026-11-05 hold lists predate some exclusion rules
+   and nothing re-applied them. The rules now live in one function,
+   `osm_places.creation_excluded`, which the proposer and the hold list both
+   read. A second candidate, way/11847178, named HGVs, is excluded as well.
+2. Two car parks both called "Car park (unnamed)" shared the token "unnamed"
+   and read as one place. That settled four cases as duplicates on a word that
+   names no business.
+3. way/129582660, Queens Hospital Surface, is a separate car park from the
+   multi-storey 72 m away and is already place PP-008489. Both reviewers were
+   right and the action was wrong. A case the database already holds now ends
+   as "keep", which does nothing.
+
+Three more faults were found by running the apply. Each would have changed the
+database.
+
+4. The hold list called a deactivated record "pending". All 461 cases from step
+   2 are records an early run created, whose run was undone, and which the
+   fixed guards then held. A reviewer calling one a separate car park asks for
+   that record back, not for a new one.
+5. The proximity guard read only the closest place. Both Belvedere Medical
+   Centre candidates sit 22 to 25 m from a Co-op car park the review cleared,
+   and 26 m from each other, so each hid behind the Co-op.
+6. An already active record was skipped before it entered the place index, so
+   later records in the same batch could not see it. The second run brought
+   back the record the first run held, which breaks the repeat safety gate.
+
+Retiring a record now needs real evidence. A duplicate verdict on a record the
+database holds retires it, and a wrong one loses a real car park. Eight of the
+nine retirements in the first run rested on a brand name shared at 50 to 245 m.
+Westfield London Car Park C sits 227 m from a row called Westfield London Car
+Parks, and Tesco Hammersmith 244 m from Tesco Hammersmith Superstore. That is
+one business with several car parks as readily as one car park entered twice.
+Retiring now needs the pin inside the candidate polygon, the same OpenStreetMap
+reference, or a distance inside 30 m. The other eight are unresolved and
+reported for a person.
+
+Every decision that acts is recorded in `config/holds_decisions.csv`, keyed by
+the OpenStreetMap reference and kept under version control. A reload of the
+same evidence reproduces all 801 verdicts from that file alone, and 255 cases
+are settled without asking a reviewer again. An unresolved case is not
+recorded, so the next run can ask again with better evidence. The access gate,
+the fact that a place already carries the reference, and the hand check
+protection all run before a recorded decision.
+
+Final verdicts over the 801 cases:
+
+| Verdict | Count | Action |
+|---|---|---|
+| duplicate | 247 | create nothing |
+| distinct | 7 | bring the record back |
+| keep | 1 | the record stands, do nothing |
+| excluded | 2 | a driver may not park here, never create |
+| unresolved | 544 | nothing happens |
+
+Commands, in order:
+
+```
+python -m ferro_parking holds-bundle --pbf data/raw/greater-london-latest.osm.pbf
+./scripts/run_codex_reviewer.sh docs/holds_reviewer_prompt.md \
+    data/runs/2026-11-11_6/holds/review_delta data/runs/2026-11-11_6/reviews_delta/codex
+python -m ferro_parking holds-merge \
+    --a data/runs/2026-11-11_6/reviews/reviewer_a.csv \
+    --b data/runs/2026-11-11_6/reviews/reviewer_b.csv \
+    --bundle data/runs/2026-11-11_6/holds/bundle.jsonl
+python -m ferro_parking db-export --out <baseline>
+python -m ferro_parking db-create-redo --reviewed config/holds_decisions.csv
+python -m ferro_parking db-create-redo --reviewed config/holds_decisions.csv --apply
+python -m ferro_parking db-export --out <after>
+```
+
+Verification of the apply:
+
+- The backup is `data/db/ferro_parking.sqlite.backup-20261111T1425`.
+- The baseline and final exports are in
+  `data/runs/2026-11-11_9/create_reviewed/`.
+- The database holds 11,558 places. It held 11,552 before.
+- Six records came back, each keeping the Place ID it already had: PP-009500,
+  PP-009510, PP-010009, PP-010090, PP-010091 and PP-010423.
+- The export gained exactly those six rows. No row was removed and no earlier
+  row changed.
+- Every one of the six carries no parking answer.
+- A second run changed nothing.
+- Zero places share an OpenStreetMap reference.
+- The seventh cleared record, way/1123932197, stays held at 26 m from
+  PP-010091 and is for a person.
+- Test suite: 1,461 passed.
+
+Nothing was written to the Google Sheet.
+
+What is still open.
+
+- One retirement survives the evidence test: PP-008072, New Barnet Sainsbury's
+  Car Park, whose pin falls inside a candidate 31.8 m from PP-000734. Retiring
+  a live record waits for Deshan.
+- The eight weak retirements are reported, not acted on.
+- The 184 attachment cases need their own prompt and their own audited plan.
+- The 2 hand checked rows are in
+  `data/runs/2026-11-11_6/holds/protected_rows.csv`.
+- Routing run route-20261111T143442Z covers all 11,558 places.
+  One row needs a person, in `data/runs/2026-11-11_12/route/proposals.csv`.
