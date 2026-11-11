@@ -519,8 +519,28 @@ def kingston_upon_thames(location=None):
     return rows
 
 
+HARINGEY_URL = 'https://www.haringey.gov.uk/parking/car-parks'
+
+
+def haringey(location=None):
+    """Keep Stoneleigh A, B and C distinct using the council's RingGo codes."""
+    raw = read_input(location or HARINGEY_URL)
+    rows = []
+    for title, body in _heading_sections(raw, 4):
+        detail = _plain_text(body)
+        codes = re.findall(r'(?:car park ([A-C]) )?location number (\d+)', detail, re.I)
+        for letter, code in codes:
+            name = title + (' car park ' + letter.upper() if letter else '')
+            row = _inventory_identity(name, HARINGEY_URL, detail)
+            row['location_code'] = code
+            rows.append(row)
+    if not rows or len({r['location_code'] for r in rows}) != len(rows):
+        raise ValueError('Haringey inventory is empty or repeats a site code')
+    return rows
+
+
 ADAPTERS = {'generic': generic, 'city-of-london': city_of_london,
             'barnet': barnet, 'hillingdon': hillingdon, 'bromley': bromley,
             'hounslow': hounslow, 'havering': havering, 'bexley': bexley,
             'croydon': croydon, 'greenwich': greenwich, 'redbridge': redbridge,
-            'waltham-forest': waltham_forest, 'newham': newham, 'richmond-upon-thames': richmond_upon_thames, 'ealing': ealing, 'merton': merton, 'harrow': harrow, 'southwark': southwark, 'kingston-upon-thames': kingston_upon_thames}
+            'waltham-forest': waltham_forest, 'newham': newham, 'richmond-upon-thames': richmond_upon_thames, 'ealing': ealing, 'merton': merton, 'harrow': harrow, 'southwark': southwark, 'kingston-upon-thames': kingston_upon_thames, 'haringey': haringey}

@@ -545,3 +545,12 @@ def test_kingston_reads_second_page_before_counting_complete_inventory(tmp_path)
     path.write_text('<a href="?page=1">Next</a><a href="/parking/car-parks/ashdown" class="teaser-link"><h2>Ashdown</h2></a>')
     (tmp_path / 'kingston-page-2.html').write_text('<a href="/parking/car-parks/rose" class="teaser-link"><h2>Rose</h2></a>')
     assert [r['name'] for r in kingston_upon_thames(path)] == ['Ashdown', 'Rose']
+
+
+def test_haringey_keeps_separate_stoneleigh_car_parks(tmp_path):
+    from ferro_parking.sources import haringey
+    path = tmp_path / 'haringey.html'
+    path.write_text('<h4>Stoneleigh Road, N17</h4><p>car park A location number 34525. car park B location number 34526. car park C location number 34528.</p>')
+    rows = haringey(path)
+    assert [r['location_code'] for r in rows] == ['34525', '34526', '34528']
+    assert rows[2]['name'].endswith('car park C')

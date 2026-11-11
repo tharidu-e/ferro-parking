@@ -79,6 +79,7 @@ Greenwich creation added two identity-only records; no Sheet changes were made.
 | Harrow | Named council car park sections | 14 | 14 | 0 | 101 |
 | Southwark | Two paid council sites only | 2 scoped | 2 | 0 in scoped list | 83 |
 | Kingston upon Thames | Both council directory pages | 12 | 12 | 0 | 76 |
+| Haringey | Council RingGo site codes | 11 | 10 separate, C grouped | 1 mapping hold | 68 |
 | City of London | COMPASS layer 2 | 5 | 5 | 0 | 6 |
 
 Discovery uses current database rows and cached borough polygons. A shared
@@ -102,6 +103,9 @@ refresh resolves all 21 region exceptions by exact site-name review: `data/runs/
 
 Download batch: 18 of 25 pages saved under `data/raw/2026-11-11_112/official_lists/`;
 seven failed. Manifest: `data/runs/2026-11-11_112/official_downloads/download_results.json`.
+Haringey: ten separate sites held; Stoneleigh C appears only in grouped
+PP-000383. A and B have separate records. RingGo returned unrelated Westminster
+content, so no C pin was inferred. Review: `data/runs/2026-11-11_140/coverage_haringey/`.
 Kingston: both pages, 12 reviewed site names, gap zero. Review: `data/runs/2026-11-11_138/coverage_kingston/`.
 Southwark: both paid-inventory sites held; park facilities remain outside this
 list. Review: `data/runs/2026-11-11_136/coverage_southwark/`.
@@ -128,7 +132,6 @@ Counts remain unknown until reviewed. These links are download requests only.
 - Southwark parks: separate park car park inventory still needed; the imported pay-to-park list explicitly excludes these facilities.
 - Lewisham: [Council-managed car parks](https://lewisham.gov.uk/myservices/parking/carparks/car-parks-managed-by-the-council).
 - Wandsworth: [Parking tariffs](https://www.wandsworth.gov.uk/parking/parking-bays/paying-to-park/parking-tariffs/), including the car park section.
-- Haringey: [Council car parks](https://www.haringey.gov.uk/parking/car-parks), blocked here.
 - Westminster: [Visitor parking](https://www.westminster.gov.uk/parking/visitor-parking-information), plus linked off-street operators; this page is not a full site inventory.
 - Camden: [Contract car parks](https://www.camden.gov.uk/contract-parking), plus a current public/off-street list; this page has limited scope.
 - Kensington and Chelsea: [Guide to parking](https://www.rbkc.gov.uk/parking-permissions/visitor-parking-and-pay-phone/guide-parking), plus linked off-street site pages.
@@ -280,6 +283,8 @@ fresh replay scores every answer wrong until a reviewer attests it, so the
 report adds plain agreement with the supported reference.
 
 ## Owner decisions and holds
+
+- Haringey Stoneleigh C: PP-000383 groups A/B/C; C needs a separate exact-site mapping. No record changed or retired.
 
 - PP-008072, New Barnet Sainsbury's Car Park: proposed retirement only, awaiting owner approval.
   Its Brand now reads Sainsbury's. Identity does not act on the retirement hold.
