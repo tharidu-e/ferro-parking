@@ -1,5 +1,10 @@
 # London parking execution checklist
 
+Read the current continuation section for the latest identity work and open
+items. Preserved reference sections at the end are historical snapshots.
+Code ownership is in `docs/MAP.md`. Pending document deletions are listed in
+`docs/CLEANUP_PROPOSAL.md`; all originals remain until Deshan approves deletion.
+
 This checklist replaces the step order in `docs/GPT_LONDON_EXECUTION_GUIDE.md`.
 The guide's content stays correct. Its sequence does not. Work the steps below
 in this order. The guide section for each step is named in the step heading.
@@ -493,3 +498,504 @@ What is still open.
   `data/runs/2026-11-11_6/holds/protected_rows.csv`.
 - Routing run route-20261111T143442Z covers all 11,558 places.
   One row needs a person, in `data/runs/2026-11-11_12/route/proposals.csv`.
+
+
+## Current continuation: identity and remaining research, 11 November 2026
+
+The identity command now builds read-only db-apply plans. See
+`docs/OSM_IDENTITY_BRIEF.md` for the contract and `docs/MAP.md` before creating
+any new module. Identity establishes a venue association, not a parking answer.
+Only active OSM-created records are candidates. Existing filled values and
+finished or personal checks stay untouched. Filled Notes cannot be appended by
+this weak-evidence plan under the existing replacement guard; evidence remains
+in the per-line quote and review CSV.
+
+Step 4 items 1 and 2 have been implemented in the venue reader: unrelated
+prices cannot become tariffs, free periods cannot become maximum stays, and
+conflicting parking sentences yield no answer. The remaining station guards,
+fetch metadata, shared finished/personal locks and replay evaluation remain open.
+
+Carry these unresolved items forward from the retired handover:
+
+- PP-008072, New Barnet Sainsbury's Car Park, is a proposed retirement only.
+  It waits for Deshan. Eight weaker retirements remain report-only.
+- The 184 attachment cases in
+  `data/runs/2026-11-11_6/holds/attachment_cases.csv` need their own prompt and
+  audited plan. Identity matching here does not apply those attachments.
+- Two hand-checked rows remain in
+  `data/runs/2026-11-11_6/holds/protected_rows.csv` for a person.
+- One routing row needs a person, in
+  `data/runs/2026-11-11_12/route/proposals.csv`.
+- The latest recorded created-place population is 11,558, including 3,951
+  OSM-created car parks. This is a dated count, not a readiness claim.
+- Build future source adapters from identity proposal counts. Identity alone
+  never supplies permission, prices or time limits for the research queue.
+
+## Run record: OSM identity dry run, 11 November 2026
+
+Final output: `data/runs/2026-11-11_14/osm_identity/`. The earlier rehearsal
+is preserved in `data/runs/2026-11-11_13/osm_identity/`.
+
+- Active OSM-created candidates: 3,951.
+- Proposed: 704 places and 704 Brand lines. Existing categories and Notes
+  are filled, so this run leaves them unchanged.
+- Methods: inside the car park 23, inside the site 134, beside it 547.
+- Held: 3,247. No nearby anchor 2,211, competing identities 761, no mapped
+  sheet category 275. Absent references: 0.
+- Existing plan.read_plan and plan.check_plan accept the saved plan with
+  zero refusals. The database was opened in read-only mode. No plan applied.
+- counts.csv contains every proposed brand count. The command prints the
+  top 20. Leading brands: Sainsbury's 33, Lidl 25, Tesco Express 19,
+  Tesco 17 and Asda 15.
+- Full offline suite: 1,504 passed, including 27 new identity tests.
+- docs/MAP.md covers all 59 source/configuration files in 83 lines.
+  docs/CLEANUP_PROPOSAL.md covers all 23 original Markdown files. Selected
+  reference content is preserved below. No original file was removed.
+- The parent session created branch feat/osm-identity-map-cleanup and handled
+  commits outside the nested Codex sandbox, which blocks .git writes.
+  No push was made. Commit messages carry the requested co-author trailer.
+
+## Preserved execution guide detail
+
+Copied from the old guide for reference. The checklist order and current
+session authority govern. Nothing in this copy grants a new database or sheet
+apply. Earlier pilot requirements and completed-step instructions are history.
+
+### Rules for the execution
+
+- Existing protected columns, finished rows and personally verified rows stay
+  unchanged. Preserve all Tharidu rows, including prefix variants, and other
+  personal checks such as Deshan's pilot. Report their issues as proposals.
+- Never propose or write the four owner payment/countdown fields. New records
+  leave them blank. New-record identity fields may be set only at creation.
+  Existing identity or address corrections go to proposals, not automatic edits.
+- Use the current exact dropdown values, existing validators, second reading,
+  writers, routing, OSM evidence rules and source adapters. Do not create a
+  second implementation of an existing component.
+- Every substantive database mutation uses an auditable plan and db-apply,
+  including insertions, source attachments and duplicate metadata. Cache and
+  routing writes retain their existing documented operational interfaces.
+- Before each apply, create a unique timestamped consistent SQLite backup in
+  ~/ferro-parking-backups/. Use the SQLite backup API or an equivalently safe
+  method that includes committed WAL state. Verify it opens and passes an
+  integrity check. A failed backup blocks apply.
+- No row/file deletion, history rewriting, push or overwriting run artifacts.
+  Allocate a new run directory for every attempt. Undo appends reversal state;
+  IDs remain reserved. Keep credentials out of logs, artifacts and commits.
+- Use plain hyphens in authored text. Preserve original source bytes in caches
+  and reference snapshots; normalise dashes only in proposed cell text.
+- Fetch at most once per second per domain, including retries. Use a normal
+  User-Agent, bounded timeouts/retries, caching and no bot-protection workaround.
+  Record failed fetches and cache status separately from extracted answers.
+  A 403, 429, timeout or challenge is not evidence that parking is unavailable.
+
+### 1. Reuse the Acton checks before expanding
+
+Read the spreadsheet through the existing Sheets client, without writes:
+spreadsheet 1VHtzY1001e0aRSXE6s_-IJU9YioJtjSNZ5WCOt1IO-o,
+tab ID 184241746, Acton (test run). Also read Acton (clean) as the formatted
+comparison. Resolve titles from metadata. Both had 43 rows on 10 November;
+both are reference material, not two independent sets of checks.
+
+The original has 43 checks by Tharidu and 43 evidence notes. Evidence labels
+are 18 official clear, 9 official partial, 6 Google Maps only and 10 no info.
+There are 22 Confirmed, 20 Corrected and one Needs on-site check. Preserve
+source values, reviewer, evidence notes, URL, checked date and snapshot hash.
+These counts describe recorded labels, not independently proven correctness.
+
+Build a repeatable local evaluation command. Reconcile original, clean and DB
+records using identity evidence, not row positions. There were only 35 exact
+normalised-name matches from original to clean; report unresolved mappings.
+Do not silently pair the remaining eight by ordering. Use names, address,
+postcode, source identity and coordinates to support unique mappings.
+
+Evaluate individual fields: Can Park?, Who Can Park, Cost Type, Tariff Detail,
+Max Stay and relevant operating restrictions. Classify reference fields as
+supported, unsupported, conflicting or unresolved. An official-page label does
+not prove every field. Keep original labels immutable; save any proposed
+reference correction separately with evidence and the reason.
+
+For example, Tesco Acton has Free based on chain policy and an evidence note
+mentioning paid parking on Google Maps. This is a conflict to investigate,
+not a target answer to teach the model. A temporary closure is also distinct
+from a site having no car park. Preserve the human row and report issues.
+
+Hide expected answers and human notes from the extractor. Give it the source
+page and minimal identity information. The reviewer compares its claims with
+the reference and source. Fresh page changes are source drift, not automatically
+extraction failures. Cache source versions and evaluate replay on frozen pages.
+
+Report correct supported values, wrong values, unsupported positive claims,
+abstentions and unevaluable fields with denominators, by field. Report supported
+answer coverage separately so an all-Unknown extractor cannot pass as accurate.
+Critical false claims about access, Free, prices or stay limits block that
+extractor's apply until fixed and retested. Unresolved reference disputes are
+held and excluded from accuracy denominators, with their count visible.
+
+The 43 cases are a regression reference, not a representative London benchmark.
+Do not describe cases previously used to develop rules as an unseen holdout.
+Grok-derived additions are research candidates, not independent ground truth.
+For fetchers outside Acton's coverage, add offline source fixtures for negative,
+ambiguous, contradictory and blocked-page cases as well as successful cases.
+
+Completion: reference snapshot, identity mapping report, field assessment,
+replayable evaluation and automated regression tests. The owner need not label
+new examples. Unsupported cases remain unresolved rather than model-certified.
+
+### 2. Fix and apply eligible existing research
+
+Address the earlier review findings in package code, with regression tests:
+
+- Enforce finished-row and personal-verification locks centrally for every
+  mutation type. Existing recognition of only Tharidu is insufficient. Unknown
+  verifier identities must be held for review unless explicitly recognised as
+  an automated producer; do not guess that a human name is an automation.
+- Associate charge statements with parking. Gym membership prices and penalty
+  charges are not parking tariffs. A genuine later parking charge means Free
+  then paid if the tariff fits the existing templates; otherwise use Unknown,
+  Notes and Review Flag. A free period never becomes Max Stay without a separate
+  explicit stay limit. Customer parking does not permit unrelated driver waiting.
+- Keep the station denial guard: blank Charges (as published), blank or Not
+  published Tariff Detail, and fresh OSM coverage proving no mapped car park
+  within 50 m. Missing OSM coverage is not a negative match. Otherwise hold the
+  answer, add the specified conflict flag and route to the research queue.
+- Use National Rail Brand only for values from that station's own official
+  page. Use the cached official station list, with no guessed URL slugs.
+  Replace the misleading unresolved label not National Rail with Station
+  lookup unresolved. Preserve routing to research; do not classify the venue
+  as outside National Rail merely because lookup failed.
+- Successful page extraction uses Verified By Code (page fetch), Evidence Level
+  Verified, Source Tier official and Specificity Site-specific where supported
+  by the schema. These metadata do not grant unquoted fields verified status.
+
+Re-run route, all four fetchers and default-fill against the current database.
+Run validation, independent second reading and the relevant evaluation. Apply
+eligible whole-row plans through db-apply after backup. Refusals must not be
+bypassed by removing required lines or weakening checks. Re-plan eligible rows
+separately when other rows are refused; save every refusal with its reason.
+Report the formerly held 60 stations using current outcomes, not old counts.
+
+Completion: run IDs, exact applied cells, refusals, per-field source support
+and independent before/after export comparisons, with protected rows unchanged.
+
+### 5. Add official sources and research new records
+
+Confirm TfL's current car-park endpoint, availability and terms using official
+documentation. Skip with a reason if a required key is unavailable. Reuse working
+existing discovery adapters, including City of London where supported. Feed
+them through the same identity matching and insertion plans. TfL can support
+site-specific facts it actually publishes; an official list is not proof of
+every parking field. Existing matches receive blank-field proposals only,
+subject to row protections and field evidence checks.
+
+Route the full active database, then run registered fetchers and default-fill.
+Probe three distinct pages for unsupported source keys with at least 30 routed
+rows. Build a small reader only if the source supports reliable branch-specific
+extraction and reuse of the existing reader makes sense. Three positive probes
+are a feasibility check, not validation: add negative, missing, contradictory,
+unrelated-price and blocked-page fixtures before applying its answers.
+
+Each proposed research field retains its own supporting quote, canonical URL,
+retrieval time and cached page hash. Quotes must support the exact claim and
+exact site. A row-level Verified label does not upgrade unsupported fields.
+Apply only plans passing all controls and relevant evaluation. A blocked page
+or unresolved conflict goes to the research queue without guessed answers.
+Use the existing grok stage/queue naming for compatibility even though this
+execution uses GPT models. Queue creation is not completed research.
+
+Completion: source results, rejects, applied run IDs, coverage and uncertainty
+counts. Report fetch time, cache hits, requests, status codes and rows per minute
+from actual measurements, distinguishing cached replay from fresh throughput.
+
+### 6. Duplicates, pins and readiness
+
+Build or reuse propose-duplicates and propose-pins as review reports. Automatic
+duplicate_of requires either the same typed OSM identity, or identical useful
+normalised name plus nonblank postcode and pins within 15 m, with no evidence
+of distinct facilities. Generic names are not useful identity proof. Hold
+ambiguities. Keeper selection prioritises human verification and stronger
+site-specific evidence over populated-field count. Protected-row changes remain
+proposals. Check self-links, cycles and already-linked groups. Persist duplicate
+metadata through audited plans, undo and rebuild. Never move an existing pin.
+
+Keep legacy readiness counts for before/after comparability. Add separate
+evidence-supported counts and explicit unknown/contradictory counts. Field
+population alone does not mean safe to display. Do not silently change app
+visibility policy to expose OSM-only places as verified public parking.
+
+Write a fresh local grok_queue.csv for every active row routed to grok. Use the
+existing exact column layout: Place ID, Row, Location Name, Street Address,
+Postcode, Borough, Place Category, Ferro Autopay, Parking Charge (£), Official
+URL, OSM Website, Current Can Park?, Current Who Can Park, Current Cost Type,
+Missing Fields, Priority. Payment columns stay blank. Row stays blank for
+database-only places, since no sheet row exists. Priority 1 is a car park name
+or council/operator category; 2 otherwise. Sort named public car parks first
+within priority, with a stable Place ID tiebreaker. Never guess public access.
+
+Completion: duplicate/pin proposals, fresh routing and readiness comparisons,
+queue counts and clear distinction between discovered, researched and supported.
+
+### 7. Build publication, dry run only
+
+Extend the existing publisher to support new-row append plans, reusing sync.py
+and tranche1_write.py helpers where appropriate. Read fresh sheet state, check
+IDs and cell drift, and preserve existing row order and protected values.
+Support limit and Place ID filters across updates and appends. Distinguish a
+database-only ID from an imported row missing from the live sheet; the latter
+must not be silently appended. Plan any required grid growth explicitly.
+
+Produce plan.json, dry_run.csv and undo.json before any future write. Define
+non-destructive append recovery, including partial-write/retry behaviour, without
+deleting rows. Never append the same Place ID twice. Preserve payment columns
+and do not invent owner formulas. Use the existing guarded writer, six controls,
+independent second reading, Verification Result last, readback and independent
+re-export comparison. Exercise these with offline tests; do not call --apply.
+
+Check OSM attribution/licensing obligations against primary sources and report
+any unresolved product licence sign-off. Do not treat it as resolved merely
+because the data can be fetched. Include it in publication blockers if unresolved.
+
+Completion: a full publish dry run and separate selectable 20-row pilot, with
+cell counts, append counts, drift and blockers. Stop for the owner's go.
+
+### Final report and continuation record
+
+Commit each finished task after the full test suite passes. Never push. Save
+checkpoint records with exact artifact paths, commit hashes, applied run IDs,
+remaining steps and blockers so a restart cannot repeat a live apply.
+
+The final report must include:
+
+- Step, rows touched, plan lines applied, refused, run ID and commit.
+- Places before/after, new records by source/category, inactive duplicates.
+- Routing before/after and legacy versus evidence-supported readiness counts.
+- Acton field-level results, denominators, unsupported claims, abstentions,
+  unresolved references and cases outside its coverage.
+- Ten examples per fetcher and default-fill with outcome, quote and URL where
+  evidence exists. For no-answer cases explicitly report absent evidence.
+- Fetch failure handling, real throughput and cache use.
+- Queue size and the amount of research still unresolved.
+- Publish cells, appended rows, drift, pilot size and blockers.
+- Skipped work, model roles actually used, test results, file-by-file summary
+  and commit hashes. Do not describe planned work as implemented.
+
+Explicit amendments to the earlier spec: no push; existing Acton reference
+instead of new manual labels; field-level evidence and evaluation; guarded
+proximity matching; audited non-destructive insertion/undo; geometry pins are
+not entrances; exact postcode caution; protected personal/finished records;
+local pilot before batch; evidence-based keeper choice; persisted duplicate
+metadata; separate attachment comparisons; failure-path fetcher tests; no
+unsupported not National Rail label; separate readiness quality measures;
+and resumable append publishing. The 300-15,000 guard and final sheet gate remain.
+
+
+## Preserved checkpoint, 10 November 2026
+
+Historical snapshot. Later run records and the current continuation above
+supersede its counts, completion claims and next-step instructions. No apply
+is authorised by this snapshot.
+
+### GPT execution checkpoint
+
+Stopped on the execution guide critical false-price claim guard. No database
+apply, undo, schema mutation, Sheet write or push was performed. Do not repeat
+categories-20261110-authorised: it already contains 2,903 changes.
+
+#### Verified baseline
+
+Branch feature/db-router; starting HEAD 16984b6. Working tree initially clean.
+Cached company tracking comparison: 0 behind, 6 ahead. No fresh remote fetch.
+SQLite read-only audit: 7,607 places; latest import 2 at
+2026-11-10T13:36:24+00:00, 7,607 rows; published baseline 0 cells.
+Legacy readiness: 1,450 showable, 1,055 complete. These are population measures,
+not evidence-supported safety counts. Latest routing is route-20261110T191632Z;
+full historical and latest stage counts are in baseline.json.
+OSM SHA256: 75e4840a9c9d957649664ea85b16df02e2f2d5f20ee3ff810410421639ca2616.
+Local extract mtime: 2026-11-02T12:21:21.056214+00:00; not a verified source date.
+
+#### Artifacts
+
+All new local artifacts are under data/runs/2026-11-10/gpt_execution_220752/:
+
+- baseline.json: read-only counts, applied runs, imports, routing, OSM hash.
+- database_snapshot.json: current headers and records read without schema changes.
+- legacy_readiness.json: full legacy counts.
+- acton_original.json: 43 original records resolved from tab metadata.
+- acton_clean.json: 43 comparison records resolved from tab metadata.
+- identity_report.json: provisional name-based mappings and original label counts.
+- critical_guard.json: exact offline input and unsafe existing extractor output.
+
+Original snapshot SHA256: 98bc3e46c79f3fbfb3e1702a865863faa1113f12c1cce60b8143060699d6fae3.
+Clean snapshot SHA256: d01b82ae389e85c611529dcb2461d2d668b1a26ef80f25c4ee911ccefe873c76.
+Recorded labels: 18 official clear, 9 official partial, 6 Maps only, 10 no info;
+22 Confirmed, 20 Corrected, 1 Needs on-site check. These are not proven accuracy.
+Current normalizer provisionally maps 41/43 original-to-clean, including stripped
+parenthetical descriptions. Unresolved: Sainsbury's Ealing Acton Town Station
+Local; Southfields Recreation Ground. Mapping is diagnostic, not apply authority.
+
+#### Stop guard and restart
+
+VenueFetcher('puregym.com').values('Free parking for 60 mins. Personal training
+costs £40 per hour.') incorrectly produces Free then paid and a £40.00 parking
+hourly tariff. The price belongs to personal training. Fix sources/venue.py
+charge association with regression fixtures before any extractor apply.
+Also review penalty-charge amounts, central finished/personal locks including
+undo, unknown verifier identities, station missing-coverage denial, unresolved
+station label, atomic apply/rebuild and stale undo. Astra found these gaps in
+read-only review. No live fixes have been applied.
+
+Resume step 1: validate mappings with identity evidence, translate original
+field headers explicitly, freeze and assess per-field official source evidence,
+then replay existing extractors without expected answers or human notes.
+No field accuracy, supported coverage or throughput measurements exist yet.
+The new evaluator is offline diagnostic infrastructure only; it does not bind
+cases to a mutation plan and must never authorise an apply by itself.
+
+Steps 2-7 remain unexecuted: no research applies, insertion implementation,
+discovery pilot/batch, official-source expansion, duplicate mutation, final queue
+or publication dry run. No new records; places remain 7,607. No append pilot is
+ready for owner approval. Publication licensing sign-off remains outstanding.
+There are no new applied run IDs or before/after mutation comparisons.
+No backup was required because no apply was attempted.
+
+#### Roles and changed files
+
+Lead retained parent runtime and owned integration and tests. GPT-6.1 Sol worker
+implemented evaluation.py and its tests. GPT-6 Astra independently reviewed
+original snapshots, current source and final evaluator. A separate Sol worker
+inspected lock paths without edits. Model agreement was not source evidence.
+
+- src/ferro_parking/evaluation.py: frozen-page replay, field diagnostics,
+  conservative unresolved mapping and provenance checks; no network or DB writes.
+- tests/test_evaluation.py: 25 local fixture regressions.
+- docs/2026-11-10_GPT_EXECUTION_CHECKPOINT.md: this continuation record.
+
+Baseline suite: 1,273 passed. Expanded suite: 1,298 passed before final diagnostic
+flag rename; final suite result and commit are recorded in commit continuation.
+
+
+## Preserved category and research report, 10 November 2026
+
+Historical snapshot. Later run records and the current continuation above
+supersede its counts, completion claims and next-step instructions. No apply
+is authorised by this snapshot.
+
+### Category apply and research review, 10 November 2026
+
+Only the category plan was applied to the live database. Nothing was published
+to Google Sheets. Fetcher and default plans remain proposals awaiting go.
+
+#### Category result
+
+Run `categories-20261110-authorised` applied 2,903 changes to 2,903 places.
+The pre/post exports retain all 7,607 Place IDs in the same order. Only Place
+Category differs. Brand and Decision Reason are unchanged. Unexpected changes: 0.
+
+The earlier 2,649 planned rows increased to 2,903. The 588 review entries contain
+460 proposals reshaped to convenience and included in the plan, plus 128 dropped
+because the name does not establish a store format.
+
+Artifacts: `data/runs/2026-11-10/categories_authorised/`:
+
+- `plan.jsonl`: 2,903 category changes.
+- `category_review.csv`: 588 reshaped or dropped proposals.
+- `examples.csv`: category examples.
+- `pre_apply.csv`, `post_apply.csv`: lossless database exports.
+- `export_compare.json`: column counts and zero unexpected changes.
+- `dry_run/dry_run.csv`, `dry_run/rejected.csv`: pre-apply validation.
+- `applied/dry_run.csv`, `applied/rejected.csv`: applied-run report, zero refusals.
+
+#### Research result
+
+| Reader | Rows | Plan lines | Proposed values | Cost Type | Held | Refused |
+|---|---:|---:|---|---|---:|---:|
+| Station, including station reviews in Grok | 473 | 2,580 | 57 Yes, 56 No, 25 flag-only | 56 Not applicable, 82 not set | 0 | 0 |
+| Better | 84 | 763 | 38 Conditional | 1 Free, 37 Unknown | 0 | 0 |
+| The Gym Group | 49 | 280 | 14 Conditional | 14 Unknown | 0 | 0 |
+| PureGym | 40 | 286 | 14 Conditional | 14 Unknown | 0 | 0 |
+| Default | 233 | 0 | None | None | 233 | 0 |
+
+Every plan passes db-apply dry-run validation and the existing independent
+second reading. None was applied. A flag-only station proposal changes no
+Can Park?, Cost Type, tariff, access or maximum-stay answer.
+
+Of the 60 previously held stations, 57 now propose Yes and Brand National Rail.
+Those proposals do not set Cost Type, tariff or maximum stay. Three are still
+unresolved. Their details are in `review/previously_held_stations.csv`.
+
+There are 335 unresolved station rows and 25 conflicts with a National Rail
+denial. These are in Grok. Unresolved names use the requested label
+"not National Rail", which does not prove that the place is outside National Rail.
+
+Default holds 226 rows not recognised by the existing policy rules and seven
+that lack Brand. No new default rule or brand guess was introduced.
+
+Final routing: 4,096 skip_done, 1,175 skip_onsite, 43 skip_named, 901 no_evidence,
+873 grok, 233 default, 113 station, 84 Better, 49 Gym Group and 40 PureGym.
+
+Artifacts: `data/runs/2026-11-10/research_final/`:
+
+- `route/routing.csv`, `route/proposals.csv`: final stages and identity reviews.
+- Each of `station/`, `better/`, `thegymgroup/`, `puregym/`: `plan.jsonl`,
+  `summary.json`, `examples.csv`, `held.csv`, `unresolved.csv`.
+- `default/plan.jsonl`, `default/summary.csv`, `default/examples.csv`: unchanged
+  policy rules applied to the current default queue.
+- `review/report.md`: combined table and ten example rows for each reader and default.
+- `review/examples.csv`: 50 examples, including values, quote, URL and outcome.
+- `review/summary.csv`, `review/refused.csv`, `review/second_reading.csv`: checks.
+- `review/previously_held_stations.csv`: all 60 previously held station outcomes.
+
+`data/runs/2026-11-10/grok_queue/grok_queue.csv` contains all 873 Grok rows in
+the requested tab layout. Payment columns are blank. Priorities follow the
+requested name/category rule. Nothing was written to the Grok Queue tab.
+
+The complete public station-list response is cached at
+`data/cache/nationalrail_station_list.json`. It is the StationList query used
+by National Rail's own finder, rather than a generated list of guessed row URLs.
+The public list and the finder's slug implementation were inspected to establish
+the lookup. Existing and new pages are kept in the existing page cache.
+
+#### File-by-file code summary
+
+- `src/ferro_parking/category_plan.py`: category plans no longer touch Decision Reason.
+- `src/ferro_parking/plan.py`: supplies actual old values to metadata validation.
+- `src/ferro_parking/validation.py`: narrow category/brand-only route and typography exception.
+- `tests/test_plan.py`: metadata exception, unchanged reasons and non-exempt parking changes.
+- `src/ferro_parking/sources/venue.py`: conservative charge detection, negation guards,
+  official-domain check, bounded free tariffs, supporting charge and stay quotes.
+- `src/ferro_parking/sources/station.py`: positive-count guard, denial conflict guard,
+  National Rail brand, official-list-only URL lookup.
+- `src/ferro_parking/sources/station_list.py`: cached complete official list, exact
+  matching, ambiguous-name refusal, official finder slug conversion.
+- `src/ferro_parking/sources/fetch.py`: supports the official station-list JSON query.
+- `src/ferro_parking/fetch_fill.py`: fresh OSM guard, station reviews, source URLs,
+  ten examples, structured summaries and HTTP failure handling.
+- `src/ferro_parking/route.py`: shares fetcher registry and sends unresolved or
+  conflicting stations to Grok.
+- `src/ferro_parking/page_fill.py`: preserves a free tariff period without treating
+  it as maximum stay and supports metadata-only consistency checks.
+- `tests/test_fetchers.py`: station conflicts, zero spaces, brand, exact lookup,
+  caching, negation, later charges, tariff periods and source-domain regressions.
+- `tests/test_route.py`: registered readers and station fallback regression tests.
+- `src/ferro_parking/grok_queue.py`: exact-layout local Grok queue export.
+- `tests/test_grok_queue.py`: layout, row references, priorities and blank payment columns.
+- `src/ferro_parking/research_report.py`: combined dry-run checks and 50 examples.
+- `tests/test_research_report.py`: report counts, no-change examples and no database writes.
+- `src/ferro_parking/publish.py`: dry-run publisher, pilot filters, drift check,
+  approved-plan requirement, existing writer, undo, readback and independent compare.
+- `src/ferro_parking/fill.py`: shared write/undo readback compares numeric cells
+  using the same conversion used when writing, so 100.00 matches Sheets value 100.
+- `src/ferro_parking/fill_round2.py`: the existing independent second reading
+  recognises category/brand-only actual changes.
+- `tests/test_publish.py`: drift, pilot filters, row locks, protected columns,
+  saved approval, fresh identity resolution, undo ordering, readback comparison,
+  lock changes during apply and published-baseline protection.
+- `src/ferro_parking/__main__.py`: publish, grok-queue and research-report commands.
+- `README.md`: current lookup, category, queue, reporting and publish instructions.
+- `docs/2026-11-10_IMPLEMENTATION_REPORT.md`: this file with results and artifact inventory.
+
+No publish run was executed. Published baseline rows remain 0. The only applied
+database change run is the authorised category run. Data and cache artifacts are
+git-ignored. They are available locally and are not included in the push.
+
+Validation: the full suite passes, 1,273 tests. No live publish was executed.
