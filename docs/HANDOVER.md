@@ -91,3 +91,72 @@ R7 and R8 and R9 apply as written in docs/PP_rules_and_pilot.md. R10 adds this. 
 ## How Deshan likes to work
 
 Direct and blunt, no padding, no em dashes. Prefers structured outputs with reasons. Wants a file-by-file summary after any task, and self-contained prompts for agent tools. Destructive actions need explicit sign-off.
+
+## Session handover, 11 November 2026
+
+Read `EXECUTION_CHECKLIST.md` first. It holds two run records for 11 November
+and the full defect list. This section covers only what is in flight.
+
+### Done and committed
+
+Step 3, the hold list, is resolved and applied. The database holds 11,558
+places, up from 11,552. Six records came back, each keeping the Place ID it
+already had. Nothing reached the Google Sheet. Test suite: 1,461 passed. The
+last commit is `678538a`. The main working tree is clean.
+
+New commands:
+
+| Command | What it does |
+|---|---|
+| `holds-bundle --pbf FILE` | Read only. Gathers the evidence on every held car park case, applies the rules and writes the reviewer batches. |
+| `holds-merge --a A --b B --bundle FILE` | Merges two reviewers. Only full agreement at high confidence decides a case. |
+| `db-create --reviewed FILE` | A reference recorded as distinct passes the hold against an existing place. |
+| `db-create-redo --reviewed FILE` | Brings back the records a decision file calls distinct, keeping each Place ID. |
+| `db-create-undo --ref REF` | Retires one record by its source reference. |
+
+`config/holds_decisions.csv` records every decision that acts, keyed by the
+OpenStreetMap reference, and is under version control. A case recorded there is
+never asked again. A reload of the same evidence reproduces all 801 verdicts
+from that file alone.
+
+### In flight: two parallel halves
+
+1. Codex owns step 4, items 1 and 2, on branch `codex/extractors`, in the
+   worktree at the session scratchpad. It was mid-task when the session ended,
+   with uncommitted changes to `src/ferro_parking/sources/venue.py` and two new
+   test files. Its brief is in the session scratchpad as `codex_brief.md`. Check
+   the branch, finish or restart that work, then merge it.
+2. The identity matcher is specified and not built. The brief is
+   `docs/OSM_IDENTITY_BRIEF.md`. Build that next.
+
+### Why the identity matcher is the gate
+
+3,951 of the 11,558 places are car parks the project created from
+OpenStreetMap. 3,495 have no real name and 4,817 rows in the research queue
+have no brand. A car park with no name and no brand has no website, so no
+fetcher and no council page can ever answer who may park there. The research
+pipeline is blocked on identity, not on extractors.
+
+The automated fetchers reach 286 places out of 11,558: stations, three gym
+chains and one council. There is no supermarket adapter and no general council
+adapter. Build the adapters the identity counts ask for, not the ones that
+sound likely.
+
+### Open for Deshan
+
+- One retirement waits for a decision: PP-008072, New Barnet Sainsbury's Car
+  Park, whose pin falls inside a candidate 31.8 m from PP-000734.
+- Eight weaker retirements are reported, not acted on. They rest on a brand
+  name shared at 50 to 245 m.
+- The 184 attachment cases in `data/runs/2026-11-11_6/holds/attachment_cases.csv`
+  need their own prompt and their own audited plan.
+- Two hand checked rows are in
+  `data/runs/2026-11-11_6/holds/protected_rows.csv`.
+- One routing row needs a person, in `data/runs/2026-11-11_12/route/proposals.csv`.
+
+### What cannot be rushed
+
+The parking rules for 4,824 places cannot be filled today or by any automated
+pass. Each needs site-specific evidence, and rules R7, R9 and R10 forbid
+writing Free, Anyone or a maximum stay without it. The honest fast win is
+identity, which turns an unanswerable row into one with a website to read.
