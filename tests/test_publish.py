@@ -143,6 +143,34 @@ def test_protected_database_change_cannot_be_published(setup):
         publish.build(conn, headers, rows)
 
 
+@pytest.mark.parametrize("column", ["Total incl. Ferro Fee (£)", "Postcode Area"])
+def test_a_formula_column_cannot_be_published(setup, column):
+    """The sheet computes these cells. Writing one would replace a formula
+    with a number that stops updating."""
+    conn, headers, rows = setup
+    conn.execute("INSERT INTO changes(run_id,place_id,column_name,old_value,new_value,"
+                 "stage,applied_at) VALUES ('bad', ?, ?, '', '1.23', 'default', '2026-11-10')",
+                 (PID, column))
+    conn.commit()
+    with pytest.raises(AssertionError):
+        publish.build(conn, headers, rows)
+
+
+def test_publication_never_grows_the_grid(setup, tmp_path, monkeypatch):
+    """Publication updates existing rows only. A new row needs an approved
+    append, which is a separate command."""
+    conn, headers, rows = setup
+    out = tmp_path / 'grid'; out.mkdir()
+    calls = fake_sheet(monkeypatch, rows, headers, out)
+    approval = tmp_path / 'approved.json'
+    approval.write_text(json.dumps(publish.build(conn, headers, rows)['plan']))
+    live_rows = {row['_sheet_row'] for row in rows}
+    report = publish.execute(conn, object(), out, approved=str(approval))
+    assert report['plan']
+    assert {row for row, _, _ in calls} <= live_rows
+    assert {entry['sheet_row'] for entry in report['plan']} <= live_rows
+
+
 def test_writer_rechecks_locks_immediately_before_mutation(setup, tmp_path, monkeypatch):
     conn, headers, rows = setup
     approval = tmp_path / 'approved.json'

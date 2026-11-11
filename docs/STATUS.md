@@ -166,6 +166,32 @@ No results CSV is in `data/raw/` yet, so `grok-import` has not run and there
 are no mapped, rejected or skipped counts to report. Nothing from the bot will
 be applied.
 
+## Publication dry runs
+
+Nothing reached the Google Sheet. `publish` read the live sheet and wrote no
+cell. A write needs `--apply` with a saved approved plan, and the owner's
+explicit go.
+
+The full dry run is `data/runs/2026-11-11_103/publish/`. It plans 0 rows and
+reports 944 drift errors, which is the correct answer. 943 of the 7,393
+applied changes belong to records the sheet does not hold, so the drift check
+reads "missing row". A created record reaches the sheet by an approved append,
+through `tranche1-write`, and never by an update.
+
+The 20-row pilot is `data/runs/2026-11-11_106/publish_pilot20/`. It plans 20
+rows and 20 undo rows, with no drift, no refusal and no second-reading
+failure. All six controls pass: identity, columns, locks, drift, validation
+and second reading. Every row fills a blank Place Category.
+
+A first 20-row attempt refused 18 of 20 as finished rows, which is the lock
+working. 858 of the 3,024 sheet-held places with applied changes are
+unfinished, and those are the publication candidates.
+
+The eight scenarios are covered offline in `tests/test_publish.py`: fresh
+identity, drift, duplicate IDs, missing imported IDs, protected fields,
+formulas, grid growth and partial-write recovery. The last three were added
+on 11 November.
+
 ## Applied research
 
 Every website reader plan is applied, each with its own undo. Use
