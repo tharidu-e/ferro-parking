@@ -518,3 +518,13 @@ def test_merton_selects_identity_table_instead_of_season_ticket_repetitions(tmp_
     assert len(rows) == 1
     assert rows[0]['name'] == 'Kenley Road, Morden'
     assert rows[0]['tariff'] == rows[0]['hours'] == ''
+
+
+def test_harrow_requires_site_fields_and_keeps_free_period_out_of_answers(tmp_path):
+    from ferro_parking.sources import harrow
+    path = tmp_path / 'harrow.html'
+    path.write_text('<h2>Council car parks</h2><p>Introduction</p><h2>Greenhill Way</h2><p>Car park type: PayByPhone Post Code: HA1 1LD Tariff: 1st hour free</p><h2>Parking Operations</h2><p>Contact us</p>')
+    rows = harrow(path)
+    assert len(rows) == 1
+    assert (rows[0]['name'], rows[0]['postcode']) == ('Greenhill Way', 'HA1 1LD')
+    assert rows[0]['tariff'] == rows[0]['max_stay'] == ''

@@ -76,6 +76,7 @@ Greenwich creation added two identity-only records; no Sheet changes were made.
 | Richmond upon Thames | All 11 council area lists | 25 | 25 | 0 | 116 |
 | Ealing | Official PDF dated 12 Dec 2024 | 18 dated | 18 | 0 in dated list | 112 |
 | Merton | Council site-by-area table | 13 | 13 | 0 | 110 |
+| Harrow | Named council car park sections | 14 | 14 | 0 | 101 |
 | City of London | COMPASS layer 2 | 5 | 5 | 0 | 6 |
 
 Discovery uses current database rows and cached borough polygons. A shared
@@ -99,6 +100,7 @@ refresh resolves all 21 region exceptions by exact site-name review: `data/runs/
 
 Download batch: 18 of 25 pages saved under `data/raw/2026-11-11_112/official_lists/`;
 seven failed. Manifest: `data/runs/2026-11-11_112/official_downloads/download_results.json`.
+Harrow: 14 reviewed site names, gap zero. Review: `data/runs/2026-11-11_134/coverage_harrow/`.
 Merton: 13 reviewed site names, gap zero. Review: `data/runs/2026-11-11_132/coverage_merton/`.
 Ealing: 18 dated inventory sites held; current completeness unproven. Two
 closure markers are preserved without retirement. Review: `data/runs/2026-11-11_130/coverage_ealing/`.
@@ -115,7 +117,6 @@ Counts remain unknown until reviewed. These links are download requests only.
 
 - Enfield: [Car parks](https://www.enfield.gov.uk/services/parking/car-parks), including the map data; HTTP 403 here.
 - Sutton: [Car parks](https://www.sutton.gov.uk/streets-transport-and-parking/parking/car-parks), plus linked site lists.
-- Harrow: [Council car parks](https://www.harrow.gov.uk/parking-permits/council-car-parks-street-parking).
 - Tower Hamlets: [Cashless parking](https://www.towerhamlets.gov.uk/FAQs/Parking-Charges/Cashless-parking.aspx), plus a complete current off-street list; this FAQ alone is not a denominator.
 - Brent: [Public car parks](https://brent.gov.uk/parking-roads-and-travel/parking/where-you-can-park/car-parks).
 - Barking and Dagenham: [Parking index](https://www.lbbd.gov.uk/parking), plus the linked current car park inventory; index is blocked here.

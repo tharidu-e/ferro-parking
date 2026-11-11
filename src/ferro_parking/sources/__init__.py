@@ -457,8 +457,23 @@ def merton(location=None):
     return rows
 
 
+HARROW_URL = 'https://www.harrow.gov.uk/parking-permits/council-car-parks-street-parking'
+
+
+def harrow(location=None):
+    """Read the named car park sections, leaving the published terms for research."""
+    rows = []
+    for title, body in _heading_sections(read_input(location or HARROW_URL), 2):
+        detail = _plain_text(body)
+        if 'Car park type:' in detail and 'Post Code:' in detail:
+            rows.append(_inventory_identity(title, HARROW_URL, detail))
+    if not rows:
+        raise ValueError('Harrow page has no named car park sections')
+    return rows
+
+
 ADAPTERS = {'generic': generic, 'city-of-london': city_of_london,
             'barnet': barnet, 'hillingdon': hillingdon, 'bromley': bromley,
             'hounslow': hounslow, 'havering': havering, 'bexley': bexley,
             'croydon': croydon, 'greenwich': greenwich, 'redbridge': redbridge,
-            'waltham-forest': waltham_forest, 'newham': newham, 'richmond-upon-thames': richmond_upon_thames, 'ealing': ealing, 'merton': merton}
+            'waltham-forest': waltham_forest, 'newham': newham, 'richmond-upon-thames': richmond_upon_thames, 'ealing': ealing, 'merton': merton, 'harrow': harrow}
