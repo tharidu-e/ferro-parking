@@ -75,7 +75,7 @@ and passed with `--input`.
 | Enfield | Not imported | Unknown | Unknown | Unknown | 209 |
 | Havering | Council car park links | 24 | 24 by name | 0 by name | 204 |
 | Bexley | Council sections | 19 listed, 18 headline | 19 | 0 of 19 listed | 176 |
-| Croydon | Council map markers | 19 | 19 by name | 0 by name | 176 |
+| Croydon | Council map markers | 19 | 19 | 0 | 176 |
 | Greenwich | Not imported | Unknown | Unknown | Unknown | 153 |
 | Redbridge | Not imported | Unknown | Unknown | Unknown | 146 |
 | Newham | Not imported | Unknown | Unknown | Unknown | 134 |
@@ -107,6 +107,10 @@ not brand counts or a Sheet export. Snapshot:
 `data/runs/2026-11-11_25/coverage/borough_order.csv`.
 Official inventories cover their stated council lists, not every private site.
 Unknown is not zero. OSM-derived identities do not establish parking permission.
+
+Croydon reimport `2026-11-11_100`: 19 named sites held, no exceptions or gaps.
+Waddon Leisure Centre PP-000214 has a 1.9 km coordinate disagreement; no pin
+changed. Review: `data/runs/2026-11-11_104/coverage_croydon/`.
 
 Bromley reimport `2026-11-11_72`: 30 per-car-park pages, 30 reviewed existing
 sites, zero exceptions or gaps. No database or Sheet changes. Review: `data/runs/2026-11-11_73/coverage_bromley/`.
