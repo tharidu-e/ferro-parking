@@ -19,17 +19,39 @@ answers, and approved Sheet publication. Keep these three measures in STATUS.md:
 3. Publication: applied changes published after approval, with zero mismatches
    on independent re-export. An unperformed comparison is not zero mismatches.
 
-The first completion target is useful driver information, not every column filled:
-Can Park?, Who Can Park and Cost Type, supported for the exact place. Include
-any stated conditions that affect use, such as customer-only access, validation,
-opening hours or a maximum stay. Record an unstated tariff, stay or hour as unknown;
-never present an unknown restriction as unrestricted parking. An explicit no-parking
-answer is useful too; keep dependent fields consistent with the existing rules.
+## Driver information standard
 
-Save supported partial answers even when the core answers are not yet complete.
-Report core answers complete separately from all details complete. This working
-target does not change readiness calculations, validation, finished-row locks or
-Verification Result rules. The controls in `docs/PP_rules_and_pilot.md` still apply.
+Check each place against this standard, using evidence for the exact site:
+
+| Information | What to record when supported |
+|---|---|
+| Location | Address and postcode for the parking place; distinguish a nearby venue or head office. |
+| Can Park? | Parking available, conditional access or an explicit statement of no parking, using existing allowed values. |
+| Who Can Park | Eligible users and conditions: customers, guests, members, visitors or public access. |
+| Cost Type | Free, paid or free then paid, including any purchase or validation requirement. |
+| Maximum stay | Site-specific limit and any no-return restriction. |
+| Tariffs and extra charges | Published rates, charging periods and mandatory additional charges, with their conditions. Keep penalties separate from the cost of parking. |
+| Hours and access | Opening hours and stated access restrictions that affect parking use. |
+| Evidence | Supporting quote, source URL and date checked, with existing evidence metadata. |
+
+Each item has a supported answer, an explicit unknown in the research outcome,
+or a justified not-applicable outcome. Use only existing allowed cell values;
+a research gap does not authorize a placeholder write or a new column. Unknown
+never means free, unlimited, unrestricted or no extra charge. Preserve protected
+payment and captured-text columns; use the existing permitted field mapping.
+
+Research complete for now means available useful sources were checked, supported
+answers saved and remaining gaps recorded with a reason and revisit trigger.
+Move on when a source is silent or blocked; revisit for new evidence or access.
+Driver information complete means location and all applicable information needed
+to use that car park safely are supported. An unknown applicable tariff or limit
+is still a gap, even if research is complete for now. Explicit no-parking answers
+remain useful, with dependent fields handled under the existing rules.
+
+Save partial answers without waiting for every detail. Report these two outcomes
+separately from existing showable and complete counts. This standard does not
+change readiness calculations, validation, finished-row locks or Verification
+Result rules. The controls in `docs/PP_rules_and_pilot.md` still apply.
 
 ## Working order
 
@@ -38,8 +60,8 @@ Verification Result rules. The controls in `docs/PP_rules_and_pilot.md` still ap
 3. Before a web request or code change, inspect the current database and saved
    inputs. Name the target Place IDs and missing driver answers, or show the
    reviewed candidate is a new place. Reuse downloaded pages, captured text and
-   accepted evidence first. Skip records already meeting the driver target unless
-   evidence is stale or conflicting. Fetch only pages needed for a named gap;
+   accepted evidence first. Skip records meeting the driver information standard
+   unless evidence is stale or conflicting. Fetch only pages needed for a named gap;
    repeat a download only with a recorded reason. Use batches of up to 25 places.
 4. Review the batch, save its outcome and undo, update STATUS.md and commit the
    finished task. Repeat until your remaining tasks are done or blocked.
@@ -91,7 +113,16 @@ The default task is to fill existing places from usable exact-site sources.
 A new reader, a category fix or a refactor is an exception to that routine.
 Missing Grok results do not block work through existing readers. This applies to
 council sites, supermarkets, shopping centres, hotels, gyms, leisure centres and
-stations. Most are existing records: check before proposing a new place.
+station car parks, private operator sites, retail parks, hospitals and other
+categories already held. Most are existing records: check before proposing a new
+place. Review every category for missing standard information and newly available
+or conflicting details. A previously applied reader or filled Verification Result
+does not prove all details are present; keep locked rows as reported holds.
+
+Use current records and existing reports to record each category's checked,
+improved, research-complete-for-now, driver-information-complete and held counts.
+Mark categories not yet checked explicitly; do not treat a missing count as zero.
+This is a batch review using existing tools, not a new reporting-system task.
 
 1. Start with the named batch and prerequisites in STATUS.md. After that batch,
    select up to 25 unfinished, unlocked places with missing supported answers
@@ -110,7 +141,8 @@ stations. Most are existing records: check before proposing a new place.
    personal locks and protected columns unchanged. Hold unsafe rows separately.
 5. Record the batch outcome, refresh routing after applied changes and measure
    readiness. Count supported partial answers as well as newly showable places.
-   Move to the next useful batch instead of repeatedly reading unchanged failures.
+   Record unresolved standard items and the next evidence needed. Move to the
+   next useful batch instead of repeatedly reading unchanged failures.
 6. If a specific data gap blocks a useful batch, use existing tools to resolve
    it. Use `propose-categories` and `category-plan` for supported category gaps,
    then rerun the affected reader. Inspect current data before assuming an old

@@ -45,7 +45,10 @@ Follow `docs/PLAN.md` for batch steps and the engineering gate. The next work is
 supported parking answers on existing places, using the readers already built.
 Before fetching or coding, name the missing driver answers on current records
 or a reviewed new-place candidate. Reuse downloaded pages first. The driver
-completion target and unchanged safety controls are defined in PLAN.md.
+information standard and two completion outcomes are defined in PLAN.md.
+Use that standard for every category, including leisure centres, station car parks,
+hotels, gyms, supermarkets, shopping centres and private operator sites. Check
+missing details and new or conflicting evidence; keep locked records held.
 
 1. Start with the 15 held M&S records whose official pages mention parking.
    Review the missing store categories with `propose-categories` and `category-plan`.
@@ -66,7 +69,10 @@ completion target and unchanged safety controls are defined in PLAN.md.
    Prepare publication from accepted batches with the existing controls.
 
 Report places checked, places improved, supported answers added, newly showable
-places and held cases. Include five reviewed examples. Partial supported answers
+places and held cases. For each category reviewed, also distinguish research
+complete for now from driver information complete, and name categories not yet
+checked. No category review counts have been refreshed by this documentation edit.
+Include five reviewed examples. Partial supported answers
 count as progress; they do not count as showable until that bar is met.
 
 ## Source imports
