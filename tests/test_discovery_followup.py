@@ -508,3 +508,13 @@ def test_ealing_keeps_free_inventory_site_and_closed_marker_without_parking_answ
     assert [r['name'] for r in rows] == ['Dean Gardens Car Park', 'Arden Road Car Park', 'Singapore Road Car Park']
     assert rows[0]['source_closed'] is True
     assert all(r['source_period'] == '12/12/2024' and r['tariff'] == r['lat'] == '' for r in rows)
+
+
+def test_merton_selects_identity_table_instead_of_season_ticket_repetitions(tmp_path):
+    from ferro_parking.sources import merton
+    path = tmp_path / 'merton.html'
+    path.write_text('<table><tr><th>Car park</th><th>Period</th></tr><tr><td>Repeated season site</td><td>Month</td></tr></table><table><tr><th>Car park (by area)</th><th>Hours</th><th>Charges</th></tr><tr><td>Kenley Road, Morden</td><td>Always</td><td>Free</td></tr></table>')
+    rows = merton(path)
+    assert len(rows) == 1
+    assert rows[0]['name'] == 'Kenley Road, Morden'
+    assert rows[0]['tariff'] == rows[0]['hours'] == ''

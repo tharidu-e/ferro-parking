@@ -435,8 +435,30 @@ def ealing(location=None):
     return rows
 
 
+MERTON_URL = 'https://www.merton.gov.uk/streets-parking-transport/parking/charges'
+
+
+def merton(location=None):
+    """Use the site-by-area table, not repeated season-ticket or tariff bands."""
+    raw = read_input(location or MERTON_URL)
+    inventories = []
+    for table in re.findall(r'<table\b[^>]*>.*?</table>', raw, re.S):
+        table_rows = re.findall(r'<tr\b[^>]*>(.*?)</tr>', table, re.S)
+        cells = [[_plain_text(cell) for cell in re.findall(r'<t[hd]\b[^>]*>(.*?)</t[hd]>', row, re.S)] for row in table_rows]
+        if cells and cells[0] and cells[0][0] == 'Car park (by area)':
+            inventories.append(cells[1:])
+    if len(inventories) != 1 or not inventories[0]:
+        raise ValueError('Merton page has no unique site-by-area inventory')
+    rows = []
+    for cells in inventories[0]:
+        if len(cells) != 3 or not cells[0]:
+            raise ValueError('Merton inventory contains an incomplete site row')
+        rows.append(_inventory_identity(cells[0], MERTON_URL, cells[0]))
+    return rows
+
+
 ADAPTERS = {'generic': generic, 'city-of-london': city_of_london,
             'barnet': barnet, 'hillingdon': hillingdon, 'bromley': bromley,
             'hounslow': hounslow, 'havering': havering, 'bexley': bexley,
             'croydon': croydon, 'greenwich': greenwich, 'redbridge': redbridge,
-            'waltham-forest': waltham_forest, 'newham': newham, 'richmond-upon-thames': richmond_upon_thames, 'ealing': ealing}
+            'waltham-forest': waltham_forest, 'newham': newham, 'richmond-upon-thames': richmond_upon_thames, 'ealing': ealing, 'merton': merton}
