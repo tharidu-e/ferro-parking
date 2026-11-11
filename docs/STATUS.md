@@ -8,8 +8,8 @@ Historical documents remain available in Git history. Run evidence stays under `
 
 | Measure | Places |
 |---|---:|
-| Total records | 11,558 |
-| Blank Verification Result | 6,190 |
+| Total records | 11,560 |
+| Blank Verification Result | 6,192 |
 | Needs on-site check | 1,176 |
 | Active OSM-created records | 3,951 |
 
@@ -54,99 +54,86 @@ The store page states a car park and no price.
 
 ## Source imports
 
-Official counts cover the named council inventory, not every private car park.
-We hold counts distinct listed sites after name or coordinate review, not raw
-record counts. Unknown is not zero. OSM-derived means active OSM-created records
-in `data/runs/2026-11-11_25/coverage/borough_order.csv`; it proves identity only.
-Greenwich creation added two identity-only records; no Sheet changes were made.
+Coverage: 33 borough rows, 20 zero gaps within the named official inventories;
+13 remain unknown or held. This is not complete London coverage. Council lists
+exclude unlisted private sites. Bexley has a headline conflict, Ealing is dated
+2024, and Southwark's two-site list excludes park facilities. No gap is owner-accepted.
+OSM-derived is a separate count of active created identities, never permission.
 
 | Borough | Official inventory | Published official | Official sites we hold | Official gap | OSM-derived |
 |---|---|---:|---:|---|---:|
 | Barnet | Current page blocked | Unknown | Unknown | Unknown | 375 |
-| Bexley | Council sections | 19 listed, 18 headline | 19 | 0 of 19 listed | 176 |
-| Bromley | 30 official site pages | 30 | 30 | 0 | 254 |
-| Croydon | Council map markers | 19 | 19 | 0 | 176 |
-| Havering | Council site links | 24 | 24 by name | 0 by name | 204 |
 | Hillingdon | Council points, refreshed | 28 | 24 | Unresolved (4) | 259 |
+| Bromley | 30 official site pages | 30 | 30 | 0 | 254 |
 | Hounslow | Council lists, refreshed | 21 | 21 | 0 | 229 |
+| Enfield | HTTP 403 | Unknown | Unknown | Unknown | 209 |
+| Havering | Council site links | 24 | 24 by name | 0 by name | 204 |
+| Bexley | Council sections | 19 listed, 18 headline | 19 | 0 of 19 listed | 176 |
+| Croydon | Council map markers | 19 | 19 | 0 | 176 |
 | Greenwich | Official directory markers | 17 | 17 | 0 | 153 |
 | Redbridge | Council site codes | 18 | 18 | 0 | 146 |
-| Waltham Forest | Council grouped site headings | 11 | 11 | 0 | 129 |
 | Newham | Five areas, eight site pages | 8 | 8 | 0 | 134 |
+| Waltham Forest | Council grouped site headings | 11 | 11 | 0 | 129 |
+| Sutton | HTTP 403 | Unknown | Unknown | Unknown | 117 |
 | Richmond upon Thames | All 11 council area lists | 25 | 25 | 0 | 116 |
 | Ealing | Official PDF dated 12 Dec 2024 | 18 dated | 18 | 0 in dated list | 112 |
 | Merton | Council site-by-area table | 13 | 13 | 0 | 110 |
 | Harrow | Named council car park sections | 14 | 14 | 0 | 101 |
-| Southwark | Two paid council sites only | 2 scoped | 2 | 0 in scoped list | 83 |
-| Kingston upon Thames | Both council directory pages | 12 | 12 | 0 | 76 |
-| Haringey | Council RingGo site codes | 11 | 10 separate, C grouped | 1 mapping hold | 68 |
-| Hackney | Eight listed plus Amhurst closed notice | 9 named | 9 | 0 named sites | 35 |
-| Brent | Complete public directory response | 11 | 11 | 0 | 91 |
 | Tower Hamlets | Current off-street tariff headings | 7 | 7 | 0 | 100 |
+| Brent | Complete public directory response | 11 | 11 | 0 | 91 |
+| Barking and Dagenham | HTTP 403 | Unknown | Unknown | Unknown | 86 |
+| Southwark | Two paid council sites only | 2 scoped | 2 | 0 in scoped list | 83 |
+| Lewisham | HTTP 403 | Unknown | Unknown | Unknown | 81 |
+| Kingston upon Thames | Both council directory pages | 12 | 12 | 0 | 76 |
+| Wandsworth | Tariffs and unlabelled park map; full inventory missing | Unknown | Unknown | Unknown | 73 |
+| Haringey | Council RingGo site codes | 11 | 10 separate, C grouped | 1 mapping hold | 68 |
+| Westminster | Operator links only, no complete named list | Unknown | Unknown | Unknown | 59 |
+| Camden | HTTP 403 | Unknown | Unknown | Unknown | 53 |
+| Kensington and Chelsea | Guide names examples, no complete inventory | Unknown | Unknown | Unknown | 45 |
+| Lambeth | HTTP 403, including direct inventory | Unknown | Unknown | Unknown | 42 |
+| Hackney | Eight listed plus Amhurst closed notice | 9 named | 9 | 0 named sites | 35 |
+| Hammersmith and Fulham | Linked page HTTP 404 | Unknown | Unknown | Unknown | 34 |
 | Islington | Council three-site enforcement statement | 3 | 3 | 0 scoped sites | 19 |
 | City of London | COMPASS layer 2 | 5 | 5 | 0 | 6 |
 
-Discovery uses current database rows and cached borough polygons. A shared
-feed URL is non-identifying. Use `--input` for local official files. Barnet's
-2014 CSV is cross-check only; both current HTML downloads are interruption
-pages. Save the actual current page as `data/raw/barnet_car_parks_current.html`.
-Reviews under `data/runs/`: Barnet `2026-11-11_49/coverage_barnet/`, Bexley
-`2026-11-11_62/coverage_bexley/`, Bromley `2026-11-11_73/coverage_bromley/`,
-Croydon `2026-11-11_104/coverage_croydon/`, Havering `2026-11-11_109/coverage_havering/`.
-Bexley's 19 region exceptions are resolved by exact name and borough review.
-Bromley and Croydon had zero exceptions. Croydon's Waddon PP-000214 has a
-1.9 km pin disagreement, left unchanged. Hillingdon's four holds are Civic
-Hall, Hayes Pool, Kingsend South short stay and Falling Lane; Cedars and Tesco
-are distinct sites. Prior review: `2026-11-11_27/coverage_review/hillingdon_review.csv`.
+Fresh inputs: `data/raw/2026-11-11_112/official_lists/`. Of 25 landing-page
+requests, 18 succeeded and seven failed; linked area/site pages, Ealing's PDF
+and Brent's public JSON were then downloaded. Manifest and request definitions:
+`data/runs/2026-11-11_112/official_downloads/`. Every usable full inventory was
+imported with an adapter and reviewed. Exact-name reviews resolved pinless lists;
+no coordinates were invented. A landing page alone was not counted as an inventory.
+Greenwich created two reviewed identity-only records in `create-20261111T220331Z`:
+North Greenwich Station Car Park and Woolwich Lidl Car Park. Parking answers
+stay blank. Per-borough reviews remain in their own append-only run folders.
+Coverage snapshot: `data/runs/2026-11-11_151/coverage_snapshot/`.
 
-Slaney Road PP-009347 remains held without retirement. PLAN.md explicitly
-allows coverage work to continue past OSM-created duplicate refusals.
-Hillingdon reimport: 28 listed, 24 reviewed held sites, four unchanged owner
-cases. Fresh review: `data/runs/2026-11-11_113/coverage_hillingdon/`. Hounslow
-refresh resolves all 21 region exceptions by exact site-name review: `data/runs/2026-11-11_114/coverage_hounslow/`.
+OSM fallback: `data/runs/2026-11-11_115/coverage_osm/` ran both existing commands
+against a current database export. All 4,852 eligible references are already
+processed: 3,951 active and 901 inactive. The db-create dry run accepted zero,
+refused zero and created zero (`2026-11-11_122/db_create/`). All 30 spatial
+gaps are excluded from the stricter creation plan; original tags and reviews
+are saved in `2026-11-11_149/coverage_osm_review/` and
+`2026-11-11_150/coverage_osm_review/`. No inactive record was reactivated.
 
-Download batch: 18 of 25 pages saved under `data/raw/2026-11-11_112/official_lists/`;
-seven failed. Manifest: `data/runs/2026-11-11_112/official_downloads/download_results.json`.
-Islington: complete three-site council enforcement statement reviewed, all held.
-Review: `data/runs/2026-11-11_148/coverage_islington/`.
-Tower Hamlets: the downloaded current page names seven off-street sites, all
-held. Minories remains unchanged. Review: `data/runs/2026-11-11_146/coverage_tower_hamlets/`.
-Brent: public endpoint returned 11 complete named sites; all held, gap zero.
-Review: `data/runs/2026-11-11_144/coverage_brent/`.
-Hackney: eight listed sites plus one named closed site held, no identity gap.
-No retirement. Review: `data/runs/2026-11-11_142/coverage_hackney/`.
-Haringey: ten separate sites held; Stoneleigh C appears only in grouped
-PP-000383. A and B have separate records. RingGo returned unrelated Westminster
-content, so no C pin was inferred. Review: `data/runs/2026-11-11_140/coverage_haringey/`.
-Kingston: both pages, 12 reviewed site names, gap zero. Review: `data/runs/2026-11-11_138/coverage_kingston/`.
-Southwark: both paid-inventory sites held; park facilities remain outside this
-list. Review: `data/runs/2026-11-11_136/coverage_southwark/`.
-Harrow: 14 reviewed site names, gap zero. Review: `data/runs/2026-11-11_134/coverage_harrow/`.
-Merton: 13 reviewed site names, gap zero. Review: `data/runs/2026-11-11_132/coverage_merton/`.
-Ealing: 18 dated inventory sites held; current completeness unproven. Two
-closure markers are preserved without retirement. Review: `data/runs/2026-11-11_130/coverage_ealing/`.
-Richmond: all 11 areas, 25 reviewed names, gap zero. Review: `data/runs/2026-11-11_128/coverage_richmond/`.
-Newham: eight reviewed site names across all five areas, gap zero. Review: `data/runs/2026-11-11_126/coverage_newham/`.
-Waltham Forest: 11 reviewed site names, gap zero. Review: `data/runs/2026-11-11_124/coverage_waltham_forest/`.
-Redbridge: 18 exact name/site-code matches, gap zero. Review: `data/runs/2026-11-11_121/coverage_redbridge/`.
-Greenwich: 17 reviewed sites, two new identities, gap zero.
-Review: `data/runs/2026-11-11_117/coverage_greenwich/`; create run `create-20261111T220331Z`.
+Owner holds stay unchanged: Slaney Road PP-009347, the four Hillingdon cases,
+Minories, Waddon, New Barnet and the other PLAN.md decisions. Stoneleigh A and B
+have separate records; C appears only in grouped PP-000383. Its linked RingGo
+page returned unrelated Westminster content, so C's mapping remains held.
 
-Owner download links and remaining input work, one borough per line. Save complete HTML plus
-linked site/list pages in `data/raw/`; an index alone is not a site inventory.
-Counts remain unknown until reviewed. These links are download requests only.
+Remaining input blocks, not requests for next-step decisions:
 
-- Enfield: [Car parks](https://www.enfield.gov.uk/services/parking/car-parks), including the map data; HTTP 403 here.
-- Sutton: [Car parks](https://www.sutton.gov.uk/streets-transport-and-parking/parking/car-parks), plus linked site lists.
-- Barking and Dagenham: [Parking index](https://www.lbbd.gov.uk/parking), plus the linked current car park inventory; index is blocked here.
-- Southwark parks: separate park car park inventory still needed; the imported pay-to-park list explicitly excludes these facilities.
-- Lewisham: [Council-managed car parks](https://lewisham.gov.uk/myservices/parking/carparks/car-parks-managed-by-the-council).
-- Wandsworth: [Parking tariffs](https://www.wandsworth.gov.uk/parking/parking-bays/paying-to-park/parking-tariffs/), including the car park section.
-- Westminster: [Visitor parking](https://www.westminster.gov.uk/parking/visitor-parking-information), plus linked off-street operators; this page is not a full site inventory.
-- Camden: [Contract car parks](https://www.camden.gov.uk/contract-parking), plus a current public/off-street list; this page has limited scope.
-- Kensington and Chelsea: [Guide to parking](https://www.rbkc.gov.uk/parking-permissions/visitor-parking-and-pay-phone/guide-parking), plus linked off-street site pages.
-- Lambeth: [Council-owned car parks](https://www.lambeth.gov.uk/lambeth-data-hub/council-owned-car-parks), plus its linked inventory.
-- Hammersmith and Fulham: [Parking index](https://www.lbhf.gov.uk/parking), plus linked car park pages; robot-check response here.
+- Barnet: [current list](https://www.barnet.gov.uk/parking/car-parks-and-street-parking-locations) saved an interruption page twice; 2014 CSV is cross-check only.
+- Enfield: [car parks](https://www.enfield.gov.uk/services/parking/car-parks), including map data; HTTP 403.
+- Sutton: [car parks](https://www.sutton.gov.uk/streets-transport-and-parking/parking/car-parks); HTTP 403.
+- Barking and Dagenham: [parking](https://www.lbbd.gov.uk/parking) and linked inventory; HTTP 403.
+- Lewisham: [council list](https://lewisham.gov.uk/myservices/parking/carparks/car-parks-managed-by-the-council); HTTP 403.
+- Camden: [contract parking](https://www.camden.gov.uk/contract-parking) and complete off-street list; HTTP 403.
+- Lambeth: [direct inventory](https://www.lambeth.gov.uk/parking/parking-restrictions/where-you-can-park/car-parks); HTTP 403.
+- Hammersmith and Fulham: [provided parking link](https://www.lbhf.gov.uk/parking) returned 404; a current official inventory is missing.
+- Wandsworth: [tariffs](https://www.wandsworth.gov.uk/parking/parking-bays/paying-to-park/parking-tariffs/) names two sites; linked Battersea map does not name its car parks. Complete inventory still missing.
+- Westminster: [visitor parking](https://www.westminster.gov.uk/parking/visitor-parking-information) links private operators, not a complete site list.
+- Kensington and Chelsea: [guide](https://www.rbkc.gov.uk/parking-permissions/visitor-parking-and-pay-phone/guide-parking) names examples, not a complete inventory.
+- Southwark park facilities: the paid council inventory excludes them; a separate list is missing.
 
 ## Grok hand-off
 
@@ -317,6 +304,6 @@ report adds plain agreement with the supported reference.
 
 The created-record path, London OSM insertion and hold-list apply are complete.
 Created identities do not establish access, prices or time limits.
-The identity matcher generates plans only. The latest full suite check passed 1,604 tests, including concurrent evidence work.
+The identity matcher generates plans only. The latest full suite check passed 1,619 tests, including concurrent evidence work.
 Code ownership is in `docs/MAP.md`. Creation procedures are in `ADD_PLACES_RUNBOOK.md`.
 Keep this file current and short. Do not append historical run narratives.
