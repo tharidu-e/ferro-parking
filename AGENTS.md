@@ -4,6 +4,10 @@ Ferro parking serves real drivers. Accuracy takes priority over coverage.
 
 - Read only documents needed for the task. Do not scan every document at startup.
 - For priorities or remaining work, read `docs/STATUS.md`.
+- Before proposing or building any capability, run `python -m ferro_parking --help`.
+  It lists every command with one line each, generated from the code, so it cannot go stale.
+  A capability already there is never rebuilt. This rule exists because an agent proposed
+  building a source register while `discover --source generic` already imported source lists.
 - Before adding a module, read `docs/MAP.md` and the existing implementation. Reuse existing modules.
 - Before data plans, parking logic or Sheet work, read `docs/PP_rules_and_pilot.md`, including cell and publication controls.
 - Sheet changes require the owner's explicit go after a dry run, saved undo, six checks and independent second reading.

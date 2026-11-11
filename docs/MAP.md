@@ -1,5 +1,10 @@
 # Code ownership map
 
+This file says which module owns what. For what the tool can already do, run
+`python -m ferro_parking --help`. That list is the capability index and it is the
+first thing to read before building anything.
+
+
 Read this before adding a module. Paths below are relative to `src/ferro_parking/`, except `config/` entries. CLI means dispatch from `__main__.py`. This is an ownership index, not a new execution order; use `docs/STATUS.md` for current priorities.
 
 ## Import and export
