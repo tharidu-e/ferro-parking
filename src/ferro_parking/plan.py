@@ -17,7 +17,12 @@ refusals are:
 - an unknown Place ID, or an unknown column
 - a column another owner writes (hard rule 2), any other protected column,
   or a column outside fill.RESEARCH_COLUMNS
-- a row whose Verified By starts with "Tharidu" (fill.is_named_person)
+- a row whose Verified By names a person or a verifier the automation list does
+  not declare (fill.lock_refusal)
+- a finished row's own Verification Result, and any answer a finished row
+  already holds (fill.finished_column_refusal). A blank cell on a finished row
+  is still fillable, because routing sends a finished row back when it has a
+  parking gap
 - a row the latest routing run put on a different stage than the plan's own
 - replacing a value that is already there, unless the plan's own Source Tier
   is strong and its Specificity is Site-specific. A placeholder is not an
@@ -183,8 +188,9 @@ def check_plan(conn, lines):
         if reason:
             refuse(reason)
             continue
-        if fill.is_named_person(row.get(fill.VERIFIED_BY)):
-            refuse(f"Verified By is {row.get(fill.VERIFIED_BY)!r}, a named person")
+        locked = fill.lock_refusal(row)
+        if locked:
+            refuse(locked)
             continue
         if column in grouped.get(place_id, {}):
             refuse(f"the plan sets {column!r} twice for this Place ID")
@@ -194,10 +200,11 @@ def check_plan(conn, lines):
     for place_id, lines_by_column in grouped.items():
         row = by_place_id[place_id]
         for column, line in lines_by_column.items():
-            reason = replacement_refusal(lines_by_column, row, column)
-            if reason:
-                rejected.append({"Place ID": place_id, "column": column,
-                                  "new value": line["new_value"], "reason": reason})
+            for reason in (fill.finished_column_refusal(row, column, line["new_value"]),
+                           replacement_refusal(lines_by_column, row, column)):
+                if reason:
+                    rejected.append({"Place ID": place_id, "column": column,
+                                      "new value": line["new_value"], "reason": reason})
 
     entries = []
     for place_id, lines_by_column in grouped.items():
@@ -296,19 +303,40 @@ def apply_plan(conn, lines, run_id, apply=False):
 
 def undo_run(conn, run_id, apply=False):
     """Append the reverse of every applied change in one run, under the run id
-    "undo-<run_id>". Nothing is deleted. Returns a report."""
+    "undo-<run_id>". Nothing is deleted. Returns a report.
+
+    One locked or drifted value blocks the whole undo, the same way one refused
+    line blocks a whole apply."""
     undo_id = f"undo-{run_id}"
     rows = [dict(row) for row in conn.execute(
         "SELECT place_id, column_name, old_value, new_value FROM changes"
         " WHERE run_id = ? AND applied_at IS NOT NULL ORDER BY id", (run_id,))]
     already = conn.execute(
         "SELECT COUNT(*) AS n FROM changes WHERE run_id = ?", (undo_id,)).fetchone()["n"]
+    # An undo is a mutation, so the locks apply to it as well. A row a person
+    # checked since the run keeps what it holds now, and so does a cell
+    # somebody else changed after the run wrote it.
+    _, current = db.current_rows(conn)
+    by_place_id = {(row.get(PLACE_ID) or "").strip(): row for row in current}
+    refused = []
+    for row in rows:
+        row_now = by_place_id.get(row["place_id"])
+        reason = fill.lock_refusal(row_now)
+        if reason is None and row_now is None:
+            reason = f"Place ID {row['place_id']!r} is no longer in the database"
+        held = "" if row_now is None else str(row_now.get(row["column_name"], "") or "").strip()
+        if reason is None and held != str(row["new_value"] or "").strip():
+            reason = (f"the run wrote {row['new_value']!r} but the cell now holds "
+                      f"{held!r}, so a later change would be lost")
+        if reason:
+            refused.append({"Place ID": row["place_id"], "column": row["column_name"],
+                            "new value": row["old_value"], "reason": reason})
     report = {"run_id": run_id, "undo_run_id": undo_id, "changes": len(rows),
-              "already_undone": bool(already), "restored": 0,
+              "already_undone": bool(already), "restored": 0, "rejected": refused,
               "dry_run_rows": [{"Place ID": row["place_id"], "column": row["column_name"],
                                  "current value": row["new_value"],
                                  "new value": row["old_value"]} for row in rows]}
-    if not rows or already or not apply:
+    if not rows or already or refused or not apply:
         return report
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
     # Reverse order, so a column the run set more than once ends on its
@@ -468,12 +496,19 @@ def undo_main(argv=None):
     out_dir = reserve_output(args.out) if args.out else new_run_dir("db_undo")
     _write_csv(out_dir / "undo.csv", report["dry_run_rows"],
                ["Place ID", "column", "current value", "new value"])
+    _write_csv(out_dir / "rejected.csv", report.get("rejected", []), REJECT_HEADERS)
 
     if not report["changes"]:
         print(f"Run {args.run} has no applied changes. Nothing to undo.")
         return 1
     if report["already_undone"]:
         print(f"Run {args.run} was already undone as {report['undo_run_id']}. Nothing done.")
+        return 1
+    if report.get("rejected"):
+        print(f"REFUSED: {len(report['rejected'])} values are locked. The whole undo is blocked.")
+        for reject in report["rejected"][:10]:
+            print(f"  {reject['Place ID']} {reject['column']}: {reject['reason']}")
+        print(f"Reports in {out_dir}/")
         return 1
     if args.apply:
         print(f"Restored {report['restored']} values under run {report['undo_run_id']}")

@@ -395,6 +395,42 @@ def test_undoing_an_unknown_run_reports_nothing_to_do(conn):
     assert report["restored"] == 0
 
 
+def test_an_undo_is_refused_once_a_person_checks_the_row(conn):
+    plan.apply_plan(conn, full_row_lines(), "run-1", apply=True)
+    set_cell(conn, BLANK_ROW, "Verified By", "Deshan (pilot, manual check)")
+    report = plan.undo_run(conn, "run-1", apply=True)
+    assert report["restored"] == 0
+    assert all("manual check" in reject["reason"] for reject in report["rejected"])
+    _, rows = db.current_rows(conn)
+    assert {r["Place ID"]: r for r in rows}[BLANK_ROW]["Who Can Park"] == "Customers only"
+
+
+def test_an_undo_is_refused_when_a_value_drifted_since_the_run(conn):
+    plan.apply_plan(conn, full_row_lines(), "run-1", apply=True)
+    conn.execute("INSERT INTO changes (run_id, place_id, column_name, old_value, new_value,"
+                 " stage, applied_at) VALUES ('run-2', ?, 'Who Can Park', 'Customers only',"
+                 " 'Anyone', 'default', '2026-11-11T00:00:00+00:00')", (BLANK_ROW,))
+    conn.commit()
+    report = plan.undo_run(conn, "run-1", apply=True)
+    assert report["restored"] == 0
+    assert any("a later change would be lost" in reject["reason"]
+               for reject in report["rejected"])
+
+
+def test_an_undo_of_a_run_that_finished_the_row_is_still_allowed(conn):
+    plan.apply_plan(conn, full_row_lines(), "run-1", apply=True)
+    conn.execute("INSERT INTO changes (run_id, place_id, column_name, old_value, new_value,"
+                 " stage, applied_at) VALUES ('run-1', ?, 'Verification Result', '',"
+                 " 'Confirmed', 'default', '2026-11-11T00:00:00+00:00')", (BLANK_ROW,))
+    conn.commit()
+    db.rebuild(conn)
+    report = plan.undo_run(conn, "run-1", apply=True)
+    assert report["rejected"] == []
+    assert report["restored"] == 9
+    _, rows = db.current_rows(conn)
+    assert {r["Place ID"]: r for r in rows}[BLANK_ROW]["Verification Result"] == ""
+
+
 def test_an_unapplied_change_is_not_undone(conn):
     conn.execute("INSERT INTO changes (run_id, place_id, column_name, old_value, new_value)"
                  " VALUES ('run-1', ?, 'Who Can Park', '', 'Customers only')", (BLANK_ROW,))
@@ -654,9 +690,12 @@ def set_cell(conn, place_id, column, value):
 
 
 def replacement_reasons(conn, place_id, column, new_value):
+    """Every refusal that says the value already there stays. A finished row
+    refuses first and with its own wording, so both phrases count."""
     return [reason for reason in
             reasons(conn, [line(place_id=place_id, column=column, new_value=new_value)])
-            if "without strong site-specific evidence" in reason]
+            if "without strong site-specific evidence" in reason
+            or "the row is finished, so its" in reason]
 
 
 def test_an_empty_value_is_a_placeholder(conn):
@@ -735,6 +774,39 @@ def test_db_apply_and_grok_import_share_one_named_person_list():
     source = inspect.getsource(grok_import.build_plan)
     assert "fill.is_named_person" in source
     assert "reviewers" not in source
+
+
+@pytest.mark.parametrize("verified_by,held", [
+    ("Deshan (pilot, manual check)", True), ("Unrecognised bot", True),
+    ("Tharidu", True), ("Grok (discovery)", False), ("Policy script", False)])
+def test_an_undeclared_verifier_is_held_as_a_person(conn, verified_by, held):
+    set_cell(conn, BLANK_ROW, "Verified By", verified_by)
+    got = [reason for reason in reasons(conn, [line()]) if "Verified By is" in reason]
+    assert bool(got) == held, got
+
+
+def test_a_finished_row_keeps_its_result_and_its_answers(conn):
+    set_cell(conn, BLANK_ROW, "Verification Result", "Confirmed")
+    set_cell(conn, BLANK_ROW, "Who Can Park", "Customers only")
+    got = reasons(conn, [line(column="Verification Result", new_value="No evidence"),
+                          line(column="Who Can Park", new_value="Anyone")])
+    assert any("its Verification Result stays" in reason for reason in got), got
+    assert any("'Who Can Park' stays" in reason for reason in got), got
+
+
+def test_a_finished_row_still_takes_a_blank_cell_routing_asked_for(conn):
+    set_cell(conn, BLANK_ROW, "Verification Result", "Confirmed")
+    got = [reason for reason in reasons(conn, [line(column="Who Can Park")])
+           if "the row is finished" in reason]
+    assert got == []
+
+
+def test_a_row_that_needs_an_on_site_check_is_not_finished(conn):
+    set_cell(conn, BLANK_ROW, "Verification Result", "Needs on-site check")
+    set_cell(conn, BLANK_ROW, "Who Can Park", "Customers only")
+    got = [reason for reason in reasons(conn, [line(new_value="Anyone")])
+           if "the row is finished" in reason]
+    assert got == []
 
 
 def test_grok_import_accepts_an_agent_verified_row(conn, tmp_path):

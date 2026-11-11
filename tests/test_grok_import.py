@@ -191,18 +191,19 @@ def test_no_parking_passes_only_with_explicit_denial_and_not_applicable_fields()
 
 
 def test_finished_and_person_rows_skipped_and_rerun_is_idempotent():
-    # One named-person list, shared with db-apply: Verified By starting with
-    # "Tharidu" (fill.is_named_person). Any other label is an agent, so its
-    # row stays importable. The reviewer allowlist in grok_value_map.toml no
-    # longer gates this, which is why the pilot and unrecognised labels below
-    # are no longer skipped as a person.
+    # One named-person list, shared with db-apply (fill.is_named_person).
+    # A label the automation list in grok_value_map.toml does not declare is
+    # held as a person, so the pilot label and an unrecognised bot are both
+    # skipped. The live data carried "Deshan (pilot, manual check)" on four
+    # rows that the earlier prefix test let through.
     for updates in ({"Verification Result": "Confirmed"}, {"Verified By": "Tharidu"},
-                    {"Verified By": "Tharidu (hand check)"}):
+                    {"Verified By": "Tharidu (hand check)"},
+                    {"Verified By": "Deshan (pilot, manual check)"},
+                    {"Verified By": "Unrecognised bot"}):
         result = build(rows=[target(**updates)])
         assert len(result["skipped"]) == 1
         assert result["plan"] == []
-    for updates in ({"Verified By": "Deshan (pilot, manual check)"},
-                    {"Verified By": "Unrecognised bot"}):
+    for updates in ({"Verified By": "Grok (discovery)"}, {"Verified By": "PP"}):
         result = build(rows=[target(**updates)])
         assert result["skipped"] == []
     first = build()

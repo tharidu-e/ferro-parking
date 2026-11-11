@@ -64,4 +64,6 @@ free_bands = '^Free for up to (\d+) mins, then (.+)$'
 
 [reviewers]
 # Unknown values are treated as a person's name, not assumed to be automation.
-automation = ["", "PP (validation)", "OSM script", "Policy script", "Claude (capture check)", "Claude (page check)", "Grok (detail pass)", "Code (page fetch)"]
+# Every label this project's own scripts write belongs here. A label that is
+# missing locks its rows, which is the safe direction.
+automation = ["", "PP", "PP (validation)", "OSM script", "OSM script (pilot)", "OSM discovery", "OSM identity match", "Policy script", "Category policy script", "Claude (capture check)", "Claude (page check)", "Grok (discovery)", "Grok (detail pass)", "Code (page fetch)"]
