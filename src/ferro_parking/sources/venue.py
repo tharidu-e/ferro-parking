@@ -20,6 +20,8 @@ The rules, per the brief:
 - Max Stay only when the page states a maximum stay with a number. A free
   period is not a maximum stay: "four hours free, then pay" lets a driver stay
   longer, so writing 240 there would send them away early.
+- Free only when the free claim has no day or time qualifier. "All parking is
+  free on Sundays" is not Free: the wording goes in Notes with a Review Flag.
 - Operator and the PCN amount only when stated.
 - A caution such as "check the signs in the car park" goes in Notes.
 - Source Tier official, Specificity Site-specific, and every value carries the
@@ -88,6 +90,17 @@ AVAILABILITY = re.compile(
 # station reader already follows.
 FACILITY_CAR_PARK = re.compile(r"^(?:free\s+|customer\s+)?car park(?:ing)?$", re.I)
 ACCESSIBLE_ONLY = re.compile(r"\b(?:disabled|accessible|blue badge)\b", re.I)
+
+# A free claim tied to named days, a date or a time window is not free. The
+# live case was "All parking is free on Sundays. Check car park for latest
+# prices." on a PureGym branch page: writing Free there tells a driver the
+# wrong thing on six days out of seven.
+FREE_QUALIFIER = re.compile(
+    r"\b(?:mon|tues|wednes|thurs|fri|satur|sun)days?\b"
+    r"|\bweekends?\b|\bweekdays?\b|\bbank holidays?\b"
+    r"|\b(?:after|before|from|until|till)\s+\d"
+    r"|\bbetween\s+\d"
+    r"|\bovernight\b|\bout of hours\b", re.I)
 
 WORD_NUMBERS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6}
 
@@ -250,6 +263,11 @@ class VenueFetcher:
         if any(DENIAL.search(sentence) for sentence in found):
             return {}, [], [], ""
         free_match, free_sentence = find(FREE, found)
+        # A free claim limited to named days or a time window is not Free. The
+        # wording is kept for a person instead of being turned into a price.
+        qualified_free = ""
+        if free_match and FREE_QUALIFIER.search(free_sentence):
+            qualified_free, free_match, free_sentence = free_sentence, None, ""
         charge_match, charge_sentence = None, ""
         # Free is allowed only when no associated parking charge is stated.
         # Ignore penalties and explicit statements that no charge applies.
@@ -273,11 +291,11 @@ class VenueFetcher:
 
         parking_charge = charge_match is not None
         if not (free_match or parking_charge or spaces_match or stay_match
-                or available_match):
+                or available_match or qualified_free):
             return {}, [], [], ""
 
         quote = (free_sentence or spaces_sentence or charge_sentence
-                 or available_sentence or stay_sentence)
+                 or available_sentence or stay_sentence or qualified_free)
         values = {
             CAN_PARK: "Conditional",
             "Who Can Park": "Customers only",
@@ -330,6 +348,10 @@ class VenueFetcher:
             values["Cost Type"] = "Unknown"
             values["Price Status"] = "Not published"
             values["Prices Stated"] = "No"
+
+        if qualified_free:
+            notes.append(f"Free only at stated times, not read as a price: {qualified_free}")
+            flags.append("Parking is free only at stated times: a person must read it")
 
         if stay_match:
             values["Max Stay (mins)"] = str(_minutes(stay_match.group(1), stay_match.group(2)))

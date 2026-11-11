@@ -182,6 +182,37 @@ def test_a_free_period_is_never_read_as_a_max_stay():
     assert "Max Stay (mins)" not in values
 
 
+def test_free_on_named_days_is_not_free():
+    """The live PureGym Romford page says parking is free on Sundays and to
+    check the car park for prices. Writing Free would mislead a driver on six
+    days out of seven."""
+    text = ("1,730 parking spaces on site. All parking is free on Sundays. "
+            "Check car park for latest prices.")
+    values, notes, flags, quote = venue_mod.VenueFetcher("puregym.com").values(text)
+    assert values["Cost Type"] == "Unknown"
+    assert values["Price Status"] == "Not published"
+    assert "Tariff Detail" not in values
+    assert any("free only at stated times" in note.lower() for note in notes)
+    assert flags
+    # The row still records that the branch has a car park.
+    assert values[fill.CAN_PARK] == "Conditional"
+
+
+@pytest.mark.parametrize("sentence,free", [
+    ("Free parking is available.", True),
+    ("Parking type: Free", True),
+    ("Parking is free on Saturdays.", False),
+    ("Parking is free at weekends.", False),
+    ("Parking is free on bank holidays.", False),
+    ("Parking is free after 6pm.", False),
+    ("Parking is free between 9am and 5pm.", False),
+    ("Parking is free overnight.", False),
+])
+def test_a_qualified_free_claim_never_becomes_a_price(sentence, free):
+    values = venue_mod.VenueFetcher("puregym.com").values(sentence)[0]
+    assert (values.get("Cost Type") == "Free") == free, values.get("Cost Type")
+
+
 def test_a_stated_maximum_stay_is_written():
     text = "Free parking is available. The maximum stay is 3 hours."
     values, notes, _, _ = venue_mod.VenueFetcher("puregym.com").values(text)
