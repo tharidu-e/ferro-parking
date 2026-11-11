@@ -5,6 +5,7 @@ from html import unescape
 import json
 import re
 from pathlib import Path
+from urllib.parse import unquote_plus
 from urllib.request import Request, urlopen
 
 
@@ -246,7 +247,32 @@ def croydon(location=None):
     return rows
 
 
+GREENWICH_URL = 'https://www.royalgreenwich.gov.uk/directory/19/car_parks'
+
+
+def greenwich(location=None):
+    """Match official directory map marker names and pins by record ID."""
+    raw = read_input(location or GREENWICH_URL)
+    info = dict(re.findall(r'id="map_marker_info_(\d+)" value="([^"<>]+)"', raw))
+    pins = {record_id: (lat, lon) for record_id, lat, lon in re.findall(
+        r'id="(\d+)" class="mapMarkers" value="(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)"', raw)}
+    if not info or info.keys() != pins.keys():
+        raise ValueError('Greenwich inventory has missing map names or pins')
+    rows = []
+    for record_id, encoded in info.items():
+        anchor = unquote_plus(unescape(encoded))
+        site = re.fullmatch(r'<a href="(https://www\.royalgreenwich\.gov\.uk/directory_record/'
+                            + record_id + r'/[^"<>]+)">([^<>]+)</a>', anchor)
+        if not site:
+            raise ValueError('Greenwich marker lacks its exact official site URL or name')
+        lat, lon = pins[record_id]
+        rows.append({'name': unescape(site[2]).strip(), 'lat': lat, 'lon': lon,
+                     'url': site[1], 'postcode': '', 'address': '', 'tariff': '',
+                     'hours': '', 'max_stay': '', 'brand': '', 'official': True})
+    return rows
+
+
 ADAPTERS = {'generic': generic, 'city-of-london': city_of_london,
             'barnet': barnet, 'hillingdon': hillingdon, 'bromley': bromley,
             'hounslow': hounslow, 'havering': havering, 'bexley': bexley,
-            'croydon': croydon}
+            'croydon': croydon, 'greenwich': greenwich}

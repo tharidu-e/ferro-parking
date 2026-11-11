@@ -58,7 +58,7 @@ Official counts cover the named council inventory, not every private car park.
 We hold counts distinct listed sites after name or coordinate review, not raw
 record counts. Unknown is not zero. OSM-derived means active OSM-created records
 in `data/runs/2026-11-11_25/coverage/borough_order.csv`; it proves identity only.
-No database or Sheet changes were made by these coverage reviews.
+Greenwich creation added two identity-only records; no Sheet changes were made.
 
 | Borough | Official inventory | Published official | Official sites we hold | Official gap | OSM-derived |
 |---|---|---:|---:|---|---:|
@@ -69,6 +69,7 @@ No database or Sheet changes were made by these coverage reviews.
 | Havering | Council site links | 24 | 24 by name | 0 by name | 204 |
 | Hillingdon | Council points, refreshed | 28 | 24 | Unresolved (4) | 259 |
 | Hounslow | Council lists, refreshed | 21 | 21 | 0 | 229 |
+| Greenwich | Official directory markers | 17 | 17 | 0 | 153 |
 | City of London | COMPASS layer 2 | 5 | 5 | 0 | 6 |
 
 Discovery uses current database rows and cached borough polygons. A shared
@@ -90,12 +91,16 @@ Hillingdon reimport: 28 listed, 24 reviewed held sites, four unchanged owner
 cases. Fresh review: `data/runs/2026-11-11_113/coverage_hillingdon/`. Hounslow
 refresh resolves all 21 region exceptions by exact site-name review: `data/runs/2026-11-11_114/coverage_hounslow/`.
 
-Owner downloads still needed, one borough per line. Save complete HTML plus
+Download batch: 18 of 25 pages saved under `data/raw/2026-11-11_112/official_lists/`;
+seven failed. Manifest: `data/runs/2026-11-11_112/official_downloads/download_results.json`.
+Greenwich: 17 reviewed sites, two new identities, gap zero.
+Review: `data/runs/2026-11-11_117/coverage_greenwich/`; create run `create-20261111T220331Z`.
+
+Owner download links and remaining input work, one borough per line. Save complete HTML plus
 linked site/list pages in `data/raw/`; an index alone is not a site inventory.
 Counts remain unknown until reviewed. These links are download requests only.
 
 - Enfield: [Car parks](https://www.enfield.gov.uk/services/parking/car-parks), including the map data; HTTP 403 here.
-- Greenwich: [Public car parks](https://www.royalgreenwich.gov.uk/directory/19/car_parks), plus each site page.
 - Redbridge: [Car parks](https://www.redbridge.gov.uk/parking/car-parks-and-on-street-parking/).
 - Newham: [Car park directory](https://www.newham.gov.uk/directory/2/car-parks-in-newham), plus all five area lists and site pages.
 - Waltham Forest: [Council car parks](https://www.walthamforest.gov.uk/parking-roads-and-travel/car-parks-and-street-parking/council-car-parks).

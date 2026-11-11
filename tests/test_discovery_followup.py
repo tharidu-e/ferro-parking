@@ -445,3 +445,17 @@ def test_barnet_current_adapter_refuses_challenge_or_historical_csv(tmp_path, te
     path.write_text(text)
     with pytest.raises(ValueError, match='Barnet current page'):
         barnet(path)
+
+
+def test_greenwich_joins_marker_names_and_pins_by_id(tmp_path):
+    from urllib.parse import quote_plus
+    from ferro_parking.sources import greenwich
+    path = tmp_path / 'greenwich.html'
+    anchor = '<a href="https://www.royalgreenwich.gov.uk/directory_record/17/example">Example Park</a>'
+    path.write_text(f'<input id="map_marker_info_17" value="{quote_plus(anchor)}"><input id="17" class="mapMarkers" value="51.48,0.02">')
+    row = greenwich(path)[0]
+    assert (row['name'], row['lat'], row['lon']) == ('Example Park', '51.48', '0.02')
+    assert row['tariff'] == row['hours'] == row['max_stay'] == ''
+    path.write_text(f'<input id="map_marker_info_17" value="{quote_plus(anchor)}">')
+    with pytest.raises(ValueError, match='missing map'):
+        greenwich(path)
