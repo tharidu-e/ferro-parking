@@ -25,16 +25,16 @@ For current counts, run the read-only example in README.md. Saved routing can la
 
 | Measure | Places |
 |---|---:|
-| Legacy showable | 1,509 |
-| Legacy complete | 1,062 |
-| Evidence-supported showable | 59 |
+| Legacy showable | 1,513 |
+| Legacy complete | 1,064 |
+| Evidence-supported showable | 137 |
 | Evidence-supported complete | 0 |
 
 Legacy counts read the sheet's own cells, through `readiness.counts` over a
 `db-export`. Evidence-supported means the `evidence` table holds a quote for
-Can Park?, Who Can Park and Cost Type on that place. 59 rows reach that bar:
-50 from the website readers and 9 from the 12 November Grok pilot. The other
-legacy answers predate the evidence table, so do not read 1,509 as 1,509
+Can Park?, Who Can Park and Cost Type on that place. 137 rows reach that bar:
+50 from the website readers and 87 from the two 12 November Grok batches. The
+other legacy answers predate the evidence table, so do not read 1,513 as 1,513
 checked car parks.
 
 The Asda rows are not legacy showable, because their Cost Type reads Unknown.
@@ -233,6 +233,38 @@ The pilot found two importer bugs and one rule problem, all fixed on
 Still to settle for the next batch: the bots must leave Evidence Age as Older
 or undated on an undated page, and the two personas still read and write tabs
 their own text forbids.
+
+Batch 2 ran the same day: 200 rows, 71 minutes, results in
+`data/raw/grok_results_batch2_20261112.csv`. The bot applied all four pilot
+corrections, including Evidence Age. `grok-import` accepted 82, skipped 12 as
+finished and rejected 106. Run `apply-20261112T154646Z` wrote 2,307 changes and
+2,307 evidence rows across 78 places, with `db-undo` available. Evidence
+supported showable rose from 59 to 137.
+
+Batch 2's 106 rejects have two main causes, both the bot's own formatting:
+
+- 64 rows: the Tariff Detail text does not match a template in
+  `formats.TARIFF_PATTERNS`. The published amounts are real. Examples are a
+  trailing "each additional day £50.00", "Up to 1 hr £2.00" instead of
+  "0-1 hrs £2.00", and whole pounds without decimals.
+- 39 rows: Proposed Result "No evidence" with a Source Tier that is not
+  "None found".
+
+49 more lines were dropped at the apply step and held in
+`data/runs/2026-11-12/grok_import_batch2_filtered/held_lines.json`: 30 Notes
+and Review Flag lines that would replace existing text, 8 Hours lines the
+charging-hours check holds, 7 Evidence Level values of "Reported" that the
+sheet dropdown does not list, and 4 rows missing a Brand their chain category
+needs.
+
+Batch 2 review items, none of them parking answers: the Liberty, Wood Green
+East and Chimes postcodes differ from our records; Westfield London, Finsbury
+Square and Berners Street may be duplicate records; three car parks are not in
+the queue (Honor Oak Recreation Ground, Ham Street and Connaught Water) in
+`data/raw/grok_not_in_queue_batch2_20261112.csv`. 22 URLs were blocked,
+including Canary Wharf, NCP, Vision RCL behind a captcha and Guy's and
+St Thomas'.
+
 
 ## Publication dry runs
 
