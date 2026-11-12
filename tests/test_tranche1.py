@@ -1,4 +1,4 @@
-"""Tests for tranche 1 prep (docs/HANDOVER.md, "Discovery count" step 2)."""
+"""Tests for tranche 1 prep (discovery tranche selection)."""
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 

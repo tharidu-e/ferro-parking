@@ -1,9 +1,22 @@
-"""Cached, rate-limited postcodes.io bulk lookup with coordinate fallback."""
+"""London membership: borough polygons from the extract, or a postcodes.io lookup.
+
+BoroughFilter is the one to use. It tests whether a point falls inside a
+Greater London borough polygon read from the OpenStreetMap extract, which is
+what the execution checklist asks for: postcode classification alone is not a
+boundary test. It needs no network, so a source list downloaded once can be
+imported offline, and it names the borough as well as answering yes or no.
+
+LondonFilter remains for a source that gives postcodes and no coordinates. It
+calls postcodes.io, so it cannot run without network access.
+"""
 import hashlib
 import json
 from pathlib import Path
 import time
 from urllib.request import Request, urlopen
+
+LONDON = "London"
+BOROUGH_CACHE = Path("data/cache/boroughs.geojson")
 
 
 class LondonFilter:
@@ -63,4 +76,71 @@ class LondonFilter:
                 except (ValueError, KeyError, TypeError):
                     result = None
             output.append((row, result.get('region') if result else None))
+        return output
+
+
+class BoroughFilter:
+    """London membership by borough polygon, with no network request.
+
+    Parsing the extract takes minutes, so the polygons are cached as GeoJSON on
+    first use and every later run loads the cache. Delete the cache to rebuild
+    it from a newer extract.
+    """
+
+    def __init__(self, pbf=None, cache=BOROUGH_CACHE):
+        self.cache = Path(cache)
+        self.boroughs = self._load(pbf)
+        if not self.boroughs:
+            raise ValueError(
+                "no borough polygon available: pass the OpenStreetMap extract "
+                "once with --boroughs-from so the cache can be built")
+        from shapely.ops import unary_union
+        self.london = unary_union([b["geom_ll"] for b in self.boroughs])
+
+    def _load(self, pbf):
+        from shapely.geometry import mapping, shape
+        if self.cache.exists():
+            data = json.loads(self.cache.read_text(encoding="utf-8"))
+            return [{"name": f["properties"]["name"], "geom_ll": shape(f["geometry"])}
+                    for f in data["features"]]
+        if not pbf:
+            return []
+        from . import osm_places
+        handler = osm_places.collect(pbf)
+        boroughs = [{"name": b["name"], "geom_ll": b["geom_ll"]} for b in handler.boroughs]
+        if boroughs:
+            self.cache.parent.mkdir(parents=True, exist_ok=True)
+            self.cache.write_text(json.dumps({
+                "type": "FeatureCollection",
+                "features": [{"type": "Feature", "properties": {"name": b["name"]},
+                              "geometry": mapping(b["geom_ll"])} for b in boroughs]},
+            ), encoding="utf-8")
+        return boroughs
+
+    def borough_of(self, point_ll):
+        for borough in self.boroughs:
+            if borough["geom_ll"].intersects(point_ll):
+                return borough["name"]
+        return ""
+
+    def classify(self, rows):
+        """[(row, "London" or None)]. A row inside London also gets its borough.
+
+        A row with no usable coordinate is unresolved rather than London. The
+        answer has to come from geometry, and there is none to test."""
+        from shapely.geometry import Point
+        output = []
+        for row in rows:
+            try:
+                point = Point(float(row["lon"]), float(row["lat"]))
+            except (KeyError, TypeError, ValueError):
+                output.append((row, None))
+                continue
+            if not self.london.contains(point):
+                output.append((row, None))
+                continue
+            name = self.borough_of(point)
+            if name:
+                row["borough"] = name
+            output.append((row, LONDON))
         return output

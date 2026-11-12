@@ -48,6 +48,10 @@ def validate_rows(entries, plan=False):
     for entry in entries:
         row = entry['new'] if plan else entry
         pid = entry.get('place_id', '') if plan else row.get('Place ID', '')
+        old = entry.get('old', {})
+        changed = {key for key, value in row.items() if str(value) != str(old.get(key, ''))}
+        category_only = plan and bool(changed) and changed <= {'Place Category', 'Brand'}
+        identity_only = plan and bool(row) and set(row) <= {'Place Category', 'Brand', 'Notes'}
         def fail(field, rule, message):
             failures.append({'Place ID': pid, 'field': field, 'value': row.get(field, ''), 'rule': rule, 'message': message})
         if not plan:
@@ -64,7 +68,8 @@ def validate_rows(entries, plan=False):
         for key, value in row.items():
             if value == '' or value is None:
                 fail(key, 'blank', 'Touched field is blank')
-            if any(chr(code) in str(value) for code in (0x2013, 0x2014)):
+            if (any(chr(code) in str(value) for code in (0x2013, 0x2014))
+                    and not (category_only and key == 'Decision Reason' and key not in changed)):
                 fail(key, 'dashes', 'Use a plain hyphen')
             if key in allowed and value not in allowed[key]:
                 fail(key, 'dropdown', 'Value must exactly match config/rules.toml')
@@ -110,6 +115,8 @@ def validate_rows(entries, plan=False):
                 if row.get(key) != 'Not applicable':
                     fail(key, 'closed', 'Closed requires Not applicable')
         for message in page_fill.consistency_checks(row):
+            if (category_only or identity_only) and message == 'Decision Reason missing or does not name the route':
+                continue
             fail('*', 'consistency', message)
         # Wrap the existing captured-evidence validator with unknown defaults for
         # untouched fields. Quotes remain evidence, never synthesised from values.

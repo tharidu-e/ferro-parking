@@ -124,7 +124,7 @@ NOT_APPLICABLE_IF_NO_PARKING = [
 ]
 
 
-def consistency_checks(new):
+def consistency_checks(new, metadata_only=False):
     """Violated consistency check names from PP_Validator_prompt_v2_OSM.md
     ("Consistency checks before you mark a row finished"), run on the final
     new-value dict before it is kept. Empty list means the row is clean."""
@@ -147,7 +147,9 @@ def consistency_checks(new):
         if "£" not in detail and "free" not in detail.lower():
             violations.append(f"Price Status Published but Tariff Detail is {detail!r}")
 
-    if tariff == "Free with time limit" and not re.match(r"^\d+$", new.get("Max Stay (mins)", "")):
+    if (tariff == "Free with time limit"
+            and not re.match(r"^\d+$", new.get("Max Stay (mins)", ""))
+            and not re.fullmatch(r"Free for up to \d+ (?:hrs|mins)", new.get("Tariff Detail", ""))):
         violations.append("Tariff Type Free with time limit but Max Stay (mins) is not a number")
 
     if new.get("Source Tier") == "None found":
@@ -165,7 +167,7 @@ def consistency_checks(new):
     if new.get(CAN_PARK) == "Yes" and new.get("Source Tier") not in STRONG_SOURCE_TIERS:
         violations.append(f"Can Park? Yes but Source Tier is {new.get('Source Tier')!r}, not a strong source")
 
-    if not new.get("Decision Reason") or "Route" not in new.get("Decision Reason", ""):
+    if not metadata_only and (not new.get("Decision Reason") or "Route" not in new.get("Decision Reason", "")):
         violations.append("Decision Reason missing or does not name the route")
 
     return violations

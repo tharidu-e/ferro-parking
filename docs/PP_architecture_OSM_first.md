@@ -1,5 +1,8 @@
 # Ferro parking data pipeline: OSM-first architecture (ASCII, for LLM context)
 
+Design reference only. Built/planned labels are historical. Read STATUS.md for current work.
+Consult this document only for architecture decisions.
+
 Legend:
   [CODE]   deterministic script, no LLM, near-zero cost
   [LLM]    language model (Grok PP bot, or Claude), costs tokens

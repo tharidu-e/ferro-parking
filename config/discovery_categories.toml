@@ -1,5 +1,5 @@
 # Ferro PP discovery: category definitions for the OSM-vs-sheet place count
-# (docs/HANDOVER.md, "Discovery count"). Read by src/ferro_parking/discovery.py.
+# (see docs/MAP.md for ownership). Read by src/ferro_parking/discovery.py.
 #
 # Each [categories.X] table has:
 #   osm_rules              list of tag rules; a feature matches this category

@@ -1,0 +1,3 @@
+Category,Name,OSM ID,Lat,Lon,Existing Place ID,Existing Location Name,Existing Geo Precision,Match Reason
+Private / operator car park,QPark Chinatown,node/26846355,51.512290,-0.131380,PP-000125,Q-Park Chinatown,Rooftop,name and distance
+Private / operator car park,Riverside Wharf Car Park,way/999001,51.505500,-0.075500,PP-000600,Riverside Wharf Car Park,Building,same OSM reference

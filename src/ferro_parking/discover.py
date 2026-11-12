@@ -10,7 +10,7 @@ from pathlib import Path
 
 from . import fill, rules
 from .formats import parse_tariff, parse_hours, parse_stay
-from .london import LondonFilter
+from .london import BoroughFilter, LondonFilter
 from .run_paths import new_run_dir, reserve_output
 from .sources import ADAPTERS
 from .sync import normalize_name, normalize_postcode, haversine_m
@@ -67,10 +67,10 @@ def rank_names(source, hits):
     return hits
 
 
-def dedupe(source, rows):
+def dedupe(source, rows, non_identifying_urls=frozenset()):
     """Prefer decisive stages; keep unresolved multi-hit evidence while trying later stages."""
     place_id = str(source.get('place_id') or source.get('Place ID') or '').strip()
-    urls = source_urls(source.get('url', ''))
+    urls = source_urls(source.get('url', '')) - non_identifying_urls
     postcode = normalize_postcode(source.get('postcode', ''))
     name = normalize_name(source.get('name', ''))
     street = normalize_name(source.get('address', ''))
@@ -181,12 +181,17 @@ def run(source_rows, sheet_rows, output, london_filter):
     candidates, matches, exceptions = [], [], []
     in_london = 0
     seen = []
+    # A feed URL shared by the whole import identifies the list, not a site.
+    # One row alone cannot establish that a URL is shared.
+    non_identifying_urls = (set.intersection(*(source_urls(row.get('url', ''))
+                                             for row in source_rows))
+                            if len(source_rows) > 1 else set())
     for source, region in london_filter.classify(source_rows):
         if region != 'London':
             exceptions.append({'name': source.get('name', ''), 'reason': 'Outside London' if region else 'London region unresolved', 'source': json.dumps(source)})
             continue
         in_london += 1
-        hits, reason = dedupe(source, sheet_rows)
+        hits, reason = dedupe(source, sheet_rows, non_identifying_urls)
         if len(hits) > 1:
             exceptions.append({'name': source['name'], 'reason': f'Ambiguous {reason}', 'source': json.dumps(source)})
             continue
@@ -224,7 +229,7 @@ def run(source_rows, sheet_rows, output, london_filter):
                             'improvements': json.dumps(improvements), 'flags': row['flags'], 'source': json.dumps(source)})
         else:
             # Compare later listings against earlier new candidates as well as the sheet.
-            duplicate, method = dedupe(source, seen)
+            duplicate, method = dedupe(source, seen, non_identifying_urls)
             if duplicate:
                 exceptions.append({'name': source['name'], 'reason': f'Duplicate source listing: {method}', 'source': json.dumps(source)})
                 continue
@@ -240,20 +245,63 @@ def run(source_rows, sheet_rows, output, london_filter):
     return summary
 
 
+def existing_rows(sheet_csv=None, db_path=None):
+    """The places to deduplicate against.
+
+    The database by default, because it holds every sheet row and also the
+    car parks the project created itself. A sheet export holds only the sheet
+    rows, so deduplicating against one cannot see a created record and would
+    add a car park the database already holds. create.check_plan reads the
+    database for the same reason, and both guards have to see the same world.
+    """
+    if sheet_csv:
+        with open(sheet_csv, newline='', encoding='utf-8-sig') as stream:
+            return list(csv.DictReader(stream)), f'sheet export {sheet_csv}'
+    from . import db
+    path = db_path or db.DB_PATH
+    conn = db.connect(path)
+    try:
+        _, rows = db.current_rows(conn)
+    finally:
+        conn.close()
+    if not rows:
+        raise ValueError(f'nothing imported into {path}: run db-import first')
+    return rows, f'database {path}'
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source', required=True, choices=ADAPTERS)
     parser.add_argument('--input')
-    parser.add_argument('--sheet-csv', required=True)
+    parser.add_argument('--sheet-csv', default=None,
+                        help='deduplicate against this sheet export instead of '
+                             'the database. The export cannot see a created '
+                             'record, so prefer the database')
+    parser.add_argument('--db', default=None)
     parser.add_argument('--out')
+    parser.add_argument('--boroughs-from', default=None,
+                        help='an OpenStreetMap extract. Build the borough '
+                             'polygon cache from it once, then every later run '
+                             'tests London membership offline')
+    parser.add_argument('--postcode-lookup', action='store_true',
+                        help='classify London by postcodes.io instead of borough '
+                             'geometry. Needs network access, and a postcode is '
+                             'not a boundary test')
     parser.add_argument('--cache', default='data/cache/postcodes')
     args = parser.parse_args(argv)
     if args.source == 'generic' and not args.input:
         parser.error('--source generic requires --input')
     sources = ADAPTERS[args.source](args.input)
-    with open(args.sheet_csv, newline='', encoding='utf-8-sig') as stream:
-        sheet = list(csv.DictReader(stream))
+    sheet, against = existing_rows(args.sheet_csv, args.db)
+    print(f'deduplicating {len(sources)} source rows against {len(sheet)} '
+          f'places from the {against}')
+    if args.postcode_lookup:
+        london = LondonFilter(args.cache)
+        print('London membership by postcodes.io lookup')
+    else:
+        london = BoroughFilter(args.boroughs_from)
+        print(f'London membership by borough polygon, {len(london.boroughs)} boroughs')
     output = reserve_output(args.out) if args.out else new_run_dir('discover')
-    print(json.dumps(run(sources, sheet, output, LondonFilter(args.cache)), indent=2))
+    print(json.dumps(run(sources, sheet, output, london), indent=2))
     print(f'Outputs: {output}')
     return 0

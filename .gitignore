@@ -4,6 +4,8 @@ data/*
 *.pbf
 *.csv
 !tests/fixtures/*.csv
+# decisions already taken on the hold list, kept under version control
+!config/holds_decisions.csv
 # secrets (Google service account key, if used later)
 secrets/
 *.json.key

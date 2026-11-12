@@ -367,7 +367,10 @@ def second_reading(plan, fill_type):
     failures, and reported instead of applied."""
     clean, failures = {}, []
     for place_id, (row, new) in plan.items():
-        violations = page_fill.consistency_checks(new)
+        changed = {column for column, value in new.items()
+                   if str(value) != str(row.get(column, ""))}
+        metadata_only = bool(changed) and changed <= {"Place Category", "Brand"}
+        violations = page_fill.consistency_checks(new, metadata_only=metadata_only)
         if violations:
             failures.append({"Place ID": place_id, "Location Name": row.get(LOCATION_NAME, ""),
                               "Fill Type": fill_type, "Violations": "; ".join(violations)})

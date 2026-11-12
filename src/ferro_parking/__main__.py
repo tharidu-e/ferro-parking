@@ -26,6 +26,41 @@ Commands:
   triage-blanks  Read-only: bucket blank parking answers from a local CSV
   readiness  Read-only: count showable and complete rows, by borough and district
   osm-gaps  Read-only: list unmatched public/customer parking from a London PBF
+  db-import  Load a sheet export into the local SQLite store (no sheet access)
+  db-export  Write the store back out as a sheet CSV in sheet column order
+  db-rebuild  Recompute the derived places and parking tables from raw
+  route  Give every row one research stage, write the routing table and
+          data/runs/<date>/route/routing.csv (never writes to the sheet)
+  db-apply  Apply a JSON lines plan file to the database (dry run unless
+          --apply; any refusal blocks the whole plan)
+  osm-identity  Read-only: propose Brand, Place Category and Notes from OSM geometry
+  osm-places  Read-only: propose new car park records from an OSM extract
+          (identity only, never a parking answer; writes a db-create plan)
+  db-create  Create new records in the database from a db-create plan (dry
+          run unless --apply; a source already created is skipped, not
+          refused, so a repeated run adds no duplicate)
+  db-create-undo  Deactivate the records one db-create run made (dry run
+          unless --apply; never deletes a row, never frees a Place ID)
+  db-create-redo  Bring back the records one db-create run made, after an
+          undo and a fix (dry run unless --apply; the duplicate guards run
+          again and each record keeps its existing Place ID)
+  db-duplicate  Record that one place repeats another, so only one of them
+          routes and publishes (dry run unless --apply; nothing is deleted and
+          no Place ID is freed; --clear reverses it)
+  db-undo  Undo one run of applied database changes (dry run unless --apply)
+  grok-import  Turn an export of the bot's results tab into a plan file
+  default-fill  Dry run: the category default (R1, R10) as a plan file, for
+          rows the latest routing run put on stage "default"
+  category-plan  Dry run: plan the blank Place Category fills from a
+          propose-categories output, with the store format guard
+  fetch-fill  Dry run: run one registered fetcher over its routed rows and
+          emit a plan file (station, better.org.uk, thegymgroup.com,
+          puregym.com; marksandspencer.com caches pages only)
+  publish  Dry run applied database changes for publication; supports pilot filters
+  grok-queue  Export the latest Grok stage locally in the queue tab layout
+  research-report  Summarize research plans, refusals and ten examples per reader
+  probe  Fetch a few branch pages for one source key and report whether they
+          state parking (one request per second per domain, no sheet access)
   tranche1  Read-only: filter and score discovery's tranche 1 missing
           places, ready for review before writing (never writes to the sheet)
   tranche1-write  Dry run: select, de-duplicate and plan the tranche 1
@@ -33,6 +68,13 @@ Commands:
   tranche1-write-apply  Append the tranche1-write plan to the sheet's
           bottom (--apply to actually write; dry run reports the plan
           otherwise)
+  holds-bundle  Read-only: gather the evidence on every held car park
+          candidate, decide what the rules can decide and write the
+          reviewer batches (never writes to the database or the sheet;
+          --pbf parses the extract, --bundle reloads a written one)
+  holds-merge  Merge two reviewers' verdicts on the held cases; only full
+          agreement at high confidence decides a case, and a case the
+          rules decided is carried through unchanged
   fill-round2  Dry run: osm fill, capture fill, policy fill and a draft
           category policy on every blank-Verification-Result row, each
           pass checked against page_fill's consistency checks (never
@@ -75,6 +117,66 @@ def main():
     if cmd == "readiness":
         from .readiness import main as readiness_main
         return readiness_main(argv)
+    if cmd == "research-report":
+        from .research_report import main as research_report_main
+        return research_report_main(argv)
+    if cmd == "publish":
+        from .publish import main as publish_main
+        return publish_main(argv)
+    if cmd == "grok-queue":
+        from .grok_queue import main as queue_main
+        return queue_main(argv)
+    if cmd == "fetch-fill":
+        from .fetch_fill import main as fetch_fill_main
+        return fetch_fill_main(argv)
+    if cmd == "category-plan":
+        from .category_plan import main as category_plan_main
+        return category_plan_main(argv)
+    if cmd == "probe":
+        from .probe import main as probe_main
+        return probe_main(argv)
+    if cmd == "default-fill":
+        from .category_default import main as default_fill_main
+        return default_fill_main(argv)
+    if cmd == "db-apply":
+        from .plan import apply_main
+        return apply_main(argv)
+    if cmd == "osm-identity":
+        from .osm_identity import main as osm_identity_main
+        return osm_identity_main(argv)
+    if cmd == "osm-places":
+        from .osm_places import main as osm_places_main
+        return osm_places_main(argv)
+    if cmd == "db-create":
+        from .create import main as create_main
+        return create_main(argv)
+    if cmd == "db-create-undo":
+        from .create import undo_main as create_undo_main
+        return create_undo_main(argv)
+    if cmd == "db-create-redo":
+        from .create import redo_main as create_redo_main
+        return create_redo_main(argv)
+    if cmd == "db-duplicate":
+        from .duplicates import main as duplicates_main
+        return duplicates_main(argv)
+    if cmd == "db-undo":
+        from .plan import undo_main
+        return undo_main(argv)
+    if cmd == "grok-import":
+        from .plan import grok_import_main
+        return grok_import_main(argv)
+    if cmd == "route":
+        from .route import main as route_main
+        return route_main(argv)
+    if cmd == "db-import":
+        from .db import import_main
+        return import_main(argv)
+    if cmd == "db-export":
+        from .db import export_main
+        return export_main(argv)
+    if cmd == "db-rebuild":
+        from .db import rebuild_main
+        return rebuild_main(argv)
     if cmd == "validate":
         from .validation import main as validate_main
         return validate_main(argv)
@@ -131,6 +233,12 @@ def main():
     if cmd == "tranche1-write-apply":
         from .tranche1_write import apply_main as tranche1_write_apply_main
         return tranche1_write_apply_main(argv)
+    if cmd == "holds-bundle":
+        from .holds import bundle_main
+        return bundle_main(argv)
+    if cmd == "holds-merge":
+        from .holds import merge_main
+        return merge_main(argv)
     if cmd == "fill-round2":
         from .fill_round2 import main as fill_round2_main
         return fill_round2_main(argv)

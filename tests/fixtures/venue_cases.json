@@ -1,0 +1,145 @@
+[
+  {
+    "name": "unrelated-price",
+    "text": "Free parking is available for members. Personal training costs £40 per hour.",
+    "expected": {
+      "Cost Type": "Free",
+      "Tariff Detail": "Free"
+    },
+    "absent": [
+      "Max Stay (mins)"
+    ],
+    "excluded_quote": "£40"
+  },
+  {
+    "name": "unrelated-price-with-parking",
+    "text": "Free parking is available for members; personal training costs £40 per hour.",
+    "expected": {
+      "Cost Type": "Free"
+    },
+    "absent": [
+      "Max Stay (mins)"
+    ]
+  },
+  {
+    "name": "negative",
+    "text": "No customer parking is available.",
+    "empty": true
+  },
+  {
+    "name": "ambiguous",
+    "text": "Parking may be available nearby. Ask reception for details.",
+    "empty": true
+  },
+  {
+    "name": "contradictory",
+    "text": "Free parking is available. No parking is available at this gym.",
+    "empty": true
+  },
+  {
+    "name": "blocked-page",
+    "text": "Access denied. Enable JavaScript and cookies to continue.",
+    "empty": true
+  },
+  {
+    "name": "free-period",
+    "text": "Customers are entitled to up to four hours free car parking. Beyond that you must pay £2.50 per hour.",
+    "expected": {
+      "Cost Type": "Free then paid",
+      "Tariff Detail": "Free for 240 mins, then £2.50 per hour"
+    },
+    "absent": [
+      "Max Stay (mins)"
+    ]
+  },
+  {
+    "name": "customer-only",
+    "text": "Parking is available for members only.",
+    "expected": {
+      "Can Park? (Yes/No/Conditional)": "Conditional",
+      "Who Can Park": "Customers only",
+      "Cost Type": "Unknown"
+    }
+  },
+  {
+    "name": "unrelated-maximum",
+    "text": "Free parking is available. Personal training has a maximum stay of 2 hours.",
+    "expected": {
+      "Cost Type": "Free"
+    },
+    "absent": [
+      "Max Stay (mins)"
+    ]
+  },
+  {
+    "name": "unrelated-hourly",
+    "text": "Parking charges apply. Personal training costs £40 per hour.",
+    "expected": {
+      "Cost Type": "Unknown"
+    },
+    "absent": [
+      "Tariff Detail"
+    ],
+    "excluded_quote": "£40"
+  },
+  {
+    "name": "unrelated-continuation",
+    "text": "Free parking is available. You must pay £40 per hour for personal training.",
+    "expected": {
+      "Cost Type": "Free"
+    },
+    "excluded_quote": "£40"
+  },
+  {
+    "name": "training-price-after-free-period",
+    "text": "Free parking for 2 hours. Personal training costs £40 per hour.",
+    "expected": {
+      "Cost Type": "Free",
+      "Tariff Detail": "Free for up to 120 mins"
+    },
+    "absent": [
+      "Max Stay (mins)"
+    ],
+    "excluded_quote": "£40"
+  },
+  {
+    "name": "unrelated-must-pay",
+    "text": "Parking is available for customers. You must pay £40 for a massage.",
+    "expected": {
+      "Cost Type": "Unknown"
+    },
+    "absent": [
+      "Tariff Detail"
+    ],
+    "excluded_quote": "£40"
+  },
+  {
+    "name": "explicit-parking-maximum",
+    "text": "Free parking is available. The maximum stay is 3 hours.",
+    "expected": {
+      "Max Stay (mins)": "180",
+      "Who Can Park": "Customers only"
+    }
+  },
+  {
+    "name": "free-period-no-rate",
+    "text": "Customers have four hours free car parking. Beyond that you must pay for additional time.",
+    "expected": {
+      "Cost Type": "Unknown"
+    },
+    "absent": [
+      "Max Stay (mins)",
+      "Tariff Detail"
+    ]
+  },
+  {
+    "name": "mixed-parking-and-training-rate",
+    "text": "Free parking for 2 hours. Parking charges apply, and personal training costs £40 per hour.",
+    "expected": {
+      "Cost Type": "Unknown"
+    },
+    "absent": [
+      "Tariff Detail"
+    ]
+  }
+]

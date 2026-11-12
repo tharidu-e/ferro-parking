@@ -1,0 +1,3 @@
+# Sheet exports and their fixtures use CRLF, which the csv module writes.
+# Keep the bytes as they are so the byte-identical round trip test is honest.
+tests/fixtures/*.csv -text

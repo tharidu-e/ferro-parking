@@ -64,6 +64,83 @@ PROTECTED_COLUMNS = {
 PROTECTED_SUFFIXES = ("(as captured)", "Charges (as published)", "Enforcement Details")
 
 
+# The one named-person test, shared by every caller. A row hand-checked by a
+# person is never touched. Agent labels ("PP (validation)", "Policy script",
+# "Grok (discovery)", "Claude (capture check)") are not people.
+#
+# A label the automation list does not name is held as a person. The live data
+# carried "Deshan (pilot, manual check)" on four finished rows, and a prefix
+# test for one name let every other person's label through.
+NAMED_VERIFIER_PREFIX = "Tharidu"
+VERIFIER_CONFIG = Path(__file__).resolve().parents[2] / "config/grok_value_map.toml"
+_automation = None
+
+
+def automation_verifiers(path=None):
+    """The declared automation labels, read once from the reviewer list."""
+    global _automation
+    if _automation is None or path is not None:
+        import tomllib
+
+        with Path(path or VERIFIER_CONFIG).open("rb") as stream:
+            found = frozenset(tomllib.load(stream)["reviewers"]["automation"])
+        if path is not None:
+            return found
+        _automation = found
+    return _automation
+
+
+def is_named_person(verified_by):
+    value = str(verified_by or "").strip()
+    return value.startswith(NAMED_VERIFIER_PREFIX) or value not in automation_verifiers()
+
+
+# A Verification Result that asks for a visit is not a finished answer. Routing
+# gives that row its own stage, and the counts in docs/STATUS.md report it as
+# remaining work.
+NEEDS_ON_SITE = "Needs on-site check"
+
+
+def is_finished(row):
+    result = str((row or {}).get(VERIFICATION_RESULT, "") or "").strip()
+    return bool(result) and result != NEEDS_ON_SITE
+
+
+def lock_refusal(row):
+    """Why no automated change may touch this row at all, or None.
+
+    One test for every mutation, the undo included. A finished row is not
+    locked here, because routing sends a finished row back when it still has a
+    parking gap. The finished row keeps its own answers through
+    `finished_column_refusal`."""
+    verified_by = str((row or {}).get(VERIFIED_BY, "") or "").strip()
+    if is_named_person(verified_by):
+        kind = "a named person" if verified_by.startswith(NAMED_VERIFIER_PREFIX) else (
+            "not a declared automation verifier")
+        return f"Verified By is {verified_by!r}, {kind}"
+    return None
+
+
+def finished_column_refusal(row, column, new_value=None):
+    """Why a finished row may not give up this column, or None.
+
+    A finished row may still gain a blank value, because routing asks for it.
+    It never loses the result that finished it, and it never has an answer
+    rewritten, however strong the new evidence claims to be. A line that
+    restates the value already there changes nothing and is not a rewrite."""
+    if not is_finished(row):
+        return None
+    current = str((row or {}).get(column, "") or "").strip()
+    if new_value is not None and str(new_value).strip() == current:
+        return None
+    if column == VERIFICATION_RESULT:
+        return "the row is finished, so its Verification Result stays"
+    # A placeholder is not an answer, so a finished row never loses one.
+    if current and current not in ("Unknown", "Not yet checked"):
+        return f"the row is finished, so its {column!r} stays"
+    return None
+
+
 def assert_not_protected(new_values):
     for col in new_values:
         if col in PROTECTED_COLUMNS or col.casefold().startswith("geo") or col.endswith(PROTECTED_SUFFIXES):
@@ -522,7 +599,8 @@ def _apply_write(service, headers, plan, undo_by_row, apply):
         sheets.write_cells(service, headers, cells)
     readback = sheets.read_cells(service, [(r, c) for r, c, _ in cells], headers)
     mismatches = [(r, c, v, readback.get((r, c)))
-                  for r, c, v in cells if str(readback.get((r, c))) != str(v)]
+                  for r, c, v in cells
+                  if str(sheets._cell_value(c, readback.get((r, c)))) != str(sheets._cell_value(c, v))]
     print(f"Wrote {len(cells)} cells across {len(to_write)} rows, {len(aborted)} aborted.")
     for r, c, wanted, got in mismatches:
         print(f"Mismatch row {r} column {c!r}: wrote {wanted!r}, read back {got!r}")
@@ -566,7 +644,8 @@ def _apply_undo(service, headers, undo_entries, apply):
         sheets.write_cells(service, headers, cells)
     readback = sheets.read_cells(service, [(r, c) for r, c, _ in cells], headers)
     mismatches = [(r, c, v, readback.get((r, c)))
-                  for r, c, v in cells if str(readback.get((r, c))) != str(v)]
+                  for r, c, v in cells
+                  if str(sheets._cell_value(c, readback.get((r, c)))) != str(sheets._cell_value(c, v))]
     print(f"Restored {len(cells)} cells across {len(to_restore)} rows, {len(aborted)} aborted.")
     for r, c, wanted, got in mismatches:
         print(f"Mismatch row {r} column {c!r}: wrote {wanted!r}, read back {got!r}")
