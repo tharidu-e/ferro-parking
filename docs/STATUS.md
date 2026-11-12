@@ -13,10 +13,11 @@ Historical documents remain available in Git history. Run evidence stays under `
 | Needs on-site check | 1,176 |
 | Active OSM-created records | 3,951 |
 
-The latest saved route is `route-20261112T110736Z`.
-Its 6,246 routed rows comprise 4,846 Grok, 862 no_evidence, 237 default,
-244 website reader and 57 station rows. 5,314 rows are skipped, of which 47
-are personal locks and 1,175 need an on-site check. The station count fell
+The latest saved route is `route-20261112T162952Z`.
+Its 5,919 routed rows comprise 4,519 Grok, 862 no_evidence, 237 default,
+244 website reader and 57 station rows. 5,641 rows are skipped, of which 47
+are personal locks and 1,181 need an on-site check. The Grok stage fell by 327
+on 12 November, because three imported batches finished those rows. The station count fell
 from 113, because 56 station pages state that the station has no parking.
 A filled verification result does not prove that every parking detail is known.
 For current counts, run the read-only example in README.md. Saved routing can lag behind data changes.
@@ -25,16 +26,16 @@ For current counts, run the read-only example in README.md. Saved routing can la
 
 | Measure | Places |
 |---|---:|
-| Legacy showable | 1,513 |
-| Legacy complete | 1,064 |
-| Evidence-supported showable | 137 |
+| Legacy showable | 1,573 |
+| Legacy complete | 1,090 |
+| Evidence-supported showable | 391 |
 | Evidence-supported complete | 0 |
 
 Legacy counts read the sheet's own cells, through `readiness.counts` over a
 `db-export`. Evidence-supported means the `evidence` table holds a quote for
-Can Park?, Who Can Park and Cost Type on that place. 137 rows reach that bar:
-50 from the website readers and 87 from the two 12 November Grok batches. The
-other legacy answers predate the evidence table, so do not read 1,513 as 1,513
+Can Park?, Who Can Park and Cost Type on that place. 391 rows reach that bar:
+50 from the website readers and 341 from the 12 November Grok batches. The
+other legacy answers predate the evidence table, so do not read 1,573 as 1,573
 checked car parks.
 
 The Asda rows are not legacy showable, because their Cost Type reads Unknown.
@@ -256,6 +257,40 @@ and Review Flag lines that would replace existing text, 8 Hours lines the
 charging-hours check holds, 7 Evidence Level values of "Reported" that the
 sheet dropdown does not list, and 4 rows missing a Brand their chain category
 needs.
+
+Batch 2 corrections and batch 3 followed the same day.
+
+| Batch | Rows | Accepted | Applied changes | Run |
+|---|---:|---:|---:|---|
+| Pilot, rows 1 to 25 | 25 | 9 | 232 | `apply-20261112T145532Z` |
+| Batch 2, 200 rows | 200 | 82 | 2,307 | `apply-20261112T154646Z` |
+| Batch 2 corrections | 114 | 91 | 2,399 | `apply-20261112T162907Z` |
+| Batch 3, rows 226 to 425 | 200 | 173 | 5,254 | `apply-20261112T162940Z` |
+
+The bot reshaped 75 Tariff Detail strings and fixed 39 "No evidence" rows, so
+batch 2 recovered from 82 accepted to 91. Batch 3 was accepted at 173 of 200,
+because the two new rules were in place before the research ran. Each batch
+keeps its own `db-undo` run.
+
+The apply step still holds some lines, and each held line is listed in that
+run's `held_lines.json` under `data/runs/2026-11-12/`. The usual causes are a
+Notes or Review Flag line that would replace existing text, an Hours value the
+charging-hours check holds, an Evidence Level of "Reported", and a row whose
+Tariff Type and Tariff Detail disagree.
+
+Batch 3 found 143 rows with nothing published, 8 newly blocked pages (The O2,
+two Barnet car park pages, Lomax George Mews, UEL SportsDock, Tesco West
+Cromwell Road, Truman Brewery and Ruskin Square) and four dead links (ExCeL
+parking, Epsom and St Helier hospital parking, Ruislip Lido and several
+National Rail pages for Tube-only stations). Do not retry those.
+
+Batch 3 review items: nine possible duplicate pairs, including Kings Mall
+(PP-005463 and PP-001030), Westfield (PP-005467, PP-005458, PP-001027 and
+PP-007793) and the two ExCeL rows (PP-005561 and PP-005562); five rows needing
+an on-site check, including Barnet Hospital A and B (PP-005596 and PP-005597),
+where the live page contradicts the 8 May 2026 charges notice; and two car
+parks not in the queue, Alexandra Palace Paddocks and Dives, in
+`data/raw/grok_not_in_queue_batch3_20261112.csv`.
 
 Batch 2 review items, none of them parking answers: the Liberty, Wood Green
 East and Chimes postcodes differ from our records; Westfield London, Finsbury
