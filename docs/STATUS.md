@@ -26,15 +26,15 @@ For current counts, run the read-only example in README.md. Saved routing can la
 
 | Measure | Places |
 |---|---:|
-| Legacy showable | 1,594 |
-| Legacy complete | 1,096 |
-| Evidence-supported showable | 559 |
+| Legacy showable | 1,600 |
+| Legacy complete | 1,098 |
+| Evidence-supported showable | 737 |
 | Evidence-supported complete | 0 |
 
 Legacy counts read the sheet's own cells, through `readiness.counts` over a
 `db-export`. Evidence-supported means the `evidence` table holds a quote for
-Can Park?, Who Can Park and Cost Type on that place. 559 rows reach that bar:
-50 from the website readers and 509 from the 12 November Grok batches. The
+Can Park?, Who Can Park and Cost Type on that place. 737 rows reach that bar:
+50 from the website readers and 687 from the 12 November Grok batches. The
 other legacy answers predate the evidence table, so do not read 1,573 as 1,573
 checked car parks.
 
@@ -270,6 +270,7 @@ Batch 2 corrections and batch 3 followed the same day.
 | Batch 4, rows 426 to 625 | 200 | 31 applied | 837 | `apply-20261112T165338Z` |
 | Batch 4 reread | 162 | 27 | 837 | `apply-20261112T183210Z` |
 | Batch 5, rows 626 to 825 | 200 | 117 | 3,277 | `apply-20261112T183214Z` |
+| Batch 6, rows 826 to 1025 | 200 | 188 | 5,409 | `apply-20261112T211304Z` |
 
 The bot reshaped 75 Tariff Detail strings and fixed 39 "No evidence" rows, so
 batch 2 recovered from 82 accepted to 91. Batch 3 was accepted at 173 of 200,
@@ -297,6 +298,20 @@ Batch 5 also refused 45 rows that pair Source Tier "None found" with
 Verification Result "Needs on-site check". Those are the places where no page
 loaded at all. The bot must use "No evidence" there and name the blocked URL in
 Notes.
+
+Batch 6 was accepted at 188 of 200, the best rate so far. 164 of its rows found
+nothing: 47 name a blocked URL in Notes and 117 read a page that says nothing
+about parking, mostly unnamed car parks, bus stations and piers. Those rows now
+carry Verification Result "No evidence", which is research complete for now and
+not driver information complete.
+
+Batch 6 review items: the Barbican centre page says a £13 fixed evening and
+weekend rate where Saba says £15; Sloane Square has no 7 to 8 hour band, so the
+row reads "7-24 hrs £52.50"; Westfield Car Park C takes its tariff from the
+centre-wide page; Paddington's Tube record says no car park while the mainline
+record says there is one; the two Hammersmith bus station rows read No from the
+whole interchange's record. Two more car parks are outside the queue, Alexandra
+Road in Hounslow and Holly Road in Twickenham.
 
 The apply step still holds some lines, and each held line is listed in that
 run's `held_lines.json` under `data/runs/2026-11-12/`. The usual causes are a
