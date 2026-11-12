@@ -13,11 +13,12 @@ Historical documents remain available in Git history. Run evidence stays under `
 | Needs on-site check | 1,176 |
 | Active OSM-created records | 3,951 |
 
-The latest saved route is `route-20261112T162952Z`.
-Its 5,919 routed rows comprise 4,519 Grok, 862 no_evidence, 237 default,
-244 website reader and 57 station rows. 5,641 rows are skipped, of which 47
-are personal locks and 1,181 need an on-site check. The Grok stage fell by 327
-on 12 November, because three imported batches finished those rows. The station count fell
+The latest saved route is `route-20261112T211421Z`.
+Its 5,437 routed rows comprise 4,037 Grok, 862 no_evidence, 237 default,
+244 website reader and 57 station rows. 6,123 rows are skipped, of which 47
+are personal locks and 1,186 need an on-site check. The Grok stage fell from
+4,846 to 4,037 on 12 November, because the imported batches finished those
+rows. The station count fell
 from 113, because 56 station pages state that the station has no parking.
 A filled verification result does not prove that every parking detail is known.
 For current counts, run the read-only example in README.md. Saved routing can lag behind data changes.
@@ -28,13 +29,15 @@ For current counts, run the read-only example in README.md. Saved routing can la
 |---|---:|
 | Legacy showable | 1,600 |
 | Legacy complete | 1,098 |
-| Evidence-supported showable | 737 |
+| Evidence-supported showable | 858 |
 | Evidence-supported complete | 0 |
 
 Legacy counts read the sheet's own cells, through `readiness.counts` over a
 `db-export`. Evidence-supported means the `evidence` table holds a quote for
-Can Park?, Who Can Park and Cost Type on that place. 737 rows reach that bar:
-50 from the website readers and 687 from the 12 November Grok batches. The
+Can Park?, Who Can Park and Cost Type on that place. 858 rows reach that bar:
+50 from the website readers and 808 from the 12 November Grok batches. 121 of
+them state that the station has no car park, which is a useful answer and never
+a showable car park. The
 other legacy answers predate the evidence table, so do not read 1,573 as 1,573
 checked car parks.
 
@@ -288,11 +291,12 @@ The batch 4 reread answered the shallow-miss worry. The bot opened 710 pages in
 30 minutes and found a fact on 137 of the 162 places. Only 27 imported, because
 112 of those answers are Can Park? No from a Transport for London station
 record that reads `"Car park": "no"`, and rule R9 does not list that wording.
-Batch 5 adds 13 more of the same. 125 refused station rows wait on one owner
-decision: whether to add that exact wording to
-`r9.explicit_no_parking_phrases` in `config/rules.toml`. The phrase is
-structured official text for the exact station, so it is stronger than the
-prose phrases already listed.
+The owner approved that wording on 12 November, and
+`r9.explicit_no_parking_phrases` now holds `car park": "no`. The quotes are
+part of the phrase, so it cannot match prose about a car park, and two tests
+cover both directions. Re-importing the three affected files then applied 121
+station rows under `apply-20261112T211407Z`, `apply-20261112T211408Z` and
+`apply-20261112T211409Z`.
 
 Batch 5 also refused 45 rows that pair Source Tier "None found" with
 Verification Result "Needs on-site check". Those are the places where no page

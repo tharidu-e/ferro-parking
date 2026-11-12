@@ -114,6 +114,11 @@ explicit_no_parking_phrases = [
     "no public parking", "there is no car park", "no hotel parking",
     "no on-site hotel parking", "no off-street hospital parking",
     "no on-site car park",
+    # Transport for London publishes a station's parking as a structured
+    # field, not a sentence. Added 12 November 2026 for 129 station rows whose
+    # only statement is this record. The quotes are part of the phrase, so it
+    # cannot match ordinary prose about a car park.
+    'car park": "no',
 ]
 
 [r10]

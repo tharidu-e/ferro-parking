@@ -182,6 +182,24 @@ def test_strong_public_price_passes():
     assert gi.validate(s, mapped(s)[0], CFG, TODAY) == []
 
 
+def test_tfl_station_record_supports_can_park_no():
+    # Transport for London states a station's parking as a structured field.
+    # 129 station rows on 12 November carried only this wording.
+    quote = 'TfL station record: "Car park": "no"; TfL station page: "Station facilities WiFi"'
+    s = strong(**{"Can Park?": "No", "Evidence Detail": quote})
+    for column in gi.page_fill.NOT_APPLICABLE_IF_NO_PARKING:
+        original = next((k for k, v in gi.ALIASES.items() if v == column), column)
+        s[original] = "Not applicable"
+    assert gi.validate(s, mapped(s)[0], CFG, TODAY) == []
+
+
+def test_prose_about_a_car_park_still_refuses_can_park_no():
+    s = strong(**{"Can Park?": "No",
+                  "Evidence Detail": "The station has a car park. No charge is published."})
+    assert "safety: No requires an explicit site-specific no-parking statement" in \
+        gi.validate(s, mapped(s)[0], CFG, TODAY)
+
+
 def test_blank_optional_numbers_do_not_reject_the_row():
     # The 12 November pilot left PCN amount and Max Stay blank on 13 rows of
     # 25. A blank cell is not a value: plan.py drops it before the write, so
