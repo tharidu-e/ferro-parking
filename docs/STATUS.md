@@ -27,15 +27,15 @@ For current counts, run the read-only example in README.md. Saved routing can la
 
 | Measure | Places |
 |---|---:|
-| Legacy showable | 1,600 |
+| Legacy showable | 1,606 |
 | Legacy complete | 1,098 |
-| Evidence-supported showable | 858 |
+| Evidence-supported showable | 1,018 |
 | Evidence-supported complete | 0 |
 
 Legacy counts read the sheet's own cells, through `readiness.counts` over a
 `db-export`. Evidence-supported means the `evidence` table holds a quote for
-Can Park?, Who Can Park and Cost Type on that place. 858 rows reach that bar:
-50 from the website readers and 808 from the 12 November Grok batches. 121 of
+Can Park?, Who Can Park and Cost Type on that place. 1,018 rows reach that bar:
+50 from the website readers and 968 from the 12 November Grok batches. 121 of
 them state that the station has no car park, which is a useful answer and never
 a showable car park. The
 other legacy answers predate the evidence table, so do not read 1,573 as 1,573
@@ -274,6 +274,8 @@ Batch 2 corrections and batch 3 followed the same day.
 | Batch 4 reread | 162 | 27 | 837 | `apply-20261112T183210Z` |
 | Batch 5, rows 626 to 825 | 200 | 117 | 3,277 | `apply-20261112T183214Z` |
 | Batch 6, rows 826 to 1025 | 200 | 188 | 5,409 | `apply-20261112T211304Z` |
+| Station rows under the new R9 | 562 | 121 | 3,751 | `apply-20261112T2114*Z` |
+| Batch 7, rows 1026 to 1225 | 200 | 160 applied | 4,662 | `apply-20261112T214843Z` |
 
 The bot reshaped 75 Tariff Detail strings and fixed 39 "No evidence" rows, so
 batch 2 recovered from 82 accepted to 91. Batch 3 was accepted at 173 of 200,
@@ -316,6 +318,25 @@ centre-wide page; Paddington's Tube record says no car park while the mainline
 record says there is one; the two Hammersmith bus station rows read No from the
 whole interchange's record. Two more car parks are outside the queue, Alexandra
 Road in Hounslow and Holly Road in Twickenham.
+
+Batch 7 covers mostly unnamed car parks, so 182 of its 200 rows found nothing.
+33 of those cite only an OpenStreetMap map entry, with no site page opened at
+all, so they are held in
+`data/runs/2026-11-12/import_batch7_without_weak/held_map_only_rows.csv` and
+stay on the Grok stage. The bot itself flagged them as its weakest calls.
+
+1,225 of the 4,823 queue rows are researched. 3,598 remain, which is 18 runs of
+200 rows. Use `scripts/filter_refused_lines.py` on each batch plan before
+db-apply, so one refused cell no longer blocks a whole batch.
+
+Batch 7 review items: East Finchley (PP-008014) has a conflict, where Saba says
+£10.60 a day with camera control and Transport for London still says £5.00 pay
+and display, and about 50 spaces close from September to December 2026 for
+charger work. Harold Wood station closes on 28 and 29 November. IKEA Croydon
+and Wembley read No evidence, because IKEA publishes only a chain-wide free
+parking line. PP-008155 and PP-008157 are both named Beckton Triangle Retail
+Park. Three more car parks sit outside the queue, including Palace Gardens in
+Enfield, which publishes a full tariff.
 
 The apply step still holds some lines, and each held line is listed in that
 run's `held_lines.json` under `data/runs/2026-11-12/`. The usual causes are a
