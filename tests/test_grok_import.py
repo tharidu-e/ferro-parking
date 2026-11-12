@@ -182,6 +182,25 @@ def test_strong_public_price_passes():
     assert gi.validate(s, mapped(s)[0], CFG, TODAY) == []
 
 
+def test_blank_optional_numbers_do_not_reject_the_row():
+    # The 12 November pilot left PCN amount and Max Stay blank on 13 rows of
+    # 25. A blank cell is not a value: plan.py drops it before the write, so
+    # checking it as a number refused the row's good fields.
+    s = strong(**{"Can Park?": "Yes", "Who Can Park": "Anyone (paid)", "Cost Type": "Paid",
+                  "Tariff Type": "Hourly rate", "Tariff Detail": "£1.00 per hour",
+                  "Price Status": "Published", "PCN amount (£)": "", "Max Stay (mins)": ""})
+    new, _, _ = mapped(s)
+    assert new["PCN (Penalty Charge Notice) amount (£)"].strip() == ""
+    assert gi.validate(s, new, CFG, TODAY) == []
+
+
+def test_bad_optional_numbers_still_reject_the_row():
+    s = strong(**{"PCN amount (£)": "£100 reduced to 60", "Max Stay (mins)": "two hours"})
+    errors = gi.validate(s, mapped(s)[0], CFG, TODAY)
+    assert "numeric: invalid PCN amount" in errors
+    assert "numeric: Max Stay must be whole minutes or an allowed marker" in errors
+
+
 def test_no_parking_passes_only_with_explicit_denial_and_not_applicable_fields():
     s = strong(**{"Can Park?": "No", "Evidence Detail": 'Example Sports Centre says "no car park".'})
     for column in gi.page_fill.NOT_APPLICABLE_IF_NO_PARKING:

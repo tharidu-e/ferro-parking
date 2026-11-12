@@ -406,9 +406,29 @@ def grok_results_to_plan(conn, results_csv, stage="grok", today=None):
                 "stage": stage,
                 "verified_by": new.get(fill.VERIFIED_BY, ""),
             })
+    # validate_rows sees only the plan's own columns, so a Yes or Conditional
+    # row needs its existing Brand and Place Category restated as context, the
+    # way fetch_fill already does it. The restated value changes nothing.
+    by_place_id = {(row.get(PLACE_ID) or "").strip(): row for row in rows}
+    planned = {(line["place_id"], line["column"]) for line in lines}
+    for entry in result["plan"]:
+        if entry["new"].get(fill.CAN_PARK) not in ("Yes", "Conditional"):
+            continue
+        row = by_place_id.get(entry["place_id"], {})
+        for column in CONTEXT_COLUMNS:
+            value = (row.get(column) or "").strip()
+            if value and (entry["place_id"], column) not in planned:
+                lines.append({"place_id": entry["place_id"], "column": column,
+                              "new_value": value, "quote": "", "source_url": "",
+                              "stage": stage, "verified_by": ""})
+
     result["dropped_columns"] = dropped
     result["proposals"] = closed_proposals(result["plan"], dropped)
     return lines, result
+
+
+# The two columns validate_rows asks for on a Yes or Conditional row.
+CONTEXT_COLUMNS = ("Brand", "Place Category")
 
 
 CLOSED_STATUSES = ("Closed", "Temporarily closed")
