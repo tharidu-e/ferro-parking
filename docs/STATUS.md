@@ -29,13 +29,13 @@ For current counts, run the read-only example in README.md. Saved routing can la
 |---|---:|
 | Legacy showable | 1,606 |
 | Legacy complete | 1,098 |
-| Evidence-supported showable | 1,018 |
+| Evidence-supported showable | 1,038 |
 | Evidence-supported complete | 0 |
 
 Legacy counts read the sheet's own cells, through `readiness.counts` over a
 `db-export`. Evidence-supported means the `evidence` table holds a quote for
-Can Park?, Who Can Park and Cost Type on that place. 1,018 rows reach that bar:
-50 from the website readers and 968 from the 12 November Grok batches. 121 of
+Can Park?, Who Can Park and Cost Type on that place. 1,038 rows reach that bar:
+50 from the website readers and 988 from the 12 November Grok batches. 121 of
 them state that the station has no car park, which is a useful answer and never
 a showable car park. The
 other legacy answers predate the evidence table, so do not read 1,573 as 1,573
@@ -276,6 +276,7 @@ Batch 2 corrections and batch 3 followed the same day.
 | Batch 6, rows 826 to 1025 | 200 | 188 | 5,409 | `apply-20261112T211304Z` |
 | Station rows under the new R9 | 562 | 121 | 3,751 | `apply-20261112T2114*Z` |
 | Batch 7, rows 1026 to 1225 | 200 | 160 applied | 4,662 | `apply-20261112T214843Z` |
+| Batch 8, rows 1226 to 1245 | 20 | 20 | 587 | `apply-20261112T224221Z` |
 
 The bot reshaped 75 Tariff Detail strings and fixed 39 "No evidence" rows, so
 batch 2 recovered from 82 accepted to 91. Batch 3 was accepted at 173 of 200,
@@ -325,7 +326,20 @@ all, so they are held in
 `data/runs/2026-11-12/import_batch7_without_weak/held_map_only_rows.csv` and
 stay on the Grok stage. The bot itself flagged them as its weakest calls.
 
-1,225 of the 4,823 queue rows are researched. 3,598 remain, which is 18 runs of
+The bot now checks its own file before sending it. It clones the repo, builds a
+copy of the database with `db-import` from a `db-export` snapshot, and runs
+`grok-import` against that copy. Batch 8 was the test: the bot reported 20
+accepted, 0 skipped and 0 rejected, and the same import here gave the same
+three numbers and the same 20 dropped Location Status cells. So a batch that
+passes on the bot's copy can be applied here without a correction round. The
+copy goes stale after every apply, so send a fresh snapshot each day.
+
+Three batch 7 rows read a Barnet bot-check page as silence and carry
+Verification Result "No evidence" with no blocked page named: PP-007994
+Fitzjohn Avenue, PP-008152 and PP-008153 Stanhope Road. The correction was
+skipped, because those rows are finished. Reread them when Barnet is reachable.
+
+1,245 of the 4,823 queue rows are researched. 3,578 remain, which is 18 runs of
 200 rows. Use `scripts/filter_refused_lines.py` on each batch plan before
 db-apply, so one refused cell no longer blocks a whole batch.
 
