@@ -1,6 +1,6 @@
 # Current work
 
-Updated 11 November 2026. Read this for priorities and remaining work only.
+Updated 12 November 2026. Read this for priorities and remaining work only.
 Counts describe the local database, not a fresh Google Sheet export.
 Historical documents remain available in Git history. Run evidence stays under `data/runs/`.
 
@@ -13,9 +13,9 @@ Historical documents remain available in Git history. Run evidence stays under `
 | Needs on-site check | 1,176 |
 | Active OSM-created records | 3,951 |
 
-The latest saved route is `route-20261111T212456Z`.
-Its 6,244 routed rows comprise 4,844 Grok, 866 no_evidence, 233 default,
-229 website reader and 57 station rows. 5,314 rows are skipped, of which 47
+The latest saved route is `route-20261112T110736Z`.
+Its 6,246 routed rows comprise 4,846 Grok, 862 no_evidence, 237 default,
+244 website reader and 57 station rows. 5,314 rows are skipped, of which 47
 are personal locks and 1,175 need an on-site check. The station count fell
 from 113, because 56 station pages state that the station has no parking.
 A filled verification result does not prove that every parking detail is known.
@@ -50,17 +50,13 @@ Use that standard for every category, including leisure centres, station car par
 hotels, gyms, supermarkets, shopping centres and private operator sites. Check
 missing details and new or conflicting evidence; keep locked records held.
 
-1. Start with the 15 held M&S records whose official pages mention parking.
-   Review the missing store categories with `propose-categories` and `category-plan`.
-   Save only categories supported by the exact store page, then rerun the existing
-   M&S reader. Save parking answers that pass the existing checks. Leave uncertain
-   categories, prices and stay limits unknown unless the source supports them.
-2. Report how many of those 15 records improved, how many remain blocked and why,
-   with five before-and-after examples. Next inspect saved council site pages
-   against current records and fill only missing driver answers they support.
-   Then choose supermarket, shopping centre, hotel, gym, leisure or station
-   batches by useful saved evidence and remaining gaps. Recorded reader plans
-   are already applied; do not repeat unchanged work.
+1. The M&S batch is done for now. Five of the 15 held records carry a supported
+   category and parking answers. Ten remain held for a category the sources do
+   not support. Do not rerun that reader without new evidence.
+2. Readable brand and venue sources are close to exhausted. Before any new
+   fetch, read the measured dead sources below and in `fetch_fill.SKIPPED_HOSTS`.
+   Choose a batch only where a named record gap meets a source that states that
+   site. Recorded reader plans are already applied; do not repeat unchanged work.
 3. Change code only for a reproduced blocker in the selected batch. The station
    context issue is an exception task, not a reason to redesign all validation.
 4. Import Grok when its results arrive. Missing results do not block other readers.
@@ -211,19 +207,50 @@ Every website reader plan is applied, each with its own undo. Use
 | puregym.com | 40 | 15 | 272 | `apply-20261111T210907Z` |
 | nuffieldhealth.com | 15 | 6 | 108 | `apply-20261111T211935Z` |
 | www.lidl.co.uk | 25 | 0 | 0 | nothing to apply |
-| marksandspencer.com | 39 | 0 | 0 | 15 rows held |
+| marksandspencer.com | 39 | 5 | 80 | `apply-20261112T110025Z` |
 | station | 473 | 119 | 2,275 | `apply-20261111T212427Z` |
 
 No plan was refused. Each evidence row carries the quote, the page url, the
 retrieval time and the cached page hash, for the fields the page states only.
 
-The M&S store pages state a car park for 15 rows. All 15 are held, because
-the row has no Place Category. The validator asks for that column on a
-Conditional row. A guessed category invents identity, so run
-`propose-categories` and `category-plan` for those rows instead.
+The M&S store pages state a car park for 15 rows. The pages state the facility
+and the opening hours only. They never state the store format, the price, the
+maximum stay or who can park. Ten rows stay held, because no source supports a
+Place Category, and the validator asks for that column on a Conditional row.
+Five rows gained a category from an exact-site OpenStreetMap brand anchor and
+then took the reader's answers: PP-001574, PP-001599, PP-001604, PP-001607 and
+PP-001608. Each reads Place Category "Supermarket - convenience", Can Park?
+Conditional and Who Can Park Customers only, from the quote "Car parking".
+Cost Type reads Unknown, so none of the five is showable yet. The anchors,
+the proposals and the ten held rows are in `data/runs/2026-11-12/ms_category/`.
+`propose-categories` offers "Supermarket - large format" for these rows and the
+`category-plan` guard drops it, because `rules.format_for` reads no store format
+from a name like "M&S Hornchurch BP - forecourt parking". PP-001565 has an
+OpenStreetMap department-store anchor 53.7 m away and needs an owner decision,
+because no allowed category reads department store.
 
 Lidl reads every page and writes nothing, which is correct. Its store pages
 list accessible bays and no car park.
+
+Eight more sources were measured on 12 November with the existing `probe`
+command, three pages each. None supports a reader, so none was built.
+Runs are in `data/runs/2026-11-12/probe_*`.
+
+| Source key | Rows | Result |
+|---|---:|---|
+| virginactive.co.uk | 11 | three pages read, none states parking |
+| visionrcl.org.uk | 8 | three pages blocked |
+| firmdalehotels.com | 6 | three pages read, no parking text on any |
+| bestwestern.co.uk | 6 | three pages blocked |
+| canarywharf.com | 4 | three pages read, none states parking |
+| odeon.co.uk | 7 | three pages blocked |
+| myvue.com | 5 | three pages read, none states parking |
+| picturehouses.com | 7 | three pages read, one states on-street parking only |
+
+Twenty rows hold published charges while Cost Type reads Unknown. Each one
+records its own reason: an unresolved conflict between a store page and an
+operator, amounts for part of the week only, or an unresolved identity. These
+are recorded outcomes and not open gaps, so no batch should rewrite them.
 
 The station fetcher owns 473 rows: the 113 on the station stage and every Grok
 row that is a station. 138 pages resolved and 335 names did not. 56 rows read
