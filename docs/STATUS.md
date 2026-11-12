@@ -71,6 +71,39 @@ checked. No category review counts have been refreshed by this documentation edi
 Include five reviewed examples. Partial supported answers
 count as progress; they do not count as showable until that bar is met.
 
+## Free-source validation, 12 November 2026
+
+Three parallel read-only reviews checked the external source shortlist. No
+records were created, changed or published. No new reader is justified yet.
+
+- The unnamed ArcGIS layer is Hillingdon's existing 28-site inventory. Live
+  records match saved examples. Its 0.40 first-hour prices conflict with the
+  council's 2026/27 fees schedule. June 2026 item metadata is not tariff freshness.
+  Keep the four owner holds. Follow up current operational fees, not another import.
+  Source: https://services1.arcgis.com/vBu1s2ZA7rxzmHBD/ArcGIS/rest/services/Car_Park__CPZ_and_Railways_WFL1/FeatureServer/8
+  Fees lead: https://modgov.hillingdon.gov.uk/documents/s65764/Appendix%20H1%20-%20Fees%20and%20Charges%202026-27.pdf
+  Proposed schedule rates need confirmation before use.
+- Barnet's CSV was retrieved: 20 names with capacity and free/paid classification.
+  Publisher metadata explicitly dates it December 2014 and specifies OGL v2.
+  It remains historical cross-check material, not current parking-rule evidence.
+  https://open.barnet.gov.uk/dataset/parking-restrictions-and-spaces-in-barnet-23lk2
+- City COMPASS saved data has tariff fields for all five already-held sites,
+  PP-000192 through PP-000196. All five are finished and locked; Minories also
+  has an owner hold. Old GIS rates conflict with newer official/operator material.
+  Zero new places and zero eligible unlocked rows from these five matches.
+- National Rail Knowledgebase is free to registered Rail Data Marketplace users.
+  Its documented station XML schema supports separate car parks and charges,
+  including hourly/daily/season values and notes. The historical Kings Cross
+  sample has N/A tariffs and can reference nearby parking. No current feed was
+  obtained; populated London charges and product reuse terms remain unverified.
+  Next test: obtain a current feed and its licence, then inspect 25 existing
+  London station records before building a reader. Existing station.py reads
+  website text and does not consume this feed.
+  https://www.nationalrail.co.uk/developers/knowledgebase-data-feeds/
+
+Validation: python -m pytest tests/ -q passed, 1,619 tests. These source reviews
+made no changes to coverage, evidence-supported readiness or publication totals.
+
 ## Source imports
 
 Coverage: 33 borough rows, 20 zero gaps within the named official inventories;
