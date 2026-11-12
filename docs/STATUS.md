@@ -26,15 +26,15 @@ For current counts, run the read-only example in README.md. Saved routing can la
 
 | Measure | Places |
 |---|---:|
-| Legacy showable | 1,587 |
-| Legacy complete | 1,091 |
-| Evidence-supported showable | 435 |
+| Legacy showable | 1,594 |
+| Legacy complete | 1,096 |
+| Evidence-supported showable | 559 |
 | Evidence-supported complete | 0 |
 
 Legacy counts read the sheet's own cells, through `readiness.counts` over a
 `db-export`. Evidence-supported means the `evidence` table holds a quote for
-Can Park?, Who Can Park and Cost Type on that place. 435 rows reach that bar:
-50 from the website readers and 385 from the 12 November Grok batches. The
+Can Park?, Who Can Park and Cost Type on that place. 559 rows reach that bar:
+50 from the website readers and 509 from the 12 November Grok batches. The
 other legacy answers predate the evidence table, so do not read 1,573 as 1,573
 checked car parks.
 
@@ -268,6 +268,8 @@ Batch 2 corrections and batch 3 followed the same day.
 | Batch 3, rows 226 to 425 | 200 | 173 | 5,254 | `apply-20261112T162940Z` |
 | Batch 3 corrections | 18 | 13 | 400 | `apply-20261112T165334Z` |
 | Batch 4, rows 426 to 625 | 200 | 31 applied | 837 | `apply-20261112T165338Z` |
+| Batch 4 reread | 162 | 27 | 837 | `apply-20261112T183210Z` |
+| Batch 5, rows 626 to 825 | 200 | 117 | 3,277 | `apply-20261112T183214Z` |
 
 The bot reshaped 75 Tariff Detail strings and fixed 39 "No evidence" rows, so
 batch 2 recovered from 82 accepted to 91. Batch 3 was accepted at 173 of 200,
@@ -280,6 +282,21 @@ Importing them would close those 162 places on a shallow miss, so only the 38
 rows with a stated fact went forward, and 31 of those applied. The held list is
 `data/runs/2026-11-12/grok_import_batch4_found_only/held_shallow_rows.csv`.
 Those 162 places stay on the Grok stage until a slower reread.
+
+The batch 4 reread answered the shallow-miss worry. The bot opened 710 pages in
+30 minutes and found a fact on 137 of the 162 places. Only 27 imported, because
+112 of those answers are Can Park? No from a Transport for London station
+record that reads `"Car park": "no"`, and rule R9 does not list that wording.
+Batch 5 adds 13 more of the same. 125 refused station rows wait on one owner
+decision: whether to add that exact wording to
+`r9.explicit_no_parking_phrases` in `config/rules.toml`. The phrase is
+structured official text for the exact station, so it is stronger than the
+prose phrases already listed.
+
+Batch 5 also refused 45 rows that pair Source Tier "None found" with
+Verification Result "Needs on-site check". Those are the places where no page
+loaded at all. The bot must use "No evidence" there and name the blocked URL in
+Notes.
 
 The apply step still holds some lines, and each held line is listed in that
 run's `held_lines.json` under `data/runs/2026-11-12/`. The usual causes are a
