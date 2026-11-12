@@ -26,15 +26,15 @@ For current counts, run the read-only example in README.md. Saved routing can la
 
 | Measure | Places |
 |---|---:|
-| Legacy showable | 1,573 |
-| Legacy complete | 1,090 |
-| Evidence-supported showable | 391 |
+| Legacy showable | 1,587 |
+| Legacy complete | 1,091 |
+| Evidence-supported showable | 435 |
 | Evidence-supported complete | 0 |
 
 Legacy counts read the sheet's own cells, through `readiness.counts` over a
 `db-export`. Evidence-supported means the `evidence` table holds a quote for
-Can Park?, Who Can Park and Cost Type on that place. 391 rows reach that bar:
-50 from the website readers and 341 from the 12 November Grok batches. The
+Can Park?, Who Can Park and Cost Type on that place. 435 rows reach that bar:
+50 from the website readers and 385 from the 12 November Grok batches. The
 other legacy answers predate the evidence table, so do not read 1,573 as 1,573
 checked car parks.
 
@@ -266,11 +266,20 @@ Batch 2 corrections and batch 3 followed the same day.
 | Batch 2, 200 rows | 200 | 82 | 2,307 | `apply-20261112T154646Z` |
 | Batch 2 corrections | 114 | 91 | 2,399 | `apply-20261112T162907Z` |
 | Batch 3, rows 226 to 425 | 200 | 173 | 5,254 | `apply-20261112T162940Z` |
+| Batch 3 corrections | 18 | 13 | 400 | `apply-20261112T165334Z` |
+| Batch 4, rows 426 to 625 | 200 | 31 applied | 837 | `apply-20261112T165338Z` |
 
 The bot reshaped 75 Tariff Detail strings and fixed 39 "No evidence" rows, so
 batch 2 recovered from 82 accepted to 91. Batch 3 was accepted at 173 of 200,
 because the two new rules were in place before the research ran. Each batch
 keeps its own `db-undo` run.
+
+Batch 4 needs a reread, not an import. It returned 162 rows as "No evidence"
+and finished in about four minutes, which cannot be 200 pages read properly.
+Importing them would close those 162 places on a shallow miss, so only the 38
+rows with a stated fact went forward, and 31 of those applied. The held list is
+`data/runs/2026-11-12/grok_import_batch4_found_only/held_shallow_rows.csv`.
+Those 162 places stay on the Grok stage until a slower reread.
 
 The apply step still holds some lines, and each held line is listed in that
 run's `held_lines.json` under `data/runs/2026-11-12/`. The usual causes are a
