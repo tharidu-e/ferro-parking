@@ -19,6 +19,21 @@ def dropdowns():
         return tomllib.load(stream)['dropdowns']
 
 
+def brand_required_categories():
+    """The Place Category values that carry a Brand, from config/rules.toml.
+
+    Brand is identity, not permission. An operator, council or station car
+    park names an Operator and no brand, so asking for Brand there refuses a
+    sourced answer for a column that does not apply. With the setting absent,
+    every category needs Brand, which is the older behaviour."""
+    with (CONFIG_DIR / 'rules.toml').open('rb') as stream:
+        data = tomllib.load(stream)
+    identity = data.get('identity')
+    if not identity or 'brand_required_categories' not in identity:
+        return set(data['dropdowns']['Place Category'])
+    return set(identity['brand_required_categories'])
+
+
 PRICE_TOKEN = re.compile(r'(?:£|GBP)\s*\d+(?:[.,]\d+)?|\b\d+\.\d{2}\s*(?:per\b|/)|\b\d+\s*(?:pence|p)\b', re.I)
 MISSING = {'', 'Unknown', 'Not published', 'Not applicable'}
 
@@ -45,6 +60,7 @@ def is_warning(problem):
 def validate_rows(entries, plan=False):
     failures, identities = [], set()
     allowed = dropdowns()
+    brand_categories = brand_required_categories()
     for entry in entries:
         row = entry['new'] if plan else entry
         pid = entry.get('place_id', '') if plan else row.get('Place ID', '')
@@ -74,7 +90,9 @@ def validate_rows(entries, plan=False):
             if key in allowed and value not in allowed[key]:
                 fail(key, 'dropdown', 'Value must exactly match config/rules.toml')
         if row.get(fill.CAN_PARK) in ('Yes', 'Conditional'):
-            for column in ('Brand', 'Place Category'):
+            category = str(row.get('Place Category') or '').strip()
+            columns = ('Brand', 'Place Category') if category in brand_categories else ('Place Category',)
+            for column in columns:
                 if not str(row.get(column) or '').strip():
                     fail(column, 'required', f'{column} is required when parking is Yes or Conditional')
         if row.get('Price Status') == 'Not published':

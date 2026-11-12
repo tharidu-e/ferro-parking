@@ -25,16 +25,17 @@ For current counts, run the read-only example in README.md. Saved routing can la
 
 | Measure | Places |
 |---|---:|
-| Legacy showable | 1,500 |
-| Legacy complete | 1,055 |
-| Evidence-supported showable | 50 |
+| Legacy showable | 1,509 |
+| Legacy complete | 1,062 |
+| Evidence-supported showable | 59 |
 | Evidence-supported complete | 0 |
 
 Legacy counts read the sheet's own cells, through `readiness.counts` over a
 `db-export`. Evidence-supported means the `evidence` table holds a quote for
-Can Park?, Who Can Park and Cost Type on that place. 50 rows reach that bar,
-all from the website readers. The other 1,450 legacy answers predate the
-evidence table, so do not read 1,500 as 1,500 checked car parks.
+Can Park?, Who Can Park and Cost Type on that place. 59 rows reach that bar:
+50 from the website readers and 9 from the 12 November Grok pilot. The other
+legacy answers predate the evidence table, so do not read 1,509 as 1,509
+checked car parks.
 
 The Asda rows are not legacy showable, because their Cost Type reads Unknown.
 The store page states a car park and no price.
@@ -189,17 +190,49 @@ Remaining input blocks, not requests for next-step decisions:
 
 ## Grok hand-off
 
-The queue is `data/runs/2026-11-11_48/grok_queue/grok_queue.csv`, 4,807 rows
-in the bot's own tab layout. Run the bot over that file outside this project
-and put the results CSV in `data/raw/`.
+The bots research and check. This project owns the queue, the identity match,
+validation, the database and publication. The bots never reach the database.
 
-Ferro Autopay and Parking Charge are blank on all 4,807 rows. The Row column
-is blank on the 3,936 rows that exist only in the database, and holds a sheet
-row number on the other 871. No created record carries a row number.
+The current queue is `data/runs/2026-11-12/grok_queue/grok_queue_for_bot.csv`,
+4,823 rows from route-20261112T110736Z. It is the full 4,846-row queue minus
+the 23 places the bots already answered. Ferro Autopay and Parking Charge stay
+blank. Upload that file to the bot and ask for the 34 Grok Results columns back
+as CSV.
 
-No results CSV is in `data/raw/` yet, so `grok-import` has not run and there
-are no mapped, rejected or skipped counts to report. Nothing from the bot will
-be applied.
+The 199 earlier results are saved as `data/raw/grok_results_2026-11-12.csv`.
+`grok-import` accepted none of them: 172 places are already finished in the
+database and 27 break the allowed value rules. Three of them found real answers
+that the format rejected: Warren Evans car park, London Zoo Parking and Lloyd
+Park. Those three wait for a hand fix.
+
+The first 25-place pilot ran on 12 November. Results:
+`data/raw/grok_results_batch_20261112.csv`. The bot found a field on 20 rows
+and nothing on 5, and reported no new place. `grok-import` accepted 9, skipped
+11 as finished rows and rejected 5. Run `apply-20261112T145532Z` wrote 232
+changes and 232 evidence rows across those 9 shopping centre car parks, with
+`db-undo` available.
+
+Two held cells in that batch: PP-001028's Hours, where the charging-hours check
+asks for a person, and Evidence Age on all 9 rows, which the bot set to Under
+12 months on undated pages against its own rule. Both are in
+`data/runs/2026-11-12/grok_import_batch1_final/held_lines.json`.
+
+The pilot found two importer bugs and one rule problem, all fixed on
+12 November:
+
+- A blank PCN amount or Max Stay was read as an invalid number and refused the
+  whole row. 13 of the 25 pilot rows failed on an empty cell.
+- The grok plan did not restate Brand and Place Category, which `validate_rows`
+  asks for on a Yes or Conditional row, because it sees only the plan's columns.
+- Brand was required on every Yes or Conditional row. 3,526 of the 4,095 queued
+  places with no Brand are private or operator car parks, and 360 are stations.
+  Those places carry an Operator and no brand. `config/rules.toml` now holds
+  `identity.brand_required_categories`, and Brand is required only for those
+  chain categories. Place Category stays required for every such row.
+
+Still to settle for the next batch: the bots must leave Evidence Age as Older
+or undated on an undated page, and the two personas still read and write tabs
+their own text forbids.
 
 ## Publication dry runs
 
