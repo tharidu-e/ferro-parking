@@ -112,8 +112,9 @@ free parking line, and the Asda rows are not showable because Cost Type reads
 Unknown. So asking the bot to read Tesco's own website store by store will
 return nothing new.
 
-Where the real gap is. Place coverage for the chains is already good, and the
-gap is the parking detail on places we hold. The database holds 173 Tesco, 175
+Where the real gap is. The gap is the parking detail on places we hold. This
+section once said that chain place coverage is already good. That was not
+measured, and the 13 November section below withdraws it. The database holds 173 Tesco, 175
 Sainsbury's, 93 Co-op, 66 Lidl, 62 M&S, 57 Iceland and 43 Asda records.
 
 Every category, measured with the project's own readiness bar over a fresh
@@ -182,6 +183,94 @@ Recommended order:
 4. Then take large-format supermarkets with the brands now known, and decide
    the source first. The chain websites are dead, so this batch needs a source
    decision from the owner, not another pass over the same pages.
+
+## How complete is each category, 13 November 2026
+
+The owner asked the right question: the category counts are a sample, not the
+whole of London. Our 11,560 records come from the sheet's own history plus the
+records created from OpenStreetMap. Nothing in the project has ever held an
+authoritative list of the places that exist, so we cannot state coverage as a
+percentage. The earlier line in this document that said chain place coverage
+"is already good" was not supported by a measurement. Treat it as withdrawn.
+
+OpenStreetMap is not a denominator either. The London extract was measured on
+13 November with `data/raw/greater-london-latest.osm.pbf`.
+
+| Brand in OpenStreetMap | London stores | With a mapped car park within 60 m | Records we hold |
+|---|---:|---:|---:|
+| Tesco | 511 | 128 | 173 |
+| Sainsbury's | 408 | 88 | 175 |
+| Co-op | 238 | 61 | 93 |
+| Lidl | 121 | 50 | 66 |
+| Marks and Spencer | 176 | 36 | 62 |
+| Waitrose | 102 | 32 | - |
+| Morrisons | 68 | 24 | - |
+| Asda | 68 | 20 | 43 |
+| Aldi | 61 | 23 | - |
+
+Read the Tesco row carefully. OpenStreetMap maps 511 Tesco stores in London and
+a car park beside only 128 of them, yet we hold 173 Tesco records. Both numbers
+are wrong in opposite directions: OpenStreetMap misses stores, and it misses
+far more car parks, because almost every Tesco Extra and Superstore has one. So
+OpenStreetMap can find places, but it cannot tell us how many we are missing.
+
+The same measurement by category, for every place type that can have a car park:
+
+| Place type in OpenStreetMap | London objects | With a mapped car park within 60 m |
+|---|---:|---:|
+| Restaurant, pub, cafe, bar | 19,975 | 3,482 |
+| Fast food | 6,192 | 1,147 |
+| Convenience shop | 5,358 | 1,040 |
+| Gym or sports centre | 1,823 | 400 |
+| Retail warehouse, DIY, trade | 1,478 | 296 |
+| Hotel or motel | 1,473 | 325 |
+| Supermarket | 1,269 | 355 |
+| Hospital or clinic | 685 | 183 |
+| Petrol station | 489 | 99 |
+| Shopping mall | 297 | 88 |
+
+### The method that does give a denominator
+
+The owner's Tesco plan is the right method, with one correction. A chain's own
+store list and a chain's parking statement are two different uses of the same
+website. `fetch_fill.SKIPPED_HOSTS` holds `www.tesco.com` because the site does
+not state parking for one named store. That does not rule out the store list.
+A store list gives the denominator, and the parking answer then comes from a
+different source.
+
+Reachability was measured on 13 November, one request per host:
+
+| Chain | robots.txt | Store list |
+|---|---|---|
+| Lidl | 200 | `https://www.lidl.co.uk/s/en-GB/store-finder/sitemap.xml`, 1,150 URLs for the whole country |
+| Morrisons | 200 | Sitemap reachable, store pages not yet counted |
+| Tesco | 403 | Blocked |
+| Aldi | 403 | Blocked |
+
+So the plan works brand by brand, and it will work for some brands and not
+others. Where a chain blocks us, the denominator stays unknown, and we must say
+unknown rather than claim completeness.
+
+### Proposed coverage register
+
+Build one table, brand by brand and category by category, with five columns: the
+list source, the national list count, the London count after the borough filter,
+the records we already hold, and the gap. `discover --source generic` already
+fetches a list, filters it to London, deduplicates it against the database and
+drafts the new places, so this needs no new module. Run it once per brand with
+the store list as `--input`, and the run's own output is the coverage row.
+
+Two limits to state in that register. For categories with no chain, which are
+independent restaurants, pubs and private car parks, no authoritative list
+exists, so coverage stays unknown for them permanently. Second, a store is not a
+parking place: a Tesco Express with no car park must not become a record, so the
+London filter needs the R10 format test, which counts a large format as having a
+car park and a convenience format only when a car park is mapped within 40 m.
+
+Driver value should pick the order, not list size. 19,975 restaurants is the
+largest category in OpenStreetMap and close to the least useful, because a
+driver does not search for restaurant parking. Supermarkets, shopping centres,
+hospitals and council car parks are what a driver needs.
 
 ## Free-source validation, 12 November 2026
 
