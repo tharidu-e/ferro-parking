@@ -257,56 +257,79 @@ For your understanding, so you know why the fields matter.
 
 # Round 1 correction, NCP
 
-Paste everything below the line into the master bot after PP reports round 1.
-It names eight items. Do not redo anything that already passed.
+Ferro checked all 120 rows on 13 November. The mechanical checks pass. Every
+`Ref` is unique and joins to a `url` in the places file in both directions,
+every dropdown value is allowed, every Tariff Detail matches its template
+with closed, ordered, touching bands, no cell holds an en dash or an em dash,
+and every opening-hours string parses. The six priced rows were compared with
+the raw tariff text in the places file and the prices are genuine.
+
+One finding blocks the batch. 69 of the 120 postcodes are corrupted, for
+example `WC2 N 4B` for WC2N 4BJ, `NW1 TJ`, `W6 J` and `W5 G`. The page log
+says every page was "read in browser, text transcribed", so the transcription
+step drops characters. That is not a partial postcode on the page, and it
+means no field in this batch is reliable at character level until a second
+reading confirms it.
+
+Paste everything below the line into the master bot.
 
 ---
 
-## NCP round 1: eight corrections
+## NCP round 1: seven corrections
 
-Good work on the 120 rows. Eight items before Ferro accepts this batch. Keep
-the same four file names with `-v2` added, for example `ncp1-results-v2.csv`.
+The mechanical checks all pass and the six priced rows are correct. Seven
+items before Ferro accepts this batch. Keep the same file names with `-v2`
+added, for example `ncp1-results-v2.csv`.
 
-1. Cover the whole sitemap. You picked 124 car parks out of 346 by reading
-   their names. A London car park with a name that does not sound like London
-   is missing from that pick. Open all 346 pages, read the address on each,
-   and keep every car park with a Greater London address. Report the new
-   total and name every car park this step adds.
+1. Stop transcribing by eye. 69 of your 120 postcodes lost characters, for
+   example `WC2 N 4B` where the real postcode is WC2N 4BJ, and `W6 J` and
+   `NW1 TJ`, which are not postcodes at all. The page log says every page was
+   "read in browser, text transcribed". Read the page source instead of the
+   rendered text, or copy the text into a file and extract the fields from
+   that file. Then rebuild the address and postcode on all 120 rows.
 
-2. "Pay on the day" means paid. A page that says you pay, without showing a
-   rate, states the Cost Type and not the price. Set Cost Type to `Paid` and
-   Price Status to `Not published` on every such row. Do not set a Tariff
-   Detail. Report how many rows change.
+2. Look for the structured data. NCP's pages very likely carry a
+   `schema.org` block in the page source, usually `application/ld+json`,
+   holding the name, the street address, the postcode and the latitude and
+   longitude. Open one car park page, search the source for `ld+json`, and
+   report what it holds. If the position is there, fill `lat` and `lon` on
+   every row from the source. You reported no coordinates, but you were
+   reading the rendered text, where a map widget shows no numbers.
 
-3. Re-read the rows that show no price. You wrote that some readings for
-   pages 32 to 124 used template lines, and that only 12 were compared with
-   screenshots. PP Checker must now open at least 40 of the 111 no-price rows
-   itself, chosen at random across the whole range, and confirm that the page
-   really shows no price. Report how many match and list every mismatch.
+3. "Pay on the day" means paid. All 111 of your unpriced rows record a
+   "Pay on the day" heading on the page, and some also list a season ticket
+   price in pounds. A page that says you pay states the Cost Type even when
+   it shows no rate. Set Cost Type to `Paid` and Price Status to
+   `Not published` on those rows. Do not set a Tariff Detail.
 
-4. Confirm the partial postcodes. 69 rows hold a postcode like `E1 P`. Open
-   five of those pages again in the browser and say whether the page truly
-   shows a partial postcode, or whether the text was cut when you read it.
-   Do not repair a postcode from another source. Report what you see.
+4. Set Can Park? on the rows that publish opening times. 87 rows carry NCP
+   opening hours on NCP's own car park page. A car park that NCP lists and
+   gives opening times for is a car park a driver can use. Set Can Park? to
+   `Yes` on those rows. Leave Who Can Park as it is unless the page states
+   who may park.
 
-5. State whether a position exists. No row carries a coordinate. For five
-   car parks, say whether the page's map, its link to a map, or any data
-   inside the page holds a latitude and longitude. If none does, write that
-   plainly. Ferro will derive a position from the address instead.
+5. Cover the whole sitemap. You picked 124 car parks out of 346 by reading
+   their names, so a London car park with a name that does not sound like
+   London is missing. Open all 346 pages, read the address on each, and keep
+   every car park with a Greater London address. Report the new total and
+   name every car park this step adds.
 
 6. Quote the three rate tables in full. Rainham, Upminster and Dagenham Dock
    publish peak and weekend rates that fit no template. Copy the published
-   rate text exactly into Evidence Detail for those three rows, character for
-   character. Ferro needs the raw text to decide whether to add a template.
+   rate text into Evidence Detail for those three rows, character for
+   character, from the page source. Ferro needs the raw text to decide
+   whether to add a template.
 
 7. Explain the match rule. You report 104 of 120 already held, with 48
-   matched on name and postcode. Say what rule matched the other 56, and list
-   those 56 with the Place ID you matched each one to.
+   matched on name and postcode. Say what rule matched the other 56, and
+   list those 56 with the Place ID you matched each one to. Note that 69 of
+   your postcodes were corrupted, so any match that used a postcode needs
+   redoing after item 1.
 
-8. Leave the 16 unmatched car parks exactly as they are, including the 12
-   Heathrow pages, Kings Cross, Victoria, Waterloo and Baynard House.
-   Heathrow is in Hillingdon and is inside Greater London. Those 16 are the
-   new places this round found, and Ferro reviews them here.
+Leave the 16 unmatched car parks as they are, including the 12 Heathrow
+pages, Kings Cross, Victoria, Waterloo and Baynard House. Heathrow sits in
+Hillingdon and is inside Greater London. Those 16 are the new places this
+round found.
 
 Keep every rule from the original brief. Silence is still not No, so a page
 that says nothing about parking does not become `Can Park? No`. Report your
