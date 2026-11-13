@@ -86,6 +86,59 @@ checked. No category review counts have been refreshed by this documentation edi
 Include five reviewed examples. Partial supported answers
 count as progress; they do not count as showable until that bar is met.
 
+## Category coverage, 13 November 2026
+
+The owner asked how we make sure that we cover every parking place, category by
+category: take all the Tesco stores in London, collect their parking
+information, exclude the places we already hold, then repeat for other chains
+and categories. The shape of that plan is right. Two parts of it already exist
+in the code, and one part is a measured dead end.
+
+What exists. `discover --source generic` fetches a source list, filters it to
+London, deduplicates it against the database and drafts the new places. Use
+`--boroughs-from` once to build the borough polygons, then every later run tests
+London membership offline. Do not build a second source register.
+`policy-fill` is rule R10, which applies a chain's published rule to a branch.
+R10 counts a large format (Tesco Superstore, Tesco Extra, Sainsbury's
+superstore, Lidl, Aldi, Asda, Morrisons) as having a car park, and a convenience
+format only if OpenStreetMap maps a car park within 40 m of the branch.
+
+What does not work. `www.tesco.com` and `stores.sainsburys.co.uk` are already
+in `fetch_fill.SKIPPED_HOSTS`, with `iceland.co.uk`, `primark.com`,
+`tkmaxx.com`, `screwfix.com`, `mcdonalds.com`, `kfc.co.uk`, `nandos.co.uk` and
+others. Those chain sites were measured and they do not state parking for one
+named store. Asda and IKEA behave the same way: IKEA publishes one chain-wide
+free parking line, and the Asda rows are not showable because Cost Type reads
+Unknown. So asking the bot to read Tesco's own website store by store will
+return nothing new.
+
+Where the real gap is. Place coverage for the chains is already good, and the
+gap is the parking detail on places we hold. The database holds 173 Tesco, 175
+Sainsbury's, 93 Co-op, 66 Lidl, 62 M&S, 57 Iceland and 43 Asda records.
+
+| Category | Records | Blank result | Cost Type known |
+|---|---:|---:|---:|
+| Private / operator car park | 4,681 | 932 | 475 |
+| Supermarket - convenience | 1,051 | 20 | 39 |
+| Supermarket - large format | 954 | 447 | 99 |
+| Station | 841 | - | - |
+| Petrol station | 610 | - | - |
+| Hotel | 558 | 118 | 193 |
+| Gym / leisure centre | 488 | 250 | 117 |
+| Council car park | 476 | 6 | 366 |
+
+Council car parks are close to done, at 366 of 476 with a known Cost Type.
+Large-format supermarkets are the worst large category, at 99 of 954. Gyms are
+next, at 117 of 488. So the owner's order is correct, but supermarkets need a
+source other than the chain website, and council car parks need no new work.
+
+The next research batch is therefore the 447 large-format supermarket records
+and the 250 gym records with a blank verification result, about 700 rows. Route
+them first, because the saved route is stale. For each row, name the source that
+states that exact store before the bot runs. Expect cautious values from R10
+where no store page states a price, and remember that Cost Type Unknown is not
+showable.
+
 ## Free-source validation, 12 November 2026
 
 Three parallel read-only reviews checked the external source shortlist. No
@@ -407,11 +460,22 @@ VERIFY. All four FIX cells are held and need an owner decision:
   wrote an hourly Tariff Detail. National Rail states the rate, but sells it
   only through ScanPay and RingGo from 12:00 Monday to Friday and all day at
   the weekend. The checker asks for "Not published". Holding the cell dropped
-  the whole place, so these three places are unwritten.
+  the whole place, so these three places were unwritten at first.
 - PP-012460 North Greenwich: the bot wrote Hours "24/7". The council page says
   24 hours a day, but season ticket holders only from 01:00 to 11:00 on
   weekdays. The checker asks for
   `Mo-Fr 00:00-01:00,11:00-24:00; Sa,Su 00:00-24:00`.
+
+
+
+All four FIX cells are now settled and applied on 13 November. PP-012460 took
+the checker's opening hours under `apply-20261113T154013Z`. The three station
+rows kept the published hourly rate, because National Rail does state it, and
+Rules Summary now carries the condition that the rate runs from 12:00 Monday to
+Friday and all day at weekends, through ScanPay or RingGo only
+(`apply-20261113T154107Z`, 93 changes across the three places). Blanking the
+Tariff Detail was not possible, because "Not published" contradicts Price Status
+Published and Tariff Type Hourly rate on the same row.
 
 The four CANNOT VERIFY rows all read a "free parking for 3 hours" or "4 hours"
 line as a Max Stay: PP-008226 Greenwich Shopping Park at 180 minutes, and
@@ -474,6 +538,38 @@ reports 944 drift errors, which is the correct answer. 943 of the 7,393
 applied changes belong to records the sheet does not hold, so the drift check
 reads "missing row". A created record reaches the sheet by an approved append,
 through `tranche1-write`, and never by an update.
+
+### 13 November dry runs
+
+An unfiltered dry run is now `data/runs/2026-11-13_39/publish/`. It plans 0 rows
+and reports 91,164 drift errors. Every one of them is "missing row" across 3,251
+places the sheet does not hold, and none is a real value conflict. One drift
+error empties the whole plan, so an unfiltered run can never write.
+
+A second dry run is `data/runs/2026-11-13_40/publish/`. It is filtered with
+`--place-ids` to the 3,511 changed places the sheet does hold. Result: 1,193
+planned rows, 0 drift errors, 2,318 refusals and 0 second-reading failures, with
+`plan.json` and `undo.json` saved. This is the first publication plan that can
+write.
+
+The 2,318 refusals break down as follows.
+
+| Cause | Rows | Meaning |
+|---|---:|---|
+| finished row | 2,165 | The writer protects a finished row. Correct, not a fault. |
+| dashes | 126 | An existing Notes cell holds an en dash. |
+| dropdown | 26 | A value does not match `config/rules.toml`. |
+| protected reviewer | 1 | The writer protects that cell. |
+
+The 126 dash rows are old data, not batch 9 to 26 text. The en dashes sit in
+Notes, and also in Location Name and the captured columns on the same records.
+Normalize them to plain hyphens before you try to publish those rows.
+
+Two of the six checks read false in `checks.json`: `locks` and `validation`.
+They read false because refusals exist, not because a planned row is wrong. The
+1,193 planned rows themselves carry no drift and no refusal. The owner's
+explicit go is still needed, with an independent second reading, before any
+`--apply`.
 
 The 20-row pilot is `data/runs/2026-11-11_106/publish_pilot20/`. It plans 20
 rows and 20 undo rows, with no drift, no refusal and no second-reading
