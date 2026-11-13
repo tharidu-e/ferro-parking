@@ -4,6 +4,11 @@ Updated 12 November 2026. Read this for priorities and remaining work only.
 Counts describe the local database, not a fresh Google Sheet export.
 Historical documents remain available in Git history. Run evidence stays under `data/runs/`.
 
+Team onboarding diagrams are in `docs/diagrams/index.html`, with an editable
+`docs/diagrams/ferro-system-design.excalidraw` and reading notes in that folder.
+They describe the architecture and explain the research and publication delays.
+Their counts retain the 12 November snapshot date; they are not live totals.
+
 ## Remaining places
 
 | Measure | Places |
