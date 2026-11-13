@@ -1,6 +1,6 @@
 # Current work
 
-Updated 12 November 2026. Read this for priorities and remaining work only.
+Updated 13 November 2026. Read this for priorities and remaining work only.
 Counts describe the local database, not a fresh Google Sheet export.
 Historical documents remain available in Git history. Run evidence stays under `data/runs/`.
 
@@ -14,9 +14,12 @@ Their counts retain the 12 November snapshot date; they are not live totals.
 | Measure | Places |
 |---|---:|
 | Total records | 11,560 |
-| Blank Verification Result | 6,192 |
-| Needs on-site check | 1,176 |
+| Blank Verification Result | 2,396 |
+| Needs on-site check | 1,430 |
 | Active OSM-created records | 3,951 |
+
+The blank count fell from 6,192 and the on-site count rose from 1,176 on
+13 November, because batches 9 to 26 closed the rest of the queue.
 
 The latest saved route is `route-20261112T211421Z`.
 Its 5,437 routed rows comprise 4,037 Grok, 862 no_evidence, 237 default,
@@ -27,13 +30,15 @@ rows. The station count fell
 from 113, because 56 station pages state that the station has no parking.
 A filled verification result does not prove that every parking detail is known.
 For current counts, run the read-only example in README.md. Saved routing can lag behind data changes.
+That saved route is stale after the 13 November applies. Run `route` again
+before you pick the next research work.
 
 ## Readiness, two ways
 
 | Measure | Places |
 |---|---:|
-| Legacy showable | 1,606 |
-| Legacy complete | 1,098 |
+| Legacy showable | 1,649 |
+| Legacy complete | 1,117 |
 | Evidence-supported showable | 1,038 |
 | Evidence-supported complete | 0 |
 
@@ -282,6 +287,24 @@ Batch 2 corrections and batch 3 followed the same day.
 | Station rows under the new R9 | 562 | 121 | 3,751 | `apply-20261112T2114*Z` |
 | Batch 7, rows 1026 to 1225 | 200 | 160 applied | 4,662 | `apply-20261112T214843Z` |
 | Batch 8, rows 1226 to 1245 | 20 | 20 | 587 | `apply-20261112T224221Z` |
+| Batch 9, rows 1246 to 1445 | 200 | 164 applied | 4,806 | `apply-20261113T105040Z` |
+| Batch 10, rows 1446 to 1645 | 200 | 164 applied | 4,787 | `apply-20261113T105043Z` |
+| Batch 11, rows 1646 to 1845 | 200 | 154 applied | 4,479 | `apply-20261113T105045Z` |
+| Batch 12, rows 1846 to 2045 | 200 | 161 applied | 4,684 | `apply-20261113T105048Z` |
+| Batch 13, rows 2046 to 2245 | 200 | 153 applied | 4,449 | `apply-20261113T105051Z` |
+| Batch 14, rows 2246 to 2445 | 200 | 171 applied | 4,979 | `apply-20261113T105054Z` |
+| Batch 15, rows 2446 to 2645 | 200 | 173 applied | 5,031 | `apply-20261113T105057Z` |
+| Batch 16, rows 2646 to 2845 | 200 | 161 applied | 4,689 | `apply-20261113T105100Z` |
+| Batch 17, rows 2846 to 3045 | 200 | 159 applied | 4,619 | `apply-20261113T105103Z` |
+| Batch 18, rows 3046 to 3245 | 200 | 142 applied | 4,118 | `apply-20261113T105107Z` |
+| Batch 19, rows 3246 to 3445 | 200 | 161 applied | 4,669 | `apply-20261113T105110Z` |
+| Batch 20, rows 3446 to 3645 | 200 | 152 applied | 4,408 | `apply-20261113T105113Z` |
+| Batch 21, rows 3646 to 3845 | 200 | 160 applied | 4,640 | `apply-20261113T105117Z` |
+| Batch 22, rows 3846 to 4045 | 200 | 143 applied | 4,147 | `apply-20261113T105120Z` |
+| Batch 23, rows 4046 to 4245 | 200 | 148 applied | 4,292 | `apply-20261113T105123Z` |
+| Batch 24, rows 4246 to 4445 | 200 | 146 applied | 4,234 | `apply-20261113T105126Z` |
+| Batch 25, rows 4446 to 4645 | 200 | 151 applied | 4,379 | `apply-20261113T105130Z` |
+| Batch 26, rows 4646 to 4823 | 178 | 127 applied | 3,684 | `apply-20261113T105133Z` |
 
 The bot reshaped 75 Tariff Detail strings and fixed 39 "No evidence" rows, so
 batch 2 recovered from 82 accepted to 91. Batch 3 was accepted at 173 of 200,
@@ -344,9 +367,63 @@ Verification Result "No evidence" with no blocked page named: PP-007994
 Fitzjohn Avenue, PP-008152 and PP-008153 Stanhope Road. The correction was
 skipped, because those rows are finished. Reread them when Barnet is reachable.
 
-1,245 of the 4,823 queue rows are researched. 3,578 remain, which is 18 runs of
-200 rows. Use `scripts/filter_refused_lines.py` on each batch plan before
-db-apply, so one refused cell no longer blocks a whole batch.
+All 4,823 queue rows are researched. Use `scripts/filter_refused_lines.py` on
+each batch plan before db-apply, so one refused cell no longer blocks a whole
+batch.
+
+## Batches 9 to 26, 13 November 2026
+
+The bot finished the queue overnight: 3,578 result rows over 18 batches, rows
+1246 to 4823. The bot's own self-check accepted every row, and `grok-import`
+here gave the same three numbers on every batch: 3,578 accepted, 0 skipped and
+0 rejected. The Place IDs cover queue rows 1246 to 4823 exactly, with no
+duplicate and no extra row. Each batch keeps its own `db-undo` run.
+
+784 rows are held, not applied. Every page opened under those Place IDs was an
+OpenStreetMap map entry, so no site, operator or council page was ever tried.
+This is the same weak class that held 33 rows in batch 7. The held list for
+each batch is `data/runs/2026-11-13_<n>/grok_import_held/held_map_only_rows.csv`,
+where `<n>` is the batch number minus 7. Those places stay on the Grok stage.
+Most of them are unnamed car parks with no website, so a reread of the same
+sources will not help. They need an on-site check or an OpenStreetMap tag rule.
+
+2,790 places were written. 2,448 of them moved from blank to "No evidence",
+243 to "Needs on-site check", 95 to "Confirmed, details not published" and 4 to
+"Confirmed". Legacy showable rose from 1,606 to 1,649 and legacy complete from
+1,098 to 1,117. The research value of this import is low, because the tail of
+the queue holds unnamed car parks that publish nothing. Its process value is
+that 2,790 places are now research complete for now, so they do not route for
+research again.
+
+A "No evidence" row here is page-backed. The bot opened about 400 pages per
+batch of 200 rows, so this is not the batch 4 shallow-miss pattern. 530 of the
+applied rows did open site pages that all failed to load, which is the accepted
+blocked-page pattern from batch 6.
+
+The PP Checker read 145 filled cells and returned 137 OK, 4 FIX and 4 CANNOT
+VERIFY. All four FIX cells are held and need an owner decision:
+
+- PP-008515 Richmond, PP-008615 Worcester Park and PP-009801 Brentford: the bot
+  wrote an hourly Tariff Detail. National Rail states the rate, but sells it
+  only through ScanPay and RingGo from 12:00 Monday to Friday and all day at
+  the weekend. The checker asks for "Not published". Holding the cell dropped
+  the whole place, so these three places are unwritten.
+- PP-012460 North Greenwich: the bot wrote Hours "24/7". The council page says
+  24 hours a day, but season ticket holders only from 01:00 to 11:00 on
+  weekdays. The checker asks for
+  `Mo-Fr 00:00-01:00,11:00-24:00; Sa,Su 00:00-24:00`.
+
+The four CANNOT VERIFY rows all read a "free parking for 3 hours" or "4 hours"
+line as a Max Stay: PP-008226 Greenwich Shopping Park at 180 minutes, and
+PP-009014, PP-009015 and PP-009016 Gallions Reach at 240 minutes. A free period
+is not a maximum stay. Those cells are applied and need a review.
+
+PP-008587 was also dropped by the refusal filter. The other held cells are the
+usual causes: a Notes or Review Flag line that would replace existing text, and
+the charging-hours check.
+
+Raw results are `data/raw/grok_results_batch9..26_2026111*.csv`. Each batch also
+has a report, a page log and a checker file in the bot's own folder.
 
 Batch 7 review items: East Finchley (PP-008014) has a conflict, where Saba says
 £10.60 a day with camera control and Transport for London still says £5.00 pay
