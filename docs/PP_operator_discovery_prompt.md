@@ -200,11 +200,29 @@ Also write a page log, `ncp1-pagelog.csv`, with these columns.
 
 ## Self-check before you send
 
-Run Ferro's own importer against a copy of the database, as you did for batch
-8 and later. Clone the repository, build the copy with `db-import` from the
-snapshot Ferro gives you, and run `grok-import` over `ncp1-results.csv`.
-Report the accepted, skipped and rejected counts in the report. A batch that
-passes on your copy needs no correction round on Ferro's side.
+Do not run `grok-import` over `ncp1-results.csv`. That importer matches rows
+by Place ID, and these places have no Place ID yet, so it would reject every
+row as an unknown identifier. That rejection would tell you nothing.
+
+Check the value rules yourself instead, and report the counts.
+
+1. Every value in a dropdown column is one of the allowed values above.
+2. Every Tariff Detail matches the template for its Tariff Type, with two
+   decimals and closed, ordered, touching bands.
+3. No cell holds an en dash or an em dash.
+4. Every row with Source Tier `None found` has Proposed Result `No evidence`,
+   and no row with a loaded page uses `None found`.
+5. Every row has a Researched Date and at least one Source URL, unless the
+   page was blocked.
+6. Every `Ref` value appears exactly once, and every `Ref` in
+   `ncp1-results.csv` also appears as a `url` in `ncp1-places.csv`.
+
+Report how many rows pass all six checks and list every row that fails one.
+
+Ferro runs `grok-import` on its own side, after `db-create` assigns the Place
+IDs. The database copy Ferro gave you is still useful for one thing: checking
+whether a car park you found is already in the database. Report those matches
+as information. Do not remove them from your files.
 
 The copy goes stale after Ferro applies anything. Ask for a fresh snapshot
 each day.
