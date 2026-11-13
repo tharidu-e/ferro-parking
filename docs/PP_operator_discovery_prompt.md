@@ -288,13 +288,23 @@ added, for example `ncp1-results-v2.csv`.
    rendered text, or copy the text into a file and extract the fields from
    that file. Then rebuild the address and postcode on all 120 rows.
 
-2. Look for the structured data. NCP's pages very likely carry a
-   `schema.org` block in the page source, usually `application/ld+json`,
-   holding the name, the street address, the postcode and the latitude and
-   longitude. Open one car park page, search the source for `ld+json`, and
-   report what it holds. If the position is there, fill `lat` and `lon` on
-   every row from the source. You reported no coordinates, but you were
-   reading the rendered text, where a map widget shows no numbers.
+2. Look for the structured data, and send it to us raw. NCP's pages very
+   likely carry a `schema.org` block in the page source, usually
+   `application/ld+json`, holding the name, the street address, the postcode
+   and the latitude and longitude. Open one car park page first, search the
+   source for `ld+json`, and report what it holds before you do the other
+   122. You reported no coordinates, but you were reading the rendered text,
+   where a map widget shows no numbers.
+
+   If that block exists, add a fifth file, `ncp1-raw.jsonl`. Write one line
+   per car park, as `{"url": "<the page URL>", "ldjson": <the block exactly
+   as the page carries it>}`. Copy the block, do not retype it and do not
+   tidy it. Ferro parses the address, the postcode and the position from
+   that file with code, so no character can be lost on the way.
+
+   If the block does not exist, write the page's visible text to
+   `ncp1-raw.jsonl` instead, as `{"url": "...", "text": "<the page text>"}`,
+   copied rather than retyped. Ferro extracts the fields here either way.
 
 3. "Pay on the day" means paid. All 111 of your unpriced rows record a
    "Pay on the day" heading on the page, and some also list a season ticket
