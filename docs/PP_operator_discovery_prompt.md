@@ -252,3 +252,62 @@ For your understanding, so you know why the fields matter.
    Ferro sends you the rejects for a correction round.
 5. Accepted rows reach the database through `db-apply`, with an undo saved.
    The owner then decides what reaches the public sheet.
+
+---
+
+# Round 1 correction, NCP
+
+Paste everything below the line into the master bot after PP reports round 1.
+It names eight items. Do not redo anything that already passed.
+
+---
+
+## NCP round 1: eight corrections
+
+Good work on the 120 rows. Eight items before Ferro accepts this batch. Keep
+the same four file names with `-v2` added, for example `ncp1-results-v2.csv`.
+
+1. Cover the whole sitemap. You picked 124 car parks out of 346 by reading
+   their names. A London car park with a name that does not sound like London
+   is missing from that pick. Open all 346 pages, read the address on each,
+   and keep every car park with a Greater London address. Report the new
+   total and name every car park this step adds.
+
+2. "Pay on the day" means paid. A page that says you pay, without showing a
+   rate, states the Cost Type and not the price. Set Cost Type to `Paid` and
+   Price Status to `Not published` on every such row. Do not set a Tariff
+   Detail. Report how many rows change.
+
+3. Re-read the rows that show no price. You wrote that some readings for
+   pages 32 to 124 used template lines, and that only 12 were compared with
+   screenshots. PP Checker must now open at least 40 of the 111 no-price rows
+   itself, chosen at random across the whole range, and confirm that the page
+   really shows no price. Report how many match and list every mismatch.
+
+4. Confirm the partial postcodes. 69 rows hold a postcode like `E1 P`. Open
+   five of those pages again in the browser and say whether the page truly
+   shows a partial postcode, or whether the text was cut when you read it.
+   Do not repair a postcode from another source. Report what you see.
+
+5. State whether a position exists. No row carries a coordinate. For five
+   car parks, say whether the page's map, its link to a map, or any data
+   inside the page holds a latitude and longitude. If none does, write that
+   plainly. Ferro will derive a position from the address instead.
+
+6. Quote the three rate tables in full. Rainham, Upminster and Dagenham Dock
+   publish peak and weekend rates that fit no template. Copy the published
+   rate text exactly into Evidence Detail for those three rows, character for
+   character. Ferro needs the raw text to decide whether to add a template.
+
+7. Explain the match rule. You report 104 of 120 already held, with 48
+   matched on name and postcode. Say what rule matched the other 56, and list
+   those 56 with the Place ID you matched each one to.
+
+8. Leave the 16 unmatched car parks exactly as they are, including the 12
+   Heathrow pages, Kings Cross, Victoria, Waterloo and Baynard House.
+   Heathrow is in Hillingdon and is inside Greater London. Those 16 are the
+   new places this round found, and Ferro reviews them here.
+
+Keep every rule from the original brief. Silence is still not No, so a page
+that says nothing about parking does not become `Can Park? No`. Report your
+usage at each save.
