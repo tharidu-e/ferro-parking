@@ -1,6 +1,19 @@
 # Current work
 
 Updated 13 November 2026. Read this for priorities and remaining work only.
+
+## Next session, first actions
+
+1. Read this file, then `docs/PLAN.md`. Nothing else is needed to start.
+2. Ask the owner whether PP has sent the NCP v2 folder. If it has, check it
+   the way the NCP section below describes, then run `discover`.
+3. If v2 has not arrived, do the identity work instead. Run `osm-identity`
+   over the 675 blank rows in the large-format supermarket, shopping centre,
+   hospital and hotel categories, because every one of them has no Brand and
+   no source can be chosen without one.
+4. The publication plan from 13 November is still waiting for the owner's go.
+   It is `data/runs/2026-11-13_40/publish/`, 1,193 rows, zero drift.
+5. Do not start a second operator until NCP round 1 is accepted.
 Counts describe the local database, not a fresh Google Sheet export.
 Historical documents remain available in Git history. Run evidence stays under `data/runs/`.
 
@@ -271,6 +284,118 @@ Driver value should pick the order, not list size. 19,975 restaurants is the
 largest category in OpenStreetMap and close to the least useful, because a
 driver does not search for restaurant parking. Supermarkets, shopping centres,
 hospitals and council car parks are what a driver needs.
+
+## The finding method, agreed 13 November 2026
+
+This is how Ferro covers a category. It was agreed with the owner on
+13 November and it replaces any plan that treats the bot as a search engine.
+
+The principle. A place earns a record only when a named source states that it
+exists. The bot reaches and reads. Ferro decides, deduplicates and writes.
+The bot is never the authority on what exists, because a find with no page
+behind it cannot be checked.
+
+Scope, decided by the owner on 13 November.
+
+- A place with no parking space is out of scope.
+- A private, residents-only or permit-only space is out of scope, because no
+  Ferro driver can enter it.
+- On-street and kerbside bays are out of scope for this database. The owner
+  collects those separately.
+- A place we examined and found no parking at still earns a record, so that
+  nobody researches it twice. Coverage itself is a count in a register, never
+  a row for a place nobody checked.
+
+The six steps, per source.
+
+1. Choose one named source: an operator's own site list, a council
+   inventory, or a chain's store list. One source per round.
+2. The bot opens that list and every site page under it. It returns the
+   places file, the parking answers, the raw page data, a page log and a
+   report. It does not deduplicate against our database, because a duplicate
+   costs one review while a dropped site never arrives.
+3. PP Checker reads the sources again and returns OK, FIX or CANNOT VERIFY
+   per cell.
+4. Ferro runs `discover --source generic` over the places file. It filters to
+   London by borough polygon, deduplicates by coordinates and name, and
+   drafts the new places. A person reviews the drafts.
+5. `db-create` creates the accepted places with identity only and never a
+   parking answer, and assigns each a Place ID. Ferro maps the bot's `Ref`
+   values to those Place IDs and runs `grok-import` over the answers.
+6. Accepted rows reach the database through `db-apply`, with an undo saved.
+   The source's London count goes into the coverage register against what we
+   hold, so the gap becomes a number.
+
+Who fetches what. Send the bot only where the site blocks us. Our own plain
+requests reached Lidl and Morrisons on 13 November, so those are parsed here
+with no bot and no transcription risk. NCP, Tesco, Aldi and the seven
+councils returning 403 need the bot's browser.
+
+Never ask the bot to type a field out. It copies the page's structured data
+or its text into a raw file, and Ferro parses the fields here with code. See
+the NCP section for why this rule exists.
+
+## NCP round 1, 13 November 2026
+
+The first operator list this project has ever taken. Files are in
+`data/raw/ncp_round1_20261113/`.
+
+Round 1 returned 120 London car parks. NCP's finder page carries no full
+list, so PP used NCP's own sitemap, which lists 346 car parks, and picked 124
+by reading their names. 120 have a Greater London address.
+
+Ferro checked all 120 rows. Every mechanical check passes. Every `Ref` is
+unique and joins to a `url` in the places file in both directions, every
+dropdown value is allowed, every Tariff Detail matches its template with
+closed, ordered and touching bands, no cell holds an en dash or an em dash,
+and every opening-hours string parses. The six priced rows were compared with
+the raw tariff text and their prices are correct.
+
+Round 1 was not imported. Seven corrections are with PP as round 2.
+
+- 69 of the 120 postcodes are incomplete, for example `WC2 N  4B` where the
+  real postcode is WC2N 4BJ. The owner opened PP's saved page source and
+  found that string in NCP's own HTML, so NCP publishes the broken value.
+  About 19 pages in 45 carry only that header address. The rest also carry
+  structured fields with a two-part postcode, for example `E1 ` and `7RA`,
+  which rebuilds cleanly. Round 2 takes the postcode from those fields.
+- No row carries a coordinate, because round 1 read the rendered text, where
+  a map widget shows no numbers. The page source carries a `schema.org`
+  block with the position.
+- NCP's own coordinates can be wrong. Saffron Hill publishes latitude
+  1.521066. The postcode EC1N 8XA returns 51.520969 from postcodes.io, so the
+  leading 5 is missing from NCP's value. Range-check every coordinate against
+  Greater London, about 51.2 to 51.7 north and -0.6 to 0.4 east, and fall
+  back to the postcode position when the check fails.
+- Cost Type reads Unknown on all 111 unpriced rows, although every one of
+  them records a "Pay on the day" heading on the page and some list a season
+  ticket price. That heading states the Cost Type. Round 2 sets `Paid` with
+  Price Status `Not published`.
+- Can Park? reads Unknown on 111 rows, although 87 publish NCP opening times
+  on NCP's own car park page. Round 2 sets `Yes` on those.
+- Rainham, Upminster and Dagenham Dock publish peak and weekend rates that
+  fit no tariff template. Their rates sit in Rules Summary. Round 2 returns
+  the raw text so Ferro can decide whether to add a template.
+- PP reports 104 of the 120 already held, 48 of them matched on name and
+  postcode. The rule that matched the other 56 is still unexplained, and any
+  postcode match needs redoing after the postcode fix.
+
+The 16 that do not match are the yield of round 1: twelve Heathrow pages,
+Kings Cross, Victoria, Waterloo and Baynard House. Heathrow sits in
+Hillingdon and is inside Greater London.
+
+PP Checker could not re-read the pages. It got through two and then hit three
+Cloudflare challenges in a row. 2 of its 105 values read OK, none need
+fixing, and 103 cannot be verified. It now checks against the page files PP
+saves, and it opens 10 pages itself, at least 10 seconds apart, with at least
+7 of them short-template pages. A page whose HTML carries no self URL is
+identified by its title, its main heading and the car park name in PP's fetch
+log URL, and all three must agree.
+
+Round 2 covers all 346 sitemap pages, at about 25 seconds each. The owner
+approved opening `ncp.co.uk` again for both bots, spaced at least 3 seconds,
+stopping if the site blocks them. NCP's `robots.txt` allows those paths, and
+the 403 is a Cloudflare challenge rather than a refusal.
 
 ## Free-source validation, 12 November 2026
 
