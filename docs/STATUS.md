@@ -4,6 +4,11 @@ Updated 12 November 2026. Read this for priorities and remaining work only.
 Counts describe the local database, not a fresh Google Sheet export.
 Historical documents remain available in Git history. Run evidence stays under `data/runs/`.
 
+Team onboarding diagrams are in `docs/diagrams/index.html`, with an editable
+`docs/diagrams/ferro-system-design.excalidraw` and reading notes in that folder.
+They describe the architecture and explain the research and publication delays.
+Their counts retain the 12 November snapshot date; they are not live totals.
+
 ## Remaining places
 
 | Measure | Places |
@@ -13,10 +18,12 @@ Historical documents remain available in Git history. Run evidence stays under `
 | Needs on-site check | 1,176 |
 | Active OSM-created records | 3,951 |
 
-The latest saved route is `route-20261112T110736Z`.
-Its 6,246 routed rows comprise 4,846 Grok, 862 no_evidence, 237 default,
-244 website reader and 57 station rows. 5,314 rows are skipped, of which 47
-are personal locks and 1,175 need an on-site check. The station count fell
+The latest saved route is `route-20261112T211421Z`.
+Its 5,437 routed rows comprise 4,037 Grok, 862 no_evidence, 237 default,
+244 website reader and 57 station rows. 6,123 rows are skipped, of which 47
+are personal locks and 1,186 need an on-site check. The Grok stage fell from
+4,846 to 4,037 on 12 November, because the imported batches finished those
+rows. The station count fell
 from 113, because 56 station pages state that the station has no parking.
 A filled verification result does not prove that every parking detail is known.
 For current counts, run the read-only example in README.md. Saved routing can lag behind data changes.
@@ -25,16 +32,19 @@ For current counts, run the read-only example in README.md. Saved routing can la
 
 | Measure | Places |
 |---|---:|
-| Legacy showable | 1,500 |
-| Legacy complete | 1,055 |
-| Evidence-supported showable | 50 |
+| Legacy showable | 1,606 |
+| Legacy complete | 1,098 |
+| Evidence-supported showable | 1,038 |
 | Evidence-supported complete | 0 |
 
 Legacy counts read the sheet's own cells, through `readiness.counts` over a
 `db-export`. Evidence-supported means the `evidence` table holds a quote for
-Can Park?, Who Can Park and Cost Type on that place. 50 rows reach that bar,
-all from the website readers. The other 1,450 legacy answers predate the
-evidence table, so do not read 1,500 as 1,500 checked car parks.
+Can Park?, Who Can Park and Cost Type on that place. 1,038 rows reach that bar:
+50 from the website readers and 988 from the 12 November Grok batches. 121 of
+them state that the station has no car park, which is a useful answer and never
+a showable car park. The
+other legacy answers predate the evidence table, so do not read 1,573 as 1,573
+checked car parks.
 
 The Asda rows are not legacy showable, because their Cost Type reads Unknown.
 The store page states a car park and no price.
@@ -189,17 +199,192 @@ Remaining input blocks, not requests for next-step decisions:
 
 ## Grok hand-off
 
-The queue is `data/runs/2026-11-11_48/grok_queue/grok_queue.csv`, 4,807 rows
-in the bot's own tab layout. Run the bot over that file outside this project
-and put the results CSV in `data/raw/`.
+The bots research and check. This project owns the queue, the identity match,
+validation, the database and publication. The bots never reach the database.
 
-Ferro Autopay and Parking Charge are blank on all 4,807 rows. The Row column
-is blank on the 3,936 rows that exist only in the database, and holds a sheet
-row number on the other 871. No created record carries a row number.
+The current queue is `data/runs/2026-11-12/grok_queue/grok_queue_for_bot.csv`,
+4,823 rows from route-20261112T110736Z. It is the full 4,846-row queue minus
+the 23 places the bots already answered. Ferro Autopay and Parking Charge stay
+blank. Upload that file to the bot and ask for the 34 Grok Results columns back
+as CSV.
 
-No results CSV is in `data/raw/` yet, so `grok-import` has not run and there
-are no mapped, rejected or skipped counts to report. Nothing from the bot will
-be applied.
+The 199 earlier results are saved as `data/raw/grok_results_2026-11-12.csv`.
+`grok-import` accepted none of them: 172 places are already finished in the
+database and 27 break the allowed value rules. Three of them found real answers
+that the format rejected: Warren Evans car park, London Zoo Parking and Lloyd
+Park. Those three wait for a hand fix.
+
+The first 25-place pilot ran on 12 November. Results:
+`data/raw/grok_results_batch_20261112.csv`. The bot found a field on 20 rows
+and nothing on 5, and reported no new place. `grok-import` accepted 9, skipped
+11 as finished rows and rejected 5. Run `apply-20261112T145532Z` wrote 232
+changes and 232 evidence rows across those 9 shopping centre car parks, with
+`db-undo` available.
+
+Two held cells in that batch: PP-001028's Hours, where the charging-hours check
+asks for a person, and Evidence Age on all 9 rows, which the bot set to Under
+12 months on undated pages against its own rule. Both are in
+`data/runs/2026-11-12/grok_import_batch1_final/held_lines.json`.
+
+The pilot found two importer bugs and one rule problem, all fixed on
+12 November:
+
+- A blank PCN amount or Max Stay was read as an invalid number and refused the
+  whole row. 13 of the 25 pilot rows failed on an empty cell.
+- The grok plan did not restate Brand and Place Category, which `validate_rows`
+  asks for on a Yes or Conditional row, because it sees only the plan's columns.
+- Brand was required on every Yes or Conditional row. 3,526 of the 4,095 queued
+  places with no Brand are private or operator car parks, and 360 are stations.
+  Those places carry an Operator and no brand. `config/rules.toml` now holds
+  `identity.brand_required_categories`, and Brand is required only for those
+  chain categories. Place Category stays required for every such row.
+
+Still to settle for the next batch: the bots must leave Evidence Age as Older
+or undated on an undated page, and the two personas still read and write tabs
+their own text forbids.
+
+Batch 2 ran the same day: 200 rows, 71 minutes, results in
+`data/raw/grok_results_batch2_20261112.csv`. The bot applied all four pilot
+corrections, including Evidence Age. `grok-import` accepted 82, skipped 12 as
+finished and rejected 106. Run `apply-20261112T154646Z` wrote 2,307 changes and
+2,307 evidence rows across 78 places, with `db-undo` available. Evidence
+supported showable rose from 59 to 137.
+
+Batch 2's 106 rejects have two main causes, both the bot's own formatting:
+
+- 64 rows: the Tariff Detail text does not match a template in
+  `formats.TARIFF_PATTERNS`. The published amounts are real. Examples are a
+  trailing "each additional day £50.00", "Up to 1 hr £2.00" instead of
+  "0-1 hrs £2.00", and whole pounds without decimals.
+- 39 rows: Proposed Result "No evidence" with a Source Tier that is not
+  "None found".
+
+49 more lines were dropped at the apply step and held in
+`data/runs/2026-11-12/grok_import_batch2_filtered/held_lines.json`: 30 Notes
+and Review Flag lines that would replace existing text, 8 Hours lines the
+charging-hours check holds, 7 Evidence Level values of "Reported" that the
+sheet dropdown does not list, and 4 rows missing a Brand their chain category
+needs.
+
+Batch 2 corrections and batch 3 followed the same day.
+
+| Batch | Rows | Accepted | Applied changes | Run |
+|---|---:|---:|---:|---|
+| Pilot, rows 1 to 25 | 25 | 9 | 232 | `apply-20261112T145532Z` |
+| Batch 2, 200 rows | 200 | 82 | 2,307 | `apply-20261112T154646Z` |
+| Batch 2 corrections | 114 | 91 | 2,399 | `apply-20261112T162907Z` |
+| Batch 3, rows 226 to 425 | 200 | 173 | 5,254 | `apply-20261112T162940Z` |
+| Batch 3 corrections | 18 | 13 | 400 | `apply-20261112T165334Z` |
+| Batch 4, rows 426 to 625 | 200 | 31 applied | 837 | `apply-20261112T165338Z` |
+| Batch 4 reread | 162 | 27 | 837 | `apply-20261112T183210Z` |
+| Batch 5, rows 626 to 825 | 200 | 117 | 3,277 | `apply-20261112T183214Z` |
+| Batch 6, rows 826 to 1025 | 200 | 188 | 5,409 | `apply-20261112T211304Z` |
+| Station rows under the new R9 | 562 | 121 | 3,751 | `apply-20261112T2114*Z` |
+| Batch 7, rows 1026 to 1225 | 200 | 160 applied | 4,662 | `apply-20261112T214843Z` |
+| Batch 8, rows 1226 to 1245 | 20 | 20 | 587 | `apply-20261112T224221Z` |
+
+The bot reshaped 75 Tariff Detail strings and fixed 39 "No evidence" rows, so
+batch 2 recovered from 82 accepted to 91. Batch 3 was accepted at 173 of 200,
+because the two new rules were in place before the research ran. Each batch
+keeps its own `db-undo` run.
+
+Batch 4 needs a reread, not an import. It returned 162 rows as "No evidence"
+and finished in about four minutes, which cannot be 200 pages read properly.
+Importing them would close those 162 places on a shallow miss, so only the 38
+rows with a stated fact went forward, and 31 of those applied. The held list is
+`data/runs/2026-11-12/grok_import_batch4_found_only/held_shallow_rows.csv`.
+Those 162 places stay on the Grok stage until a slower reread.
+
+The batch 4 reread answered the shallow-miss worry. The bot opened 710 pages in
+30 minutes and found a fact on 137 of the 162 places. Only 27 imported, because
+112 of those answers are Can Park? No from a Transport for London station
+record that reads `"Car park": "no"`, and rule R9 does not list that wording.
+The owner approved that wording on 12 November, and
+`r9.explicit_no_parking_phrases` now holds `car park": "no`. The quotes are
+part of the phrase, so it cannot match prose about a car park, and two tests
+cover both directions. Re-importing the three affected files then applied 121
+station rows under `apply-20261112T211407Z`, `apply-20261112T211408Z` and
+`apply-20261112T211409Z`.
+
+Batch 5 also refused 45 rows that pair Source Tier "None found" with
+Verification Result "Needs on-site check". Those are the places where no page
+loaded at all. The bot must use "No evidence" there and name the blocked URL in
+Notes.
+
+Batch 6 was accepted at 188 of 200, the best rate so far. 164 of its rows found
+nothing: 47 name a blocked URL in Notes and 117 read a page that says nothing
+about parking, mostly unnamed car parks, bus stations and piers. Those rows now
+carry Verification Result "No evidence", which is research complete for now and
+not driver information complete.
+
+Batch 6 review items: the Barbican centre page says a £13 fixed evening and
+weekend rate where Saba says £15; Sloane Square has no 7 to 8 hour band, so the
+row reads "7-24 hrs £52.50"; Westfield Car Park C takes its tariff from the
+centre-wide page; Paddington's Tube record says no car park while the mainline
+record says there is one; the two Hammersmith bus station rows read No from the
+whole interchange's record. Two more car parks are outside the queue, Alexandra
+Road in Hounslow and Holly Road in Twickenham.
+
+Batch 7 covers mostly unnamed car parks, so 182 of its 200 rows found nothing.
+33 of those cite only an OpenStreetMap map entry, with no site page opened at
+all, so they are held in
+`data/runs/2026-11-12/import_batch7_without_weak/held_map_only_rows.csv` and
+stay on the Grok stage. The bot itself flagged them as its weakest calls.
+
+The bot now checks its own file before sending it. It clones the repo, builds a
+copy of the database with `db-import` from a `db-export` snapshot, and runs
+`grok-import` against that copy. Batch 8 was the test: the bot reported 20
+accepted, 0 skipped and 0 rejected, and the same import here gave the same
+three numbers and the same 20 dropped Location Status cells. So a batch that
+passes on the bot's copy can be applied here without a correction round. The
+copy goes stale after every apply, so send a fresh snapshot each day.
+
+Three batch 7 rows read a Barnet bot-check page as silence and carry
+Verification Result "No evidence" with no blocked page named: PP-007994
+Fitzjohn Avenue, PP-008152 and PP-008153 Stanhope Road. The correction was
+skipped, because those rows are finished. Reread them when Barnet is reachable.
+
+1,245 of the 4,823 queue rows are researched. 3,578 remain, which is 18 runs of
+200 rows. Use `scripts/filter_refused_lines.py` on each batch plan before
+db-apply, so one refused cell no longer blocks a whole batch.
+
+Batch 7 review items: East Finchley (PP-008014) has a conflict, where Saba says
+£10.60 a day with camera control and Transport for London still says £5.00 pay
+and display, and about 50 spaces close from September to December 2026 for
+charger work. Harold Wood station closes on 28 and 29 November. IKEA Croydon
+and Wembley read No evidence, because IKEA publishes only a chain-wide free
+parking line. PP-008155 and PP-008157 are both named Beckton Triangle Retail
+Park. Three more car parks sit outside the queue, including Palace Gardens in
+Enfield, which publishes a full tariff.
+
+The apply step still holds some lines, and each held line is listed in that
+run's `held_lines.json` under `data/runs/2026-11-12/`. The usual causes are a
+Notes or Review Flag line that would replace existing text, an Hours value the
+charging-hours check holds, an Evidence Level of "Reported", and a row whose
+Tariff Type and Tariff Detail disagree.
+
+Batch 3 found 143 rows with nothing published, 8 newly blocked pages (The O2,
+two Barnet car park pages, Lomax George Mews, UEL SportsDock, Tesco West
+Cromwell Road, Truman Brewery and Ruskin Square) and four dead links (ExCeL
+parking, Epsom and St Helier hospital parking, Ruislip Lido and several
+National Rail pages for Tube-only stations). Do not retry those.
+
+Batch 3 review items: nine possible duplicate pairs, including Kings Mall
+(PP-005463 and PP-001030), Westfield (PP-005467, PP-005458, PP-001027 and
+PP-007793) and the two ExCeL rows (PP-005561 and PP-005562); five rows needing
+an on-site check, including Barnet Hospital A and B (PP-005596 and PP-005597),
+where the live page contradicts the 8 May 2026 charges notice; and two car
+parks not in the queue, Alexandra Palace Paddocks and Dives, in
+`data/raw/grok_not_in_queue_batch3_20261112.csv`.
+
+Batch 2 review items, none of them parking answers: the Liberty, Wood Green
+East and Chimes postcodes differ from our records; Westfield London, Finsbury
+Square and Berners Street may be duplicate records; three car parks are not in
+the queue (Honor Oak Recreation Ground, Ham Street and Connaught Water) in
+`data/raw/grok_not_in_queue_batch2_20261112.csv`. 22 URLs were blocked,
+including Canary Wharf, NCP, Vision RCL behind a captcha and Guy's and
+St Thomas'.
+
 
 ## Publication dry runs
 

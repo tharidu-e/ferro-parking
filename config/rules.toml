@@ -114,6 +114,11 @@ explicit_no_parking_phrases = [
     "no public parking", "there is no car park", "no hotel parking",
     "no on-site hotel parking", "no off-street hospital parking",
     "no on-site car park",
+    # Transport for London publishes a station's parking as a structured
+    # field, not a sentence. Added 12 November 2026 for 129 station rows whose
+    # only statement is this record. The quotes are part of the phrase, so it
+    # cannot match ordinary prose about a car park.
+    'car park": "no',
 ]
 
 [r10]
@@ -181,6 +186,18 @@ price_status = "Chain policy (not store-specific)"
 max_stay_mins = "Not published"
 rules_summary = "Customer parking while fuelling or shopping, check signs"
 evidence_level = "Chain policy"
+
+# Brand is identity, not permission. A chain branch carries a brand, and a
+# private, operator, council or station car park carries an Operator instead.
+# A Yes or Conditional row always needs Place Category; it needs Brand only
+# for these categories. Measured on 12 November 2026: 3,526 of the 4,095
+# queued places with no Brand are private or operator car parks.
+[identity]
+brand_required_categories = [
+    "Supermarket - large format", "Supermarket - convenience", "Hotel",
+    "Gym / leisure centre", "Fast food / drive-thru", "Restaurant / pub / cafe",
+    "Retail warehouse / DIY / trade", "Petrol station",
+]
 
 # Exact sheet dropdown values used by the standalone validator.
 [dropdowns]

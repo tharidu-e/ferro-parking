@@ -168,11 +168,22 @@ def test_unknown_hours_do_not_get_charging_hours_error():
 
 
 @pytest.mark.parametrize('can_park',['Yes','Conditional'])
-def test_brand_category_required_and_closed_cannot_park(can_park):
+def test_place_category_required_and_closed_cannot_park(can_park):
     row={**discover.draft(source()),fill.CAN_PARK:can_park,'Location Status':'Closed'}
     problems=validation.validate_rows([row])
-    assert {p['field'] for p in problems if p['rule']=='required'}=={'Brand','Place Category'}
+    assert {p['field'] for p in problems if p['rule']=='required'}=={'Place Category'}
     assert any(p['rule']=='closed' and p['field']==fill.CAN_PARK for p in problems)
+
+
+@pytest.mark.parametrize('category,expected',[
+    ('Hotel',{'Brand'}), ('Supermarket - convenience',{'Brand'}),
+    ('Private / operator car park',set()), ('Station',set()), ('Shopping centre',set())])
+def test_brand_is_required_only_for_a_chain_category(category,expected):
+    # Brand is identity, not permission. An operator or station car park names
+    # an Operator and no brand. config/rules.toml holds the category list.
+    row={**discover.draft(source()),fill.CAN_PARK:'Conditional','Place Category':category}
+    problems=validation.validate_rows([row])
+    assert {p['field'] for p in problems if p['rule']=='required'}==expected
 
 
 @pytest.mark.parametrize('field',['Notes','Brand','Location Name','Operator'])

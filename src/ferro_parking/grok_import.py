@@ -226,13 +226,18 @@ def validate(source, new, config, today):
         errors.append("safety: free, public access or prices require strong site-specific evidence")
     if risky and source.get("Fields Found") == "None":
         errors.append("safety: Fields Found None cannot establish free, public access or prices")
-    max_stay = new["Max Stay (mins)"]
-    if max_stay not in {"Not published", "Not applicable", "No limit"} and not re.fullmatch(r"\d+", max_stay):
+    # A blank cell is not a value. plan.py drops it before the write and lists
+    # it in dropped_columns.csv, so checking it as a number refuses the row's
+    # good fields for a column nobody writes.
+    max_stay = new["Max Stay (mins)"].strip()
+    if max_stay and max_stay not in {"Not published", "Not applicable", "No limit"} \
+            and not re.fullmatch(r"\d+", max_stay):
         errors.append("numeric: Max Stay must be whole minutes or an allowed marker")
-    if max_stay not in {"Not published", "Not applicable"} and not site_strong:
+    if max_stay and max_stay not in {"Not published", "Not applicable"} and not site_strong:
         errors.append("safety: max stay requires strong site-specific evidence")
-    pcn = new["PCN (Penalty Charge Notice) amount (£)"]
-    if pcn not in {"Not published", "Not applicable"} and not re.fullmatch(r"\d+(?:\.\d{1,2})?", pcn):
+    pcn = new["PCN (Penalty Charge Notice) amount (£)"].strip()
+    if pcn and pcn not in {"Not published", "Not applicable"} \
+            and not re.fullmatch(r"\d+(?:\.\d{1,2})?", pcn):
         errors.append("numeric: invalid PCN amount")
     if new["Agreeing Sources"] not in {"0", "1", "2", "3"}:
         errors.append("numeric: Agreeing Sources must be 0-3")
