@@ -116,28 +116,72 @@ Where the real gap is. Place coverage for the chains is already good, and the
 gap is the parking detail on places we hold. The database holds 173 Tesco, 175
 Sainsbury's, 93 Co-op, 66 Lidl, 62 M&S, 57 Iceland and 43 Asda records.
 
-| Category | Records | Blank result | Cost Type known |
-|---|---:|---:|---:|
-| Private / operator car park | 4,681 | 932 | 475 |
-| Supermarket - convenience | 1,051 | 20 | 39 |
-| Supermarket - large format | 954 | 447 | 99 |
-| Station | 841 | - | - |
-| Petrol station | 610 | - | - |
-| Hotel | 558 | 118 | 193 |
-| Gym / leisure centre | 488 | 250 | 117 |
-| Council car park | 476 | 6 | 366 |
+Every category, measured with the project's own readiness bar over a fresh
+`db-export` on 13 November. Showable means Can Park? Yes or Conditional, a
+usable pin, a known Who Can Park and a known Cost Type. Complete adds hours,
+maximum stay and tariff detail.
 
-Council car parks are close to done, at 366 of 476 with a known Cost Type.
-Large-format supermarkets are the worst large category, at 99 of 954. Gyms are
-next, at 117 of 488. So the owner's order is correct, but supermarkets need a
-source other than the chain website, and council car parks need no new work.
+| Category | Records | Showable | Complete | Blank result | No evidence | On-site |
+|---|---:|---:|---:|---:|---:|---:|
+| Private / operator car park | 4,681 | 409 | 232 | 929 | 2,912 | 317 |
+| Supermarket - convenience | 1,051 | 36 | 28 | 20 | 57 | 280 |
+| Supermarket - large format | 954 | 91 | 77 | 447 | 4 | 123 |
+| Station | 841 | 130 | 117 | 94 | 149 | 73 |
+| Petrol station | 610 | 4 | 2 | 10 | 6 | 121 |
+| Fast food / drive-thru | 570 | 7 | 4 | 117 | 0 | 41 |
+| Hotel | 558 | 167 | 141 | 118 | 0 | 76 |
+| Gym / leisure centre | 488 | 98 | 38 | 250 | 2 | 85 |
+| Council car park | 476 | 406 | 338 | 6 | 17 | 27 |
+| Other | 446 | 81 | 40 | 148 | 21 | 89 |
+| Retail warehouse / DIY / trade | 325 | 16 | 14 | 82 | 69 | 109 |
+| Hospital / health centre | 236 | 129 | 29 | 46 | 2 | 44 |
+| No category | 124 | 13 | 7 | 60 | 25 | 0 |
+| Shopping centre | 121 | 42 | 36 | 64 | 7 | 14 |
+| School / college | 30 | 6 | 1 | 2 | 0 | 5 |
+| Restaurant / pub / cafe | 24 | 4 | 4 | 0 | 3 | 14 |
+| Council park / open space | 22 | 13 | 12 | 0 | 0 | 12 |
+| Park / open space | 2 | 0 | 0 | 0 | 0 | 0 |
+| Business park / office | 1 | 0 | 0 | 0 | 0 | 0 |
+| Total | 11,560 | 1,652 | 1,120 | 2,393 | 3,274 | 1,430 |
 
-The next research batch is therefore the 447 large-format supermarket records
-and the 250 gym records with a blank verification result, about 700 rows. Route
-them first, because the saved route is stale. For each row, name the source that
-states that exact store before the bot runs. Expect cautious values from R10
-where no store page states a price, and remember that Cost Type Unknown is not
-showable.
+What the table says. Council car parks are done at 406 showable of 476, and
+council parks and open spaces are the next best. Private and operator car parks
+are exhausted, because 2,912 of them already read No evidence. Petrol stations
+and fast food sites score almost zero, and their chain sites are measured dead,
+so they are poor targets and low value to a driver. Restaurants, pubs and cafes
+are only 24 records, so that category is too small to plan around. The big
+unworked categories are large-format supermarkets, gyms and hotels.
+
+The blocker on the three big targets is identity, not research. Every one of the
+447 blank large-format supermarket rows has no Brand, and so do all 64 blank
+shopping centre rows, all 46 blank hospital rows and all 118 blank hotel rows.
+Without a Brand we cannot pick the source that states the site. `osm-identity`
+already proposes Brand, Place Category and Notes from the OpenStreetMap
+geometry, and `data/raw/greater-london-latest.osm.pbf` is on disk, so that pass
+is read-only and needs no new code.
+
+Gyms are the one target with a reader already built. Of their 250 blank rows,
+37 are Better, 15 are PureGym and 14 are The Gym Group, and `fetch-fill` has a
+registered reader for each of those three hosts. A dry run on those 66 rows
+costs nothing and needs no new code.
+
+An OpenStreetMap fee pass is not the unlock. The London extract holds 17,988
+`amenity=parking` objects, but only 1,824 carry a `fee` tag and only 115 carry
+`maxstay`. Those tags cannot fill 954 supermarket records.
+
+Recommended order:
+
+1. Run `osm-identity` over the 675 blank rows in the four branded categories,
+   to get a Brand on large-format supermarkets, shopping centres, hospitals and
+   hotels. Read-only, no new code.
+2. Run `fetch-fill` as a dry run for `better.org.uk`, `puregym.com` and
+   `thegymgroup.com` over the 66 branded gym rows.
+3. Route again, then take shopping centres as the first bot batch. There are
+   only 64 blank rows, centre pages publish tariffs, and batch 6 and batch 7
+   proved the bot reads them well.
+4. Then take large-format supermarkets with the brands now known, and decide
+   the source first. The chain websites are dead, so this batch needs a source
+   decision from the owner, not another pass over the same pages.
 
 ## Free-source validation, 12 November 2026
 
