@@ -342,16 +342,36 @@ def build_plan(headers, rows, result_headers, results, config=None, today=None, 
             rejects.append(record)
             out_of_scope.append(record)
             continue
-        finished = bool(str(target.get("Verification Result", "")).strip())
         # One named-person test, shared with db-apply (fill.is_named_person).
         human = fill.is_named_person(target.get("Verified By", ""))
-        if finished or human:
-            skipped.append({**base, "Reasons": [r for r, yes in (
-                ("finished", finished), ("person or unrecognised reviewer", human)) if yes]})
+        if human:
+            skipped.append({**base, "Reasons": ["person or unrecognised reviewer"]})
             continue
-        new, changes, errors = map_values(source, target, config)
+        full, changes, errors = map_values(source, target, config)
+        new = dict(full)
+        # A finished row keeps every answer it holds and still gains a blank
+        # cell, which is fill.finished_column_refusal, the same rule db-apply
+        # and publish use. The older row-wide skip dropped 49 of the 95
+        # hospital rows on 15 November, although each one only filled blanks.
+        held = {column: why for column, why in
+                ((column, fill.finished_column_refusal(target, column, value))
+                 for column, value in new.items()) if why}
+        if held:
+            new = {column: value for column, value in new.items() if column not in held}
+            changes = [c for c in changes if c["Column"] not in held]
+        # Nothing left to say about this row. This also keeps a rerun
+        # idempotent, which the row-wide skip used to do by accident.
+        if all(str(value) == str(target.get(column, "")) for column, value in new.items()):
+            skipped.append({**base, "Reasons": [
+                "the row already holds every value this result would write"
+                if not held else
+                "finished row: every answer this result would change is already filled"]})
+            continue
         new["Verified By"] = verified_by
-        errors.extend(validate(source, new, config, today))
+        # Validate the bot's whole proposal, including a column a finished row
+        # keeps, so the checks read the same combination they always did. Only
+        # the write set shrinks.
+        errors.extend(validate(source, full, config, today))
         errors = list(dict.fromkeys(errors))
         for c in changes:
             audit.append({**base, **c, "Disposition": "rejected" if errors else "candidate"})
