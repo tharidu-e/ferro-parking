@@ -37,8 +37,9 @@ later.
 
 ## 2. How a bot writes to the sheet, settled 15 November 2026
 
-A bot writes parking answers into the tab "ALL LONDON (clean)" itself. Two
-limits apply, and three layers hold each limit.
+A bot writes parking answers into the tab "ALL LONDON (clean)" itself. Three
+limits apply. Three layers hold each of the first two: the sheet, the bot, and
+a check by Ferro after the round.
 
 ### Limit 1: answer columns only, never identity
 
