@@ -127,10 +127,16 @@ def max_stay_strong(value):
     return bool(value) and value not in ("Not published", "Not applicable")
 
 
-def check_row(row):
-    """Return a list of problems with one normalised row."""
+def check_row(row, context=None):
+    """Problems with one normalised row.
+
+    `row` is what this round writes. `context` is that row merged onto the
+    sheet's own row, so a rule that asks "is this value known" sees the cell
+    the round is keeping. A rule about what the round wrote reads `row`, never
+    the context: the sheet holds old en dashes that this round never typed."""
     problems = []
-    get = row.get
+    merged = {**(context or {}), **{k: v for k, v in row.items() if v}}
+    get = merged.get
 
     for column, allowed in DROPDOWNS.items():
         value = get(column, "")
@@ -229,11 +235,11 @@ def check_row(row):
         problems.append(f'Agreeing Sources is "{agreeing}", which must be 0, 1, 2 or 3')
 
     for column, value in row.items():
-        if "–" in value or "—" in value:
+        if "–" in str(value) or "—" in str(value):
             problems.append(f"{column} holds a dash character that the sheet refuses. "
                             "Use a plain hyphen")
 
-    evidence = get("Evidence Detail (what the source shows)", "")
+    evidence = row.get("Evidence Detail (what the source shows)", "")
     if "£" in evidence and re.search(r"\d{2}:\d{2}", evidence):
         problems.append("Evidence Detail holds a price and an opening time together. "
                         "One field for each evidence cell")
@@ -252,6 +258,15 @@ def check_row(row):
                         "or one of: " + ", ".join(words))
 
     return problems
+
+
+def sheet_rows(sheet_path):
+    """{Place ID: normalised row} from a downloaded export of the tab."""
+    live = {}
+    with open(sheet_path, newline="", encoding="utf-8-sig") as stream:
+        for row in csv.DictReader(stream):
+            live[str(row.get("Place ID", "")).strip()] = normalise(row)
+    return live
 
 
 def merge_with_sheet(rows, sheet_path):
@@ -277,12 +292,12 @@ def merge_with_sheet(rows, sheet_path):
 def check_file(path, sheet_path=None):
     with open(path, newline="", encoding="utf-8-sig") as handle:
         rows = [normalise(row) for row in csv.DictReader(handle)]
-    if sheet_path:
-        rows = merge_with_sheet(rows, sheet_path)
+    live = sheet_rows(sheet_path) if sheet_path else {}
     problems = []
     for number, row in enumerate(rows, start=2):
         name = row.get("Location Name") or row.get("Place ID") or row.get("Ref") or "?"
-        for problem in check_row(row):
+        context = live.get(str(row.get("Place ID", "")).strip(), {})
+        for problem in check_row(row, context):
             problems.append(f"row {number} ({name}): {problem}")
     return len(rows), problems
 

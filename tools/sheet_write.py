@@ -37,6 +37,18 @@ import sys
 TAB = "ALL LONDON (clean)"
 PLACE_ID = "Place ID"
 
+# The bot's short column names, as bot_self_check.py maps them.
+ALIASES = {
+    "Can Park?": "Can Park? (Yes/No/Conditional)",
+    "Proposed Result": "Verification Result",
+    "Hours": "Hours (OpenStreetMap opening_hours format)",
+    "Parking Control Type": "Parking Control Type (Cameras / Barrier / Patrol)",
+    "PCN amount (£)": "PCN (Penalty Charge Notice) amount (£)",
+    "Evidence Detail": "Evidence Detail (what the source shows)",
+    "Source URLs": "Source URLs (primary first)",
+    "Researched Date": "Verified Date",
+}
+
 # A bot never writes identity or money. The sheet's protected ranges hold this
 # too; this is the second layer, so a misconfigured range cannot be the only
 # guard.
@@ -45,9 +57,19 @@ NEVER_WRITE = {
     "Borough", "Latitude", "Longitude", "Geo Source", "Geo Precision",
     "Geo (as captured)", "Postcode (derived from pin)",
     "Pin to postcode distance (m)", "Ferro Autopay", "Parking Charge (£)",
-    "Total incl. Ferro Fee (£)", "Verified By", "Verified Date",
+    "Total incl. Ferro Fee (£)",
     "Type (as captured)", "Charges (as published)", "Max Stay (as captured)",
     "Hours (as captured)",
+}
+
+# A bot signs its own work, and only with a declared automation label. A
+# label this list does not name reads as a person and locks the row for
+# every later round, so no bot may write one.
+AUTOMATION_VERIFIERS = {
+    "PP", "PP (validation)", "OSM script", "OSM discovery", "OSM identity match",
+    "Policy script", "Category policy script", "Claude (capture check)",
+    "Claude (page check)", "Grok (discovery)", "Grok (detail pass)",
+    "Code (page fetch)",
 }
 
 PLACEHOLDERS = {"", "Unknown", "Not yet checked"}
@@ -66,11 +88,20 @@ def plan_row(place_id, new_values, live_row, queue):
     if place_id not in queue:
         return [], [f"{place_id}: not in this round's queue"]
     for column, value in new_values.items():
+        column = ALIASES.get(column, column)
         value = str(value or "").strip()
-        if not value:
+        if not value or column == PLACE_ID or column.startswith("_"):
+            continue
+        if column not in live_row:
+            # A column the bot keeps for itself, such as Minutes Spent. The
+            # sheet has no such cell, so there is nothing to write.
             continue
         if column in NEVER_WRITE:
             refusals.append(f"{place_id}: {column} is never written by a bot")
+            continue
+        if column == "Verified By" and value not in AUTOMATION_VERIFIERS:
+            refusals.append(f"{place_id}: Verified By {value!r} is not a declared "
+                            "automation label, and a bot never writes a person's name")
             continue
         live = live_row.get(column, "")
         if str(live).strip() == value:
@@ -165,7 +196,7 @@ def demo():
     """The file's own checks. Run with --demo."""
     live = {"PP-1": {"Place ID": "PP-1", "Who Can Park": "", "Cost Type": "Unknown",
                      "Hours (OpenStreetMap opening_hours format)": "24/7",
-                     "Location Name": "Example"}}
+                     "Verified By": "", "Location Name": "Example"}}
     queue = {"PP-1"}
     result = {"Place ID": "PP-1", "Who Can Park": "Anyone (paid)", "Cost Type": "Paid",
               "Hours (OpenStreetMap opening_hours format)": "Mo-Fr 08:00-18:00",
@@ -175,6 +206,8 @@ def demo():
     assert columns == {"Who Can Park", "Cost Type"}, columns
     assert any("Location Name is never written" in r for r in refusals)
     assert any("already reads '24/7'" in r for r in refusals)
+    signed = {"Place ID": "PP-1", "Verified By": "Deshan"}
+    assert "not a declared automation label" in plan_row("PP-1", signed, live["PP-1"], queue)[1][0]
     assert plan_row("PP-2", result, live["PP-1"], queue)[1] == [
         "PP-2: not in this round's queue"]
     assert writable("") and writable("Unknown") and writable("Not yet checked")
