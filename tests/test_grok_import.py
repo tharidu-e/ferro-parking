@@ -233,7 +233,7 @@ def test_finished_and_person_rows_skipped_and_rerun_is_idempotent():
     # held as a person, so the pilot label and an unrecognised bot are both
     # skipped. The live data carried "Deshan (pilot, manual check)" on four
     # rows that the earlier prefix test let through.
-    for updates in ({"Verification Result": "Confirmed"}, {"Verified By": "Tharidu"},
+    for updates in ({"Verified By": "Tharidu"},
                     {"Verified By": "Tharidu (hand check)"},
                     {"Verified By": "Deshan (pilot, manual check)"},
                     {"Verified By": "Unrecognised bot"}):
@@ -246,6 +246,34 @@ def test_finished_and_person_rows_skipped_and_rerun_is_idempotent():
     first = build()
     applied = target(**first["plan"][0]["new"])
     assert not build(rows=[applied])["plan"]
+
+
+def test_a_finished_row_gains_a_blank_cell_and_keeps_its_answers():
+    """The per-column rule, shared with db-apply, publish and the writer. The
+    row-wide skip dropped 49 of the 95 hospital rows on 15 November 2026,
+    although each one only filled blanks."""
+    row = target(**{"Verification Result": "Confirmed, details not published",
+                    "Who Can Park": "Permit holders"})
+    result = gi.build_plan(list(target()), [row], gi.RESULT_COLUMNS,
+                           [strong(**{"Who Can Park": "Customers only"})], CFG, TODAY)
+    assert result["skipped"] == []
+    written = result["plan"][0]["new"]
+    # The row keeps its own answer, and the blank cells are filled.
+    assert "Who Can Park" not in written
+    assert written["Verification Result"] == "Confirmed, details not published"
+    assert written["Evidence Detail (what the source shows)"]
+
+
+def test_a_finished_row_with_nothing_to_add_is_skipped():
+    row = target(**{"Verification Result": "Confirmed, details not published",
+                    "Who Can Park": "Permit holders"})
+    result = gi.build_plan(list(target()), [row], gi.RESULT_COLUMNS,
+                           [strong(**{"Who Can Park": "Customers only"})], CFG, TODAY)
+    applied = target(**{**row, **result["plan"][0]["new"]})
+    again = gi.build_plan(list(target()), [applied], gi.RESULT_COLUMNS,
+                          [strong(**{"Who Can Park": "Customers only"})], CFG, TODAY)
+    assert again["plan"] == []
+    assert again["skipped"][0]["Reasons"]
 
 
 @pytest.mark.parametrize("s,rows", [([source(), source()], [target()]),
