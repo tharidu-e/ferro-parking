@@ -56,6 +56,16 @@ DROPDOWNS = {
     "Evidence Age": ["Under 12 months", "1-2 years", "Older or undated"],
 }
 
+# An answer column. A row with one of these filled writes to the sheet, so it
+# carries the round stamp. Bookkeeping columns alone do not.
+STAMPED_COLUMNS = (
+    "Can Park? (Yes/No/Conditional)", "Who Can Park", "Cost Type", "Price Status",
+    "Tariff Type", "Tariff Detail", "Max Stay (mins)",
+    "Hours (OpenStreetMap opening_hours format)", "Hours Basis", "Operator",
+    "PCN (Penalty Charge Notice) amount (£)", "Rules Summary", "Location Status",
+    "Parking Control Type (Cameras / Barrier / Patrol)", "Verification Result",
+)
+
 STRONG_SOURCE_TIERS = {"Official site - text", "Operator / council site",
                        "Official site - logo or icon", "Google Maps - tariff photo"}
 
@@ -200,9 +210,12 @@ def check_row(row):
     if max_stay_strong(get("Max Stay (mins)", "")) and not site_strong:
         problems.append("Max Stay needs strong site-specific evidence")
 
-    # Only a real result row needs the round stamp. A fragment with no Place
-    # ID is a fragment, and the demo below checks one rule at a time.
-    if get("Place ID", "") and not re.search(r"\bRoute\b", get("Decision Reason", "")):
+    # Only a row that writes something needs the round stamp. A row the round
+    # read and did not change writes nothing, so it carries no stamp. On
+    # 15 November this rule flagged 66 hospital rows that the round left alone.
+    writes_something = any(get(column, "") for column in STAMPED_COLUMNS)
+    if (get("Place ID", "") and writes_something
+            and not re.search(r"\bRoute\b", get("Decision Reason", ""))):
         problems.append('Decision Reason must name the round, as "Route: <round>"')
 
     agreeing = get("Agreeing Sources", "")
@@ -278,8 +291,11 @@ def demo():
                       "Max Stay (mins)": "120"})
     assert check_row({"Conflict": "Yes"})
     assert check_row({"Review Flag": "Check the tariff"})
-    assert check_row({"Place ID": "PP-1", "Decision Reason": "hospital1"})
-    assert not check_row({"Place ID": "PP-1", "Decision Reason": "Route: hospital1"})
+    assert check_row({"Place ID": "PP-1", "Cost Type": "Paid", "Decision Reason": "hospital1"})
+    assert not check_row({"Place ID": "PP-1", "Cost Type": "Paid",
+                          "Decision Reason": "Route: hospital1"})
+    # A row the round read and did not change needs no stamp.
+    assert not check_row({"Place ID": "PP-1", "Notes": "nothing published"})
     assert check_row({"Agreeing Sources": "4"})
     print("self-check passed")
 

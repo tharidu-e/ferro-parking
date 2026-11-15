@@ -5,9 +5,17 @@ One file, standard library plus the Google client the bot already uses. It
 replaces the old chain of grok-import, db-apply and publish.
 
     python3 sheet_write.py --round hospital1 --results results.csv \
-        --queue queue.csv --log hospital1-writes.csv [--apply]
+        --queue queue.csv --log hospital1-writes.csv --sheet-csv live.csv
 
-Without --apply it plans and writes nothing. Every run prints the same counts.
+That plans against a fresh export of the tab and needs no credentials. It
+writes plan.csv, which names every cell to write with its sheet row, and
+refusals.csv. A bot with a Sheets connector then applies plan.csv itself,
+re-reading each target cell and writing only while it is still blank.
+
+    python3 sheet_write.py ... --apply
+
+That applies the plan directly and needs a sheets_client module. Use it only
+where the bot can authenticate from Python.
 
 What it guarantees, so that no rule in a prompt has to:
 
@@ -115,6 +123,29 @@ def read_csv(path):
         return list(csv.DictReader(stream))
 
 
+def live_from_csv(path):
+    """{Place ID: row} from a downloaded export of the tab, with the sheet row
+    number. The header is row 1, so the first data row is row 2. This is the
+    credential-free path: the export is public to anyone holding the link."""
+    rows = read_csv(path)
+    out = {}
+    for index, row in enumerate(rows, start=2):
+        row = dict(row)
+        row["_sheet_row"] = index
+        out[str(row.get(PLACE_ID, "")).strip()] = row
+    return out
+
+
+def save_plan(path, writes, live):
+    with open(path, "w", newline="", encoding="utf-8") as stream:
+        writer = csv.DictWriter(stream, fieldnames=["sheet_row", "Place ID", "column",
+                                                     "old value", "new value"])
+        writer.writeheader()
+        for write in writes:
+            writer.writerow({**write,
+                             "sheet_row": live[write["Place ID"]]["_sheet_row"]})
+
+
 def live_rows(service):
     """{Place ID: row} from the live tab, with the sheet row number kept."""
     from googleapiclient.discovery import build  # noqa: F401  (import check only)
@@ -157,6 +188,25 @@ def demo():
         assert "over the limit" in str(stop)
     else:
         raise AssertionError("the volume limit did not stop the plan")
+    # The credential-free path: an export gives the same rows and the sheet
+    # row number, so a bot with a connector can apply the plan itself.
+    import tempfile, os
+    with tempfile.TemporaryDirectory() as folder:
+        export = os.path.join(folder, "live.csv")
+        with open(export, "w", newline="", encoding="utf-8") as stream:
+            writer = csv.DictWriter(stream, fieldnames=["Place ID", "Who Can Park", "Cost Type"])
+            writer.writeheader()
+            writer.writerow({"Place ID": "PP-1", "Who Can Park": "", "Cost Type": "Unknown"})
+        from_csv = live_from_csv(export)
+        assert from_csv["PP-1"]["_sheet_row"] == 2
+        writes, _ = build_plan([{"Place ID": "PP-1", "Cost Type": "Paid"}],
+                               from_csv, {"PP-1"}, max_cells=10)
+        plan_path = os.path.join(folder, "plan.csv")
+        save_plan(plan_path, writes, from_csv)
+        with open(plan_path, encoding="utf-8") as stream:
+            planned = list(csv.DictReader(stream))
+        assert planned == [{"sheet_row": "2", "Place ID": "PP-1", "column": "Cost Type",
+                            "old value": "Unknown", "new value": "Paid"}], planned
     print("self-check passed")
 
 
@@ -169,6 +219,8 @@ def main(argv=None):
     parser.add_argument("--queue")
     parser.add_argument("--log")
     parser.add_argument("--max-cells", type=int, default=3000)
+    parser.add_argument("--sheet-csv", help="A fresh export of the tab. Plans with no credentials")
+    parser.add_argument("--plan-out", default="plan.csv", help="Where to write the planned cells")
     parser.add_argument("--apply", action="store_true")
     args = parser.parse_args(argv)
     if args.demo:
@@ -180,18 +232,30 @@ def main(argv=None):
 
     results = read_csv(args.results)
     queue = {str(r.get("Ref") or r.get(PLACE_ID, "")).strip() for r in read_csv(args.queue)}
-    import sheets_client  # the bot's own thin wrapper around the Sheets API
-    service = sheets_client.get_service()
-    _, live = live_rows(service)
+    if args.sheet_csv:
+        live = live_from_csv(args.sheet_csv)
+        service = None
+    else:
+        import sheets_client  # the bot's own thin wrapper around the Sheets API
+        service = sheets_client.get_service()
+        _, live = live_rows(service)
     writes, refusals = build_plan(results, live, queue, args.max_cells)
+    if args.plan_out:
+        save_plan(args.plan_out, writes, live)
+        with open(args.plan_out + ".refusals.csv", "w", encoding="utf-8") as stream:
+            stream.write("\n".join(refusals) + "\n")
 
     for refusal in refusals:
         print(refusal)
     print(f"{len(writes)} cells to write across "
           f"{len({w['Place ID'] for w in writes})} rows, {len(refusals)} refusals.")
     if not args.apply:
-        print("Planned only. Add --apply to write.")
+        print(f"Planned only. Cells to write are in {args.plan_out}. "
+              "Apply them through your connector, re-reading each cell first, "
+              "or rerun with --apply where Python can authenticate.")
         return 0
+    if service is None:
+        raise SystemExit("--apply needs a sheets_client module. Use the plan file instead.")
 
     url_by_place = {str(r.get(PLACE_ID, "")).strip(): r.get("Source URLs (primary first)",
                                                             r.get("Source URLs", ""))
