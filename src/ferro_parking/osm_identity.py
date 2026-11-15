@@ -110,8 +110,12 @@ def propose(conn, handler, categories, limit=0):
     automation = set(grok_import.load_config()["reviewers"]["automation"]) | {"OSM discovery", "OSM identity match"}
     lines, proposals, held, absent = [], [], [], []
     records = list(conn.execute(
+        # Every created record now has a sheet row, because the appended rows
+        # reached the sheet on 15 November. A row's own guards below decide
+        # what may be filled, so holding back a sheet-held record would now
+        # select nothing at all.
         "SELECT c.place_id, c.source_ref FROM created c WHERE c.active = 1 AND c.source = 'osm'"
-        " AND NOT EXISTS (SELECT 1 FROM raw r WHERE r.place_id = c.place_id) ORDER BY c.place_id"))
+        " ORDER BY c.place_id"))
     if limit:
         records = records[:limit]
     for record in records:

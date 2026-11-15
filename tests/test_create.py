@@ -381,7 +381,7 @@ def test_a_record_naming_a_place_the_sheet_already_names_is_skipped(conn):
     had already created. A sheet row that already carries that OpenStreetMap
     reference was invisible, so the same car park was created a second time."""
     headers, rows = db.current_rows(conn)
-    target = rows[0]["Place ID"]
+    target = next(row["Place ID"] for row in rows if not row["OSM ID"])
     conn.execute(
         "INSERT INTO changes (run_id, place_id, column_name, old_value, new_value,"
         " stage, applied_at) VALUES ('osm-link', ?, 'OSM ID', '', 'way/500',"
@@ -653,7 +653,7 @@ def test_redo_leaves_a_record_that_is_now_a_duplicate_deactivated(conn):
         run_id="create-1")
     create.undo_run(conn, "create-1", apply=True)
     _, rows = db.current_rows(conn)
-    target = rows[0]["Place ID"]
+    target = next(row["Place ID"] for row in rows if not row["OSM ID"])
     conn.execute(
         "INSERT INTO changes (run_id, place_id, column_name, old_value, new_value,"
         " stage, applied_at) VALUES ('osm-link', ?, 'OSM ID', '', 'way/912',"

@@ -195,8 +195,21 @@ def test_automation_uses_existing_configuration(conn):
     assert identity.propose(conn, handler([anchor(Point(0, 0))]), CATEGORIES)[0]
 
 
-def test_created_record_later_imported_is_out_of_scope(conn):
+def insert_sheet_row(conn, row):
     conn.execute("INSERT INTO raw (import_id,place_id,row_index,json,imported_at) VALUES (?,?,?,?,?)",
-                 (db.latest_import_id(conn), "PP-100000", 99,
-                  json.dumps({"Place ID": "PP-100000"}), "2026-11-11"))
-    assert identity.propose(conn, handler([anchor(Point(0, 0))]), CATEGORIES) == ([], [], [], [])
+                 (db.latest_import_id(conn), row["Place ID"], 99, json.dumps(row), "2026-11-11"))
+    conn.commit()
+
+
+def test_created_record_the_sheet_now_holds_is_in_scope(conn):
+    """The appended records reached the sheet on 15 November. Holding back a
+    sheet-held record would select nothing, so the row's own guards decide."""
+    insert_sheet_row(conn, {"Place ID": "PP-100000"})
+    assert identity.propose(conn, handler([anchor(Point(0, 0))]), CATEGORIES)[0]
+
+
+def test_a_finished_sheet_row_is_still_held(conn):
+    insert_sheet_row(conn, {"Place ID": "PP-100000", "Verification Result": "Confirmed"})
+    lines, _, held, _ = identity.propose(conn, handler([anchor(Point(0, 0))]), CATEGORIES)
+    assert lines == []
+    assert [h["reason"] for h in held] == ["finished, personally verified or unavailable row"]
