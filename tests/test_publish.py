@@ -40,12 +40,10 @@ def test_drift_blocks_every_row_before_planning(setup):
     assert report['drift'] and not report['plan']
 
 
-@pytest.mark.parametrize('change', ['finished', 'person', 'duplicate', 'missing'])
+@pytest.mark.parametrize('change', ['person', 'duplicate', 'missing'])
 def test_row_locks_and_identity_guards(setup, change):
     conn, headers, rows = setup
-    if change == 'finished':
-        rows[-1]['Verification Result'] = 'Confirmed'
-    elif change == 'person':
+    if change == 'person':
         rows[-1]['Verified By'] = 'Deshan'
     elif change == 'duplicate':
         rows.append(dict(rows[-1]))
@@ -57,6 +55,38 @@ def test_row_locks_and_identity_guards(setup, change):
     else:
         result = publish.build(conn, headers, rows)
         assert result['refused'] or result['drift']
+
+
+def test_a_finished_row_still_gains_a_blank_cell(setup):
+    """The project's per-column rule, not a row-wide refusal. 2,296 rows had a
+    Place Category filled on 10 November 2026 and the row-wide refusal held
+    2,163 of them out of the sheet for ever."""
+    conn, headers, rows = setup
+    target = next(row for row in rows if row['Place ID'] == PID)
+    target['Verification Result'] = 'Confirmed'
+    target['Verified By'] = 'Policy script'
+    report = publish.build(conn, headers, rows)
+    assert report['refused'] == []
+    assert report['plan'][0]['new'] == {'Place Category': 'Restaurant / pub / cafe'}
+
+
+def test_a_finished_row_never_loses_an_answer_it_has(setup):
+    conn, headers, rows = setup
+    target = next(row for row in rows if row['Place ID'] == PID)
+    target['Verification Result'] = 'Confirmed'
+    target['Place Category'] = 'Hotel'
+    # The sheet, the import baseline and the change's old value all read
+    # Hotel, so this is a rewrite and not a drift.
+    row_json = json.loads(conn.execute(
+        'SELECT json FROM raw WHERE place_id = ?', (PID,)).fetchone()['json'])
+    row_json.update({'Place Category': 'Hotel', 'Verification Result': 'Confirmed'})
+    conn.execute('UPDATE raw SET json = ? WHERE place_id = ?', (json.dumps(row_json), PID))
+    conn.execute("UPDATE changes SET old_value = 'Hotel' WHERE place_id = ?", (PID,))
+    conn.commit()
+    report = publish.build(conn, headers, rows)
+    assert report['drift'] == []
+    assert report['plan'] == []
+    assert report['refused'] == [f"{PID}: Place Category: the row is finished, so its 'Place Category' stays"]
 
 
 def test_pilot_selection_and_invalid_limit(setup):
@@ -179,10 +209,13 @@ def test_writer_rechecks_locks_immediately_before_mutation(setup, tmp_path, monk
     calls = fake_sheet(monkeypatch, rows, headers, out)
     original = sheets.read_cells
     def changed_lock(service, cells, headers):
+        # A named person took the row between the plan and the write. A
+        # Verification Result alone is not a lock any more: the project's rule
+        # lets a finished row gain a blank cell.
         result = original(service, cells, headers)
         for key in result:
-            if key[1] == 'Verification Result':
-                result[key] = 'Confirmed'
+            if key[1] == 'Verified By':
+                result[key] = 'Tharidu'
         return result
     monkeypatch.setattr(sheets, 'read_cells', changed_lock)
     with pytest.raises(ValueError, match='compare failed'):
@@ -226,3 +259,20 @@ def test_numeric_undo_readback_accepts_formatting_but_refuses_another_value(monk
     result = fill._apply_undo(object(), ['Place ID', column],
                               [{'place_id': PID, 'sheet_row': 2, 'old': {column: '100.00'}}], True)
     assert result == exit_code
+
+
+def test_one_column_can_be_published_on_its_own(setup):
+    """The owner approves a column, so drift and the plan both narrow to it.
+    Without this, a filtered run also carries every other applied change on
+    the same row."""
+    conn, headers, rows = setup
+    conn.execute("INSERT INTO changes(run_id,place_id,column_name,old_value,new_value,stage,applied_at)"
+                 " VALUES ('answers', ?, 'Who Can Park', '', 'Customers only', 'default', '2026-11-10')", (PID,))
+    conn.commit()
+    both = publish.build(conn, headers, rows)
+    assert both['plan'] == []
+    assert both['refused'] == [f'{PID}: consistency: Decision Reason missing or does not name the route']
+    one = publish.build(conn, headers, rows, columns=['Place Category'])
+    assert one['plan'][0]['new'] == {'Place Category': 'Restaurant / pub / cafe'}
+    with pytest.raises(ValueError):
+        publish.build(conn, headers, rows, columns=['No Such Column'])
