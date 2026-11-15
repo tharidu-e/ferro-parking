@@ -26,6 +26,38 @@ Team onboarding diagrams are in `docs/diagrams/index.html`, with an editable
 They describe the architecture and explain the research and publication delays.
 Their counts retain the 12 November snapshot date; they are not live totals.
 
+## 15 November 2026, evening: the bots write the sheet themselves
+
+The import chain is out of the loop. A bot now reads a page and writes the
+cell, through three scripts in `tools/`, and `grok-import`, `db-apply` and
+`publish` are no longer part of a research round.
+
+- `bot_self_check.py` holds every rule `grok-import` held, so the two cannot
+  disagree. It takes a fresh export as a second argument and checks each row
+  as it will read after the write.
+- `sheet_write.py` plans from an export with no credentials and names every
+  cell in `plan.csv`. It writes only a blank, Unknown or Not yet checked cell,
+  refuses identity and payment columns, refuses a Place ID outside the round's
+  queue, stops over `--max-cells`, and logs every write.
+- `sheet_undo.py` undoes one round from that log, cell by cell, skipping a
+  cell somebody changed since.
+
+hospital1 is the first round through this path. 95 places researched, 1,325
+cells written across 77 rows, 0 skipped, every target cell blank beforehand.
+Showable rose from 3,158 to 3,167 and complete from 1,129 to 1,138. Nine new
+showable places for a round that took most of an evening, which is the measure
+of how little the web publishes for this category.
+
+Seven rows hold a Tariff Type and Tariff Detail in the sheet that do not match
+each other, including PP-001964, PP-001633, PP-001737 and PP-003447. This
+round wrote none of those cells. They need a cleanup pass.
+
+Airports are covered except London City. Heathrow reads 66 showable of 97
+rows, Gatwick 12 of 16, Luton 5 of 7. Stansted's five open rows are Meet and
+Greet, Valet, JetParks, Long Stay and a pick-up zone, and our own scope rules
+exclude the first three. London City blocks us. The Southend rows sit outside
+Greater London.
+
 ## 15 November 2026, afternoon: the showable bar and the category publication
 
 The owner set the showable bar: Can Park? Yes or Conditional, a usable pin and
