@@ -201,7 +201,14 @@ Rules for the values.
 - Fill only what the page states. Everything else stays Unknown or Not
   published.
 - Take on-the-day and hourly rates. Never a pre-book price.
-- "Anyone (paid)" needs a price published on that car park's own page.
+- Never read Who Can Park from a price. A page that states a tariff says what
+  parking costs, not who may park. On 15 November four hospital rows read
+  "Anyone (paid)" from a line like "Parking costs £3 for up to four hours",
+  and a hospital car park is for patients and visitors.
+  Take Who Can Park from an access statement only: "visitor car park",
+  "customers only", "permit holders", "open to the public". Where the page
+  states a price and no access rule, Who Can Park stays Unknown and Cost Type
+  reads Paid.
 - One field per cell. Never join hours and rates in one cell.
 - A price that fits no tariff template goes in Rules Summary, word for word.
 - A blank day is not an opening time. If a page lists closed days and leaves
