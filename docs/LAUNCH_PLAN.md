@@ -85,10 +85,18 @@ Follow these steps in order. One source per round.
 ## 5. What a driver sees at launch
 
 A row is showable when Can Park? is Yes or Conditional, the place has a usable
-pin, Who Can Park is known, and the hours are known. A published price is not
-required. A row with Price Status "Not published" still helps a driver.
+pin, and Who Can Park is known. Hours and price are not required. The owner
+set this bar on 15 November 2026, and `readiness.bars` holds it.
+
+The app shows the hours and the price where we know them, and writes "hours
+not published" or "price not published" where we do not. 3,158 rows pass this
+bar today. Only 800 of them carry known hours and only 1,619 a known Cost
+Type, so a bar that asked for both would show 675 rows and hide the rest of
+the work.
+
 Every other row is hidden from drivers. Hidden is not deleted. A "No evidence"
-row stops anyone researching that place twice.
+row stops anyone researching that place twice. Complete is the stricter count:
+showable plus a known Cost Type, hours, maximum stay and tariff detail.
 
 ## 6. Airport places: what earns a row
 

@@ -26,6 +26,33 @@ Team onboarding diagrams are in `docs/diagrams/index.html`, with an editable
 They describe the architecture and explain the research and publication delays.
 Their counts retain the 12 November snapshot date; they are not live totals.
 
+## 15 November 2026, afternoon: the showable bar and the category publication
+
+The owner set the showable bar: Can Park? Yes or Conditional, a usable pin and
+a known Who Can Park. Hours and price are not required, and the app writes
+"hours not published" or "price not published" instead. `readiness.bars` holds
+it and `docs/LAUNCH_PLAN.md` section 5 states it. Showable reads 3,158 and
+complete 1,129.
+
+2,296 rows held a Place Category in the database that the sheet never received.
+Run `categories-20261110-authorised` filled them on 10 November. Three places
+in the code refused to publish them, each with a row-wide rule stricter than
+`fill.finished_column_refusal`, which is per column and lets a finished row
+gain a blank cell. `publish.build` and `fill._apply_write` now use the
+project's own two rules, and `publish` takes `--columns` so one approved column
+publishes on its own. All 2,296 cells are now in the sheet, in two runs of 133
+and 2,163, with zero drift, zero refusals and both readbacks passed. Blank
+Place Category fell from 2,420 to 124, and the 123 that remain are supermarket
+rows whose name states no store format.
+
+Two faults in the mirror were fixed the same morning. `effective_rows` counted
+every appended OpenStreetMap record twice, so the database read 15,515 rows for
+11,562 places. A stale applied change also beat the sheet on 1,231 cells. A
+change now wins only while the sheet value is one the change chain itself held.
+
+`docs/BOT_CHARTER.md` holds the rules the bots run on, one section per settled
+decision.
+
 ## 15 November 2026: the sheet becomes the store, and airports
 
 The Google Sheet tab "ALL LONDON (clean)" is now the one store, and the
@@ -93,12 +120,23 @@ before you pick the next research work.
 
 ## Readiness, two ways
 
+Measured on the 15 November sheet export, under the showable bar the owner set
+that day: Can Park? Yes or Conditional, a usable pin and a known Who Can Park.
+`docs/LAUNCH_PLAN.md` section 5 owns that bar.
+
 | Measure | Places |
 |---|---:|
-| Legacy showable | 1,649 |
-| Legacy complete | 1,117 |
+| Showable | 3,158 |
+| Complete | 1,129 |
+| Of the showable, hours known | 800 |
+| Of the showable, Cost Type known | 1,619 |
+| Of the showable, Max Stay known | 308 |
 | Evidence-supported showable | 1,038 |
 | Evidence-supported complete | 0 |
+
+The showable count rose from 1,649 because the bar no longer asks for a price,
+not because of new research. 944 of the showable rows lack hours only, 125 lack
+the Cost Type only and 1,414 lack both, so hours are the next research target.
 
 Legacy counts read the sheet's own cells, through `readiness.counts` over a
 `db-export`. Evidence-supported means the `evidence` table holds a quote for
