@@ -74,8 +74,8 @@ Follow these steps in order. One source per round.
 
 ## 4. Order of work
 
-1. Airports, by hand, from each airport's own pages. Heathrow is done. Gatwick,
-   Stansted, Luton and London City follow.
+1. Airports, by hand, from each airport's own pages. Heathrow, Gatwick,
+   Stansted and Luton are done. London City blocks us, so it waits.
 2. Council car parks, which are 406 showable of 476 already.
 3. Stations.
 4. Large-format supermarkets and shopping centres, where identity now allows a

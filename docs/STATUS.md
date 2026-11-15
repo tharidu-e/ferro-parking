@@ -1,6 +1,6 @@
 # Current work
 
-Updated 13 November 2026. Read this for priorities and remaining work only.
+Updated 15 November 2026. Read this for priorities and remaining work only.
 
 ## Next session, first actions
 
@@ -25,6 +25,47 @@ Team onboarding diagrams are in `docs/diagrams/index.html`, with an editable
 `docs/diagrams/ferro-system-design.excalidraw` and reading notes in that folder.
 They describe the architecture and explain the research and publication delays.
 Their counts retain the 12 November snapshot date; they are not live totals.
+
+## 15 November 2026: the sheet becomes the store, and airports
+
+The Google Sheet tab "ALL LONDON (clean)" is now the one store, and the
+database is a mirror rebuilt from it. `docs/LAUNCH_PLAN.md` owns the process.
+
+Written to the sheet on 15 November:
+
+- The approved publication plan: 20,671 cells across 1,193 existing rows, zero
+  drift, zero refusals, second reading passed.
+- The 3,953 places the sheet did not hold, appended from row 7609. The sheet
+  and the database now hold the same 11,560 Place IDs.
+- Identity filled by code, with no bot: 2,156 cells from OpenStreetMap tags
+  (1,145 Who Can Park, 394 Cost Type, 347 Operator, 270 Hours), 4,214 street
+  addresses, 2,800 rows renamed from "Car park (unnamed)" to "Car park,
+  <street>", and 4,301 postcodes derived from the pin. 1,088 pins had no
+  postcode close enough and stay blank.
+- Six new columns: Postcode (derived from pin), Pin to postcode distance (m),
+  Place Type, Terminal, Penalty Note and Entry Note.
+- Identity and payment columns are now protected ranges. Place Type takes only
+  its four values.
+- A new tab, "NEW PLACE CANDIDATES", receives any place a bot finds that the
+  sheet does not hold. Ferro creates the row and the Place ID.
+
+Airports. Heathrow is done by hand from its own pages: 11 rows filled and the
+Authorised Vehicle Area created as PP-012462. Gatwick, Stansted and Luton are
+done from PP's saved pages: 270 cells across 14 rows, plus the Gatwick private
+hire waiting area as PP-012463, which has no coordinate yet. London City
+blocked both PP and a direct request on 15 November, so it waits.
+
+Two recorded conflicts: Stansted's Short Stay page says pre-booking only while
+its Turn Up & Park page prices the Blue and Green zones, and Luton's taxi page
+says £7 for 10 minutes while three other pages say £9 for 12 minutes.
+
+NCP round 2 closed with little yield: 89 rows mapped to held places and all 89
+skipped as finished, so the round produced 6 fillable cells and 4 new place
+candidates. The identity work for it is
+`data/raw/ncp_round2_20261114/ncp1-identity-resolved.csv`.
+
+Next: rebuild the database from the sheet, run the yield test for the first
+category round, and start shopping centres and large-format supermarkets.
 
 ## Remaining places
 
