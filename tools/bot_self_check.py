@@ -4,6 +4,11 @@
 One file, standard library only. Copy it to the bot's computer and run:
 
     python3 bot_self_check.py results.csv
+    python3 bot_self_check.py results.csv live.csv
+
+The second form reads a fresh export of the tab as well, and checks each row
+as it will read after the write. A blank cell in the results file means "keep
+the sheet's value", so use this form whenever the export is to hand.
 
 It prints one line per problem and exits 1 when anything is wrong. Fix every
 line, run it again, and only send the file when it exits 0.
@@ -138,7 +143,9 @@ def check_row(row):
                         "Put the page's own wording in Rules Summary instead")
 
     hours = get("Hours (OpenStreetMap opening_hours format)", "")
-    if hours and hours != "Not published" and not hours_valid(hours):
+    # "Not applicable" is what a Can Park? No row must hold, so it can never
+    # be rejected as a badly formed opening-hours string.
+    if hours and hours not in ("Not published", "Not applicable") and not hours_valid(hours):
         problems.append(f'Hours "{hours}" is not a valid opening hours string')
 
     if get("Price Status", "") == "Published" and "£" not in detail and "free" not in detail.lower():
@@ -214,9 +221,8 @@ def check_row(row):
     # read and did not change writes nothing, so it carries no stamp. On
     # 15 November this rule flagged 66 hospital rows that the round left alone.
     writes_something = any(get(column, "") for column in STAMPED_COLUMNS)
-    if (get("Place ID", "") and writes_something
-            and not re.search(r"\bRoute\b", get("Decision Reason", ""))):
-        problems.append('Decision Reason must name the round, as "Route: <round>"')
+    if (get("Place ID", "") and writes_something and not get("Decision Reason", "")):
+        problems.append('Decision Reason is blank. Write the round, as "Route: <round>"')
 
     agreeing = get("Agreeing Sources", "")
     if agreeing and agreeing not in ("0", "1", "2", "3"):
@@ -248,9 +254,31 @@ def check_row(row):
     return problems
 
 
-def check_file(path):
+def merge_with_sheet(rows, sheet_path):
+    """Each result row overlaid on the sheet's own row, by Place ID.
+
+    A blank cell in a result file means "keep the sheet's value". Checking the
+    file alone reads that blank as an empty answer, which is what produced 99
+    problems on the hospital round of 15 November. The checks run on the row as
+    it will read after the write."""
+    live = {}
+    with open(sheet_path, newline="", encoding="utf-8-sig") as stream:
+        for row in csv.DictReader(stream):
+            live[str(row.get("Place ID", "")).strip()] = normalise(row)
+    out = []
+    for row in rows:
+        existing = live.get(str(row.get("Place ID", "")).strip(), {})
+        merged = dict(existing)
+        merged.update({k: v for k, v in row.items() if v})
+        out.append(merged)
+    return out
+
+
+def check_file(path, sheet_path=None):
     with open(path, newline="", encoding="utf-8-sig") as handle:
         rows = [normalise(row) for row in csv.DictReader(handle)]
+    if sheet_path:
+        rows = merge_with_sheet(rows, sheet_path)
     problems = []
     for number, row in enumerate(rows, start=2):
         name = row.get("Location Name") or row.get("Place ID") or row.get("Ref") or "?"
@@ -291,23 +319,44 @@ def demo():
                       "Max Stay (mins)": "120"})
     assert check_row({"Conflict": "Yes"})
     assert check_row({"Review Flag": "Check the tariff"})
-    assert check_row({"Place ID": "PP-1", "Cost Type": "Paid", "Decision Reason": "hospital1"})
+    assert check_row({"Place ID": "PP-1", "Cost Type": "Paid", "Decision Reason": ""})
     assert not check_row({"Place ID": "PP-1", "Cost Type": "Paid",
                           "Decision Reason": "Route: hospital1"})
     # A row the round read and did not change needs no stamp.
     assert not check_row({"Place ID": "PP-1", "Notes": "nothing published"})
     assert check_row({"Agreeing Sources": "4"})
+    assert not check_row({"Can Park? (Yes/No/Conditional)": "No",
+                          "Source Tier": "Official site - text", "Specificity": "Site-specific",
+                          "Hours (OpenStreetMap opening_hours format)": "Not applicable",
+                          "Hours Basis": "Not applicable",
+                          "Parking Control Type (Cameras / Barrier / Patrol)": "Not applicable"})
+    assert not check_row({"Place ID": "PP-1", "Cost Type": "Paid",
+                          "Decision Reason": "Route C: operator page"})
+    # The merge: a blank in the results file keeps the sheet's value.
+    import tempfile, os
+    with tempfile.TemporaryDirectory() as folder:
+        export = os.path.join(folder, "live.csv")
+        with open(export, "w", newline="", encoding="utf-8") as stream:
+            writer = csv.DictWriter(stream, fieldnames=["Place ID", "Cost Type",
+                                                        "Decision Reason"])
+            writer.writeheader()
+            writer.writerow({"Place ID": "PP-1", "Cost Type": "Free then paid",
+                             "Decision Reason": "Route B: earlier round"})
+        merged = merge_with_sheet([normalise({"Place ID": "PP-1",
+                                              "Who Can Park": "Anyone (paid)"})], export)
+        assert merged[0]["Cost Type"] == "Free then paid"
+        assert not check_row(merged[0])
     print("self-check passed")
 
 
 def main(argv):
-    if len(argv) != 2:
+    if len(argv) not in (2, 3):
         print(__doc__)
         return 2
     if argv[1] == "--demo":
         demo()
         return 0
-    rows, problems = check_file(argv[1])
+    rows, problems = check_file(argv[1], argv[2] if len(argv) == 3 else None)
     for problem in problems:
         print(problem)
     print(f"{rows} rows checked, {len(problems)} problems")
