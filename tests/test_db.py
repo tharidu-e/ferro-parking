@@ -379,3 +379,35 @@ def test_the_header_order_of_the_import_is_stored(conn):
         "SELECT header_json FROM imports").fetchone()["header_json"])
     headers, _ = read_rows(FIXTURE)
     assert stored == headers
+
+
+def test_a_sheet_value_the_database_never_wrote_wins_over_an_applied_change(conn, tmp_path):
+    """The sheet is the one store. A hand edit or a code fill that wrote a third
+    value beats the stale change, so the mirror cannot hold back the sheet."""
+    db.import_sheet_csv(conn, FIXTURE)
+    apply_change(conn, "PP-000002", "Who Can Park", "Unknown", "Unknown")
+    variant = write_variant(tmp_path, edits={"PP-000002": {"Who Can Park": "Customers only"}})
+    db.import_sheet_csv(conn, variant)
+    db.rebuild(conn)
+    _, rows = db.effective_rows(conn)
+    assert {row["Place ID"]: row["Who Can Park"] for row in rows}["PP-000002"] == "Customers only"
+    _, current = db.current_rows(conn)
+    assert {row["Place ID"]: row["Who Can Park"] for row in current}["PP-000002"] == "Customers only"
+
+
+def test_a_created_record_the_sheet_now_holds_is_not_counted_twice(conn, tmp_path):
+    db.import_sheet_csv(conn, FIXTURE)
+    conn.execute(
+        "INSERT INTO created (run_id, place_id, source, source_ref, json, active, created_at)"
+        " VALUES ('create-1', 'PP-090001', 'osm', 'node/1', ?, 1, '2026-11-15T00:00:00+00:00')",
+        (json.dumps({"Place ID": "PP-090001", "Location Name": "Appended car park"}),))
+    conn.commit()
+    _, rows = db.effective_rows(conn)
+    assert sum(1 for row in rows if row["Place ID"] == "PP-090001") == 1
+    variant = write_variant(
+        tmp_path, extra={"Place ID": "PP-090001", "Location Name": "Appended car park"})
+    db.import_sheet_csv(conn, variant)
+    _, rows = db.effective_rows(conn)
+    assert sum(1 for row in rows if row["Place ID"] == "PP-090001") == 1
+    _, current = db.current_rows(conn)
+    assert sum(1 for row in current if row["Place ID"] == "PP-090001") == 1

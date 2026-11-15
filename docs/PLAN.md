@@ -6,6 +6,9 @@ Use `python -m ferro_parking --help` and subcommand help before changing code.
 Take the first unblocked task in your track. Continue past held cases without
 asking the owner for next steps. Read only the documents that task needs.
 
+`docs/LAUNCH_PLAN.md` replaces the parts of this file that treat the database
+as the store and the bots as research helpers. Read it first.
+
 ## Goal and progress
 
 The goal remains one record for every London car park, supported parking

@@ -13,7 +13,6 @@ from ferro_parking.validation import dropdowns
     ('Hotel','Hotel'), ('Hotel / Private Car Park (operator - APCOA)','Hotel'),
     ('Gym (PureGym)','Gym / leisure centre'), ('Leisure Centre (Better/GLL)','Gym / leisure centre'),
     ('Supermarket (Co-op)','Supermarket - convenience'), ('Supermarket (Iceland)','Supermarket - convenience'),
-    ('Retail / Supermarket','Supermarket - large format'), ('Supermarket','Supermarket - large format'),
     ('Retail - Trade/DIY','Retail warehouse / DIY / trade'), ('Retail / Trade & DIY','Retail warehouse / DIY / trade'),
     ('Retail - DIY','Retail warehouse / DIY / trade'), ('DIY / Home Improvement Store','Retail warehouse / DIY / trade'),
     ('DIY / Home store','Retail warehouse / DIY / trade'), ('Retail Warehouse','Retail warehouse / DIY / trade'),
@@ -40,6 +39,19 @@ def test_explicit_type_groups_only_use_real_dropdown_values(typ,want):
     assert value==want
     assert value in dropdowns()['Place Category']
     assert confidence=='high'
+    assert reason
+
+
+@pytest.mark.parametrize('name,want,confidence',[
+    ("Sainsbury's Tooting Bec Loc Local - customer car park",'Supermarket - convenience','high'),
+    ('Tesco Acton Superstore','Supermarket - large format','high'),
+    ("Sainsbury's Nine Elms - customer car park",'Supermarket - large format','medium'),
+])
+def test_the_store_format_in_the_name_decides_the_supermarket_category(name,want,confidence):
+    """R10 reads the format from the name. Without this, 451 Local, Express and
+    Simply Food stores were proposed as large format on 15 November 2026."""
+    value,reason,got=pc.category_proposal({'Location Name':name,'Type (as captured)':'Retail / Supermarket'})
+    assert (value,got)==(want,confidence)
     assert reason
 
 

@@ -564,8 +564,23 @@ def _apply_write(service, headers, plan, undo_by_row, apply):
         if current.get((sheet_row, PLACE_ID)) != place_id:
             aborted.append((sheet_row, place_id, "Place ID changed; rebuild plan"))
             continue
-        if current.get((sheet_row, VERIFICATION_RESULT), "") or current.get((sheet_row, VERIFIED_BY), "") not in ("", "PP (validation)"):
-            aborted.append((sheet_row, place_id, "finished or personally verified row"))
+        # The project's own two rules, as `db-apply` and `publish` use them.
+        # A row-wide refusal here aborted 2,163 of 2,296 blank Place Category
+        # cells on 15 November 2026, although every one of those cells was
+        # empty and no answer was at risk.
+        live_row = {PLACE_ID: place_id,
+                    VERIFIED_BY: current.get((sheet_row, VERIFIED_BY), ""),
+                    VERIFICATION_RESULT: current.get((sheet_row, VERIFICATION_RESULT), "")}
+        live_row.update({col: current.get((sheet_row, col), "") for col in entry["new"]})
+        locked = lock_refusal(live_row)
+        if locked:
+            aborted.append((sheet_row, place_id, locked))
+            continue
+        held = [f"{col}: {why}" for col, why in
+                ((col, finished_column_refusal(live_row, col, value))
+                 for col, value in entry["new"].items()) if why]
+        if held:
+            aborted.append((sheet_row, place_id, "; ".join(held)))
             continue
         undo_entry = undo_by_row.get(sheet_row)
         if undo_entry is None or undo_entry["place_id"] != place_id:
@@ -578,10 +593,6 @@ def _apply_write(service, headers, plan, undo_by_row, apply):
                 aborted.append((sheet_row, place_id, f"{col} changed since the plan was made "
                                                        f"(sheet has {live!r}, expected {expected!r})"))
                 break
-        else:
-            verification = current.get((sheet_row, VERIFICATION_RESULT), "")
-            if verification not in ("", undo_entry["old"].get(VERIFICATION_RESULT, "")):
-                aborted.append((sheet_row, place_id, "Verification Result is no longer blank"))
 
     aborted_rows = {a[0] for a in aborted}
     to_write = [e for e in plan if e["sheet_row"] not in aborted_rows]

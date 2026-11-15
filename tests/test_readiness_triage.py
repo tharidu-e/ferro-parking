@@ -16,9 +16,16 @@ def ready(**changes):
             'Borough':'Hackney','Postcode':'E8 1AA',**changes}
 
 
-@pytest.mark.parametrize('column,value',[('Latitude','nan'),('Longitude','inf'),('Latitude','91'),('Longitude','181'),('Latitude',''),('Longitude','no pin'),('Who Can Park','Unknown'),('Cost Type','Not published'),(CAN_PARK,'No'),(CAN_PARK,'')])
+@pytest.mark.parametrize('column,value',[('Latitude','nan'),('Longitude','inf'),('Latitude','91'),('Longitude','181'),('Latitude',''),('Longitude','no pin'),('Who Can Park','Unknown'),(CAN_PARK,'No'),(CAN_PARK,'')])
 def test_showable_requires_answers_and_usable_numeric_pin(column,value):
     assert readiness.bars(ready(**{column:value}))==(False,False)
+
+
+@pytest.mark.parametrize('value',['Unknown','Not published',''])
+def test_an_unknown_price_still_shows_the_place(value):
+    """The owner's bar of 15 November 2026. The app says "price not published"
+    on such a place, and the row is not complete until the price is known."""
+    assert readiness.bars(ready(**{'Cost Type':value}))==(True,False)
 
 
 def test_readiness_time_exception_requires_documented_source():

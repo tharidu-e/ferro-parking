@@ -1,0 +1,225 @@
+#!/usr/bin/env python3
+"""Check a bot results file before it reaches the sheet.
+
+One file, standard library only. Copy it to the bot's computer and run:
+
+    python3 bot_self_check.py results.csv
+
+It prints one line per problem and exits 1 when anything is wrong. Fix every
+line, run it again, and only send the file when it exits 0.
+
+    python3 bot_self_check.py --demo     runs the file's own checks
+
+Column names may be the short bot names ("Can Park?", "Proposed Result") or the
+full sheet names ("Can Park? (Yes/No/Conditional)", "Verification Result").
+"""
+import csv
+import re
+import sys
+
+ALIASES = {
+    "Can Park?": "Can Park? (Yes/No/Conditional)",
+    "Proposed Result": "Verification Result",
+    "Hours": "Hours (OpenStreetMap opening_hours format)",
+    "Parking Control Type": "Parking Control Type (Cameras / Barrier / Patrol)",
+    "PCN amount (£)": "PCN (Penalty Charge Notice) amount (£)",
+    "Evidence Detail": "Evidence Detail (what the source shows)",
+    "Source URLs": "Source URLs (primary first)",
+    "Researched Date": "Verified Date",
+}
+
+DROPDOWNS = {
+    "Can Park? (Yes/No/Conditional)": ["Conditional", "No", "Unknown", "Yes"],
+    "Who Can Park": ["Anyone", "Anyone (paid)", "Customers only", "Guests only",
+                     "Not applicable", "Patients and visitors", "Permit holders", "Unknown"],
+    "Cost Type": ["Free", "Free then paid", "Not applicable", "Paid", "Unknown"],
+    "Tariff Type": ["Banded by stay length", "Flat rate per 24 hours", "Flat rate per entry",
+                    "Flat rate per night", "Free (time limit not published)",
+                    "Free period, then hourly", "Free with time limit", "Hourly rate",
+                    "Not applicable", "Not published"],
+    "Price Status": ["Published", "Not published", "Chain policy (not store-specific)",
+                     "Not applicable"],
+    "Parking Control Type (Cameras / Barrier / Patrol)": [
+        "ANPR (Automatic Number Plate Recognition) camera", "Barrier", "Not applicable",
+        "Not published", "Patrol", "Pay and display"],
+    "Hours Basis": ["Car park hours", "Not applicable", "Not published", "Site hours",
+                    "Store hours"],
+    "Verification Result": ["Confirmed", "Confirmed, details not published",
+                            "Needs on-site check", "No evidence"],
+    "Specificity": ["Site-specific", "Chain-wide", "Area only"],
+    "Evidence Level": ["Verified", "Chain policy", "Presumed"],
+    "Location Status": ["Open", "Temporarily closed", "Closed", "Unknown"],
+    "Place Type": ["Car park", "Drop-off zone", "Pick-up area", "Holding area"],
+    "Rules Stated": ["Yes", "No"],
+    "Prices Stated": ["Yes", "No"],
+    "Conflict": ["Yes", "No"],
+    "Evidence Age": ["Under 12 months", "1-2 years", "Older or undated"],
+}
+
+MONEY = r"£\d+\.\d{2}"
+BAND = rf"(\d+)-(\d+) (hrs|mins) ({MONEY})"
+TARIFF_PATTERNS = {
+    "Free (time limit not published)": r"Free",
+    "Free with time limit": r"Free for up to \d+ (?:hrs|mins)",
+    "Free period, then hourly": rf"Free for \d+ mins, then {MONEY} per hour",
+    "Hourly rate": rf"{MONEY} per hour",
+    "Flat rate per 24 hours": rf"{MONEY} per 24 hours",
+    "Flat rate per night": rf"{MONEY} per night",
+    "Flat rate per entry": rf"{MONEY} per entry",
+    "Banded by stay length": rf"{BAND}(?:; {BAND})*",
+    "Not published": r"Not published",
+    "Not applicable": r"Not applicable",
+}
+
+DAY = r"(?:Mo|Tu|We|Th|Fr|Sa|Su|PH|SH)"
+DAYS = rf"{DAY}(?:-{DAY})?(?:,{DAY}(?:-{DAY})?)*"
+TIME = r"(?:[01]\d|2[0-3]):[0-5]\d|24:00|sunrise|sunset"
+SPAN = rf"(?:{TIME})-(?:{TIME})"
+RULE = rf"(?:{DAYS} )?(?:{SPAN}(?:,{SPAN})*|off|closed)"
+HOURS = rf"(?:24/7|{RULE}(?:; {RULE})*)"
+
+
+def tariff_valid(kind, detail):
+    """True when the detail matches its type's template, bands included."""
+    if not re.fullmatch(TARIFF_PATTERNS.get(kind, r"(?!)"), detail):
+        return False
+    if kind == "Banded by stay length":
+        found = re.findall(r"(\d+)-(\d+) (hrs|mins)", detail)
+        if len({unit for _, _, unit in found}) > 1:
+            return False
+        bands = [(int(a), int(b)) for a, b, _ in found]
+        return (all(a < b for a, b in bands)
+                and all(bands[i][1] == bands[i + 1][0] for i in range(len(bands) - 1)))
+    return True
+
+
+def hours_valid(text):
+    return bool(re.fullmatch(HOURS, text))
+
+
+def normalise(row):
+    out = {}
+    for key, value in row.items():
+        out[ALIASES.get((key or "").strip(), (key or "").strip())] = (value or "").strip()
+    return out
+
+
+def check_row(row):
+    """Return a list of problems with one normalised row."""
+    problems = []
+    get = row.get
+
+    for column, allowed in DROPDOWNS.items():
+        value = get(column, "")
+        if value and value not in allowed:
+            problems.append(f'{column} is "{value}", which is not an allowed value')
+
+    kind, detail = get("Tariff Type", ""), get("Tariff Detail", "")
+    if kind and detail and not tariff_valid(kind, detail):
+        problems.append(f'Tariff Detail "{detail}" does not match Tariff Type "{kind}". '
+                        "Put the page's own wording in Rules Summary instead")
+
+    hours = get("Hours (OpenStreetMap opening_hours format)", "")
+    if hours and hours != "Not published" and not hours_valid(hours):
+        problems.append(f'Hours "{hours}" is not a valid opening hours string')
+
+    if get("Price Status", "") == "Published" and "£" not in detail and "free" not in detail.lower():
+        problems.append('Price Status is "Published" but Tariff Detail holds no amount')
+
+    cost = get("Cost Type", "")
+    if cost == "Free" and kind and not kind.startswith("Free"):
+        problems.append(f'Cost Type is "Free" but Tariff Type is "{kind}"')
+    if cost == "Free then paid" and kind and kind not in ("Free period, then hourly",
+                                                          "Banded by stay length"):
+        problems.append(f'Cost Type is "Free then paid" but Tariff Type is "{kind}"')
+
+    if get("Source Tier", "") == "None found":
+        for column, want in (("Can Park? (Yes/No/Conditional)", "Unknown"),
+                             ("Evidence Type", "No info found"),
+                             ("Verification Result", "No evidence")):
+            if get(column, "") != want:
+                problems.append(f'Source Tier is "None found" but {column} is '
+                                f'"{get(column, "")}", expected "{want}"')
+    if get("Verification Result", "") == "No evidence" and get("Source Tier", "") != "None found":
+        problems.append('Verification Result is "No evidence" but Source Tier is not "None found"')
+
+    if get("Who Can Park", "") == "Anyone (paid)":
+        pages_price = "£" in detail or "£" in get("Rules Summary", "")
+        if not pages_price:
+            problems.append('Who Can Park is "Anyone (paid)" but no price from that page '
+                            "is recorded. Use Unknown instead")
+
+    for column, value in row.items():
+        if "–" in value or "—" in value:
+            problems.append(f"{column} holds a dash character that the sheet refuses. "
+                            "Use a plain hyphen")
+
+    evidence = get("Evidence Detail (what the source shows)", "")
+    if "£" in evidence and re.search(r"\d{2}:\d{2}", evidence):
+        problems.append("Evidence Detail holds a price and an opening time together. "
+                        "One field for each evidence cell")
+
+    # "Not published", "Not applicable" and "No limit" are the sheet's own words
+    # for a number nobody published.
+    words = ("Not published", "Not applicable", "No limit")
+    max_stay = get("Max Stay (mins)", "")
+    if max_stay and max_stay not in words and not re.fullmatch(r"\d+", max_stay):
+        problems.append(f'Max Stay (mins) is "{max_stay}", which is neither a whole '
+                        "number of minutes nor one of: " + ", ".join(words))
+
+    pcn = get("PCN (Penalty Charge Notice) amount (£)", "")
+    if pcn and pcn not in words and not re.fullmatch(r"\d+(\.\d{1,2})?", pcn):
+        problems.append(f'PCN amount is "{pcn}", which is a number without the £ sign, '
+                        "or one of: " + ", ".join(words))
+
+    return problems
+
+
+def check_file(path):
+    with open(path, newline="", encoding="utf-8-sig") as handle:
+        rows = [normalise(row) for row in csv.DictReader(handle)]
+    problems = []
+    for number, row in enumerate(rows, start=2):
+        name = row.get("Location Name") or row.get("Place ID") or row.get("Ref") or "?"
+        for problem in check_row(row):
+            problems.append(f"row {number} ({name}): {problem}")
+    return len(rows), problems
+
+
+def demo():
+    """The file's own checks. Run with --demo."""
+    assert tariff_valid("Banded by stay length", "0-29 mins £8.50; 29-44 mins £12.50")
+    assert not tariff_valid("Banded by stay length", "0-29 mins £8.50; 30-44 mins £12.50")
+    assert not tariff_valid("Banded by stay length", "0-1 hrs £2.00; 1-2 mins £3.00")
+    assert tariff_valid("Flat rate per entry", "£7.00 per entry")
+    assert not tariff_valid("Hourly rate", "£2 per hour")
+    assert hours_valid("Mo-Fr 07:00-19:00; Sa,Su off")
+    assert hours_valid("24/7")
+    assert not hours_valid("Monday 7am to 7pm")
+    assert check_row({"Price Status": "Published", "Tariff Detail": ""})
+    assert check_row({"Who Can Park": "Anyone (paid)", "Tariff Detail": "", "Rules Summary": ""})
+    assert not check_row({"Who Can Park": "Anyone (paid)", "Tariff Detail": "£3.00 per hour",
+                          "Tariff Type": "Hourly rate", "Price Status": "Published"})
+    assert check_row({"Location Name": "A – B"})
+    assert not check_row({"Max Stay (mins)": "Not published"})
+    assert check_row({"Max Stay (mins)": "about an hour"})
+    assert check_row({"Can Park? (Yes/No/Conditional)": "Maybe"})
+    print("self-check passed")
+
+
+def main(argv):
+    if len(argv) != 2:
+        print(__doc__)
+        return 2
+    if argv[1] == "--demo":
+        demo()
+        return 0
+    rows, problems = check_file(argv[1])
+    for problem in problems:
+        print(problem)
+    print(f"{rows} rows checked, {len(problems)} problems")
+    return 1 if problems else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

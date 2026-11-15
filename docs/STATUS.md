@@ -1,6 +1,23 @@
 # Current work
 
-Updated 12 November 2026. Read this for priorities and remaining work only.
+Updated 15 November 2026. Read this for priorities and remaining work only.
+
+## Next session, first actions
+
+Read `docs/LAUNCH_PLAN.md` first. It owns the process agreed on 14 and 15
+November: the sheet is the one store, the bots write parking answers only,
+and airports come first.
+
+1. Read this file, then `docs/PLAN.md`. Nothing else is needed to start.
+2. Ask the owner whether PP has sent the NCP v2 folder. If it has, check it
+   the way the NCP section below describes, then run `discover`.
+3. If v2 has not arrived, do the identity work instead. Run `osm-identity`
+   over the 675 blank rows in the large-format supermarket, shopping centre,
+   hospital and hotel categories, because every one of them has no Brand and
+   no source can be chosen without one.
+4. The publication plan from 13 November is still waiting for the owner's go.
+   It is `data/runs/2026-11-13_40/publish/`, 1,193 rows, zero drift.
+5. Do not start a second operator until NCP round 1 is accepted.
 Counts describe the local database, not a fresh Google Sheet export.
 Historical documents remain available in Git history. Run evidence stays under `data/runs/`.
 
@@ -9,14 +26,85 @@ Team onboarding diagrams are in `docs/diagrams/index.html`, with an editable
 They describe the architecture and explain the research and publication delays.
 Their counts retain the 12 November snapshot date; they are not live totals.
 
+## 15 November 2026, afternoon: the showable bar and the category publication
+
+The owner set the showable bar: Can Park? Yes or Conditional, a usable pin and
+a known Who Can Park. Hours and price are not required, and the app writes
+"hours not published" or "price not published" instead. `readiness.bars` holds
+it and `docs/LAUNCH_PLAN.md` section 5 states it. Showable reads 3,158 and
+complete 1,129.
+
+2,296 rows held a Place Category in the database that the sheet never received.
+Run `categories-20261110-authorised` filled them on 10 November. Three places
+in the code refused to publish them, each with a row-wide rule stricter than
+`fill.finished_column_refusal`, which is per column and lets a finished row
+gain a blank cell. `publish.build` and `fill._apply_write` now use the
+project's own two rules, and `publish` takes `--columns` so one approved column
+publishes on its own. All 2,296 cells are now in the sheet, in two runs of 133
+and 2,163, with zero drift, zero refusals and both readbacks passed. Blank
+Place Category fell from 2,420 to 124, and the 123 that remain are supermarket
+rows whose name states no store format.
+
+Two faults in the mirror were fixed the same morning. `effective_rows` counted
+every appended OpenStreetMap record twice, so the database read 15,515 rows for
+11,562 places. A stale applied change also beat the sheet on 1,231 cells. A
+change now wins only while the sheet value is one the change chain itself held.
+
+`docs/BOT_CHARTER.md` holds the rules the bots run on, one section per settled
+decision.
+
+## 15 November 2026: the sheet becomes the store, and airports
+
+The Google Sheet tab "ALL LONDON (clean)" is now the one store, and the
+database is a mirror rebuilt from it. `docs/LAUNCH_PLAN.md` owns the process.
+
+Written to the sheet on 15 November:
+
+- The approved publication plan: 20,671 cells across 1,193 existing rows, zero
+  drift, zero refusals, second reading passed.
+- The 3,953 places the sheet did not hold, appended from row 7609. The sheet
+  and the database now hold the same 11,560 Place IDs.
+- Identity filled by code, with no bot: 2,156 cells from OpenStreetMap tags
+  (1,145 Who Can Park, 394 Cost Type, 347 Operator, 270 Hours), 4,214 street
+  addresses, 2,800 rows renamed from "Car park (unnamed)" to "Car park,
+  <street>", and 4,301 postcodes derived from the pin. 1,088 pins had no
+  postcode close enough and stay blank.
+- Six new columns: Postcode (derived from pin), Pin to postcode distance (m),
+  Place Type, Terminal, Penalty Note and Entry Note.
+- Identity and payment columns are now protected ranges. Place Type takes only
+  its four values.
+- A new tab, "NEW PLACE CANDIDATES", receives any place a bot finds that the
+  sheet does not hold. Ferro creates the row and the Place ID.
+
+Airports. Heathrow is done by hand from its own pages: 11 rows filled and the
+Authorised Vehicle Area created as PP-012462. Gatwick, Stansted and Luton are
+done from PP's saved pages: 270 cells across 14 rows, plus the Gatwick private
+hire waiting area as PP-012463, which has no coordinate yet. London City
+blocked both PP and a direct request on 15 November, so it waits.
+
+Two recorded conflicts: Stansted's Short Stay page says pre-booking only while
+its Turn Up & Park page prices the Blue and Green zones, and Luton's taxi page
+says £7 for 10 minutes while three other pages say £9 for 12 minutes.
+
+NCP round 2 closed with little yield: 89 rows mapped to held places and all 89
+skipped as finished, so the round produced 6 fillable cells and 4 new place
+candidates. The identity work for it is
+`data/raw/ncp_round2_20261114/ncp1-identity-resolved.csv`.
+
+Next: rebuild the database from the sheet, run the yield test for the first
+category round, and start shopping centres and large-format supermarkets.
+
 ## Remaining places
 
 | Measure | Places |
 |---|---:|
 | Total records | 11,560 |
-| Blank Verification Result | 6,192 |
-| Needs on-site check | 1,176 |
+| Blank Verification Result | 2,396 |
+| Needs on-site check | 1,430 |
 | Active OSM-created records | 3,951 |
+
+The blank count fell from 6,192 and the on-site count rose from 1,176 on
+13 November, because batches 9 to 26 closed the rest of the queue.
 
 The latest saved route is `route-20261112T211421Z`.
 Its 5,437 routed rows comprise 4,037 Grok, 862 no_evidence, 237 default,
@@ -27,15 +115,28 @@ rows. The station count fell
 from 113, because 56 station pages state that the station has no parking.
 A filled verification result does not prove that every parking detail is known.
 For current counts, run the read-only example in README.md. Saved routing can lag behind data changes.
+That saved route is stale after the 13 November applies. Run `route` again
+before you pick the next research work.
 
 ## Readiness, two ways
 
+Measured on the 15 November sheet export, under the showable bar the owner set
+that day: Can Park? Yes or Conditional, a usable pin and a known Who Can Park.
+`docs/LAUNCH_PLAN.md` section 5 owns that bar.
+
 | Measure | Places |
 |---|---:|
-| Legacy showable | 1,606 |
-| Legacy complete | 1,098 |
+| Showable | 3,158 |
+| Complete | 1,129 |
+| Of the showable, hours known | 800 |
+| Of the showable, Cost Type known | 1,619 |
+| Of the showable, Max Stay known | 308 |
 | Evidence-supported showable | 1,038 |
 | Evidence-supported complete | 0 |
+
+The showable count rose from 1,649 because the bar no longer asks for a price,
+not because of new research. 944 of the showable rows lack hours only, 125 lack
+the Cost Type only and 1,414 lack both, so hours are the next research target.
 
 Legacy counts read the sheet's own cells, through `readiness.counts` over a
 `db-export`. Evidence-supported means the `evidence` table holds a quote for
@@ -80,6 +181,304 @@ complete for now from driver information complete, and name categories not yet
 checked. No category review counts have been refreshed by this documentation edit.
 Include five reviewed examples. Partial supported answers
 count as progress; they do not count as showable until that bar is met.
+
+## Category coverage, 13 November 2026
+
+The owner asked how we make sure that we cover every parking place, category by
+category: take all the Tesco stores in London, collect their parking
+information, exclude the places we already hold, then repeat for other chains
+and categories. The shape of that plan is right. Two parts of it already exist
+in the code, and one part is a measured dead end.
+
+What exists. `discover --source generic` fetches a source list, filters it to
+London, deduplicates it against the database and drafts the new places. Use
+`--boroughs-from` once to build the borough polygons, then every later run tests
+London membership offline. Do not build a second source register.
+`policy-fill` is rule R10, which applies a chain's published rule to a branch.
+R10 counts a large format (Tesco Superstore, Tesco Extra, Sainsbury's
+superstore, Lidl, Aldi, Asda, Morrisons) as having a car park, and a convenience
+format only if OpenStreetMap maps a car park within 40 m of the branch.
+
+What does not work. `www.tesco.com` and `stores.sainsburys.co.uk` are already
+in `fetch_fill.SKIPPED_HOSTS`, with `iceland.co.uk`, `primark.com`,
+`tkmaxx.com`, `screwfix.com`, `mcdonalds.com`, `kfc.co.uk`, `nandos.co.uk` and
+others. Those chain sites were measured and they do not state parking for one
+named store. Asda and IKEA behave the same way: IKEA publishes one chain-wide
+free parking line, and the Asda rows are not showable because Cost Type reads
+Unknown. So asking the bot to read Tesco's own website store by store will
+return nothing new.
+
+Where the real gap is. The gap is the parking detail on places we hold. This
+section once said that chain place coverage is already good. That was not
+measured, and the 13 November section below withdraws it. The database holds 173 Tesco, 175
+Sainsbury's, 93 Co-op, 66 Lidl, 62 M&S, 57 Iceland and 43 Asda records.
+
+Every category, measured with the project's own readiness bar over a fresh
+`db-export` on 13 November. Showable means Can Park? Yes or Conditional, a
+usable pin, a known Who Can Park and a known Cost Type. Complete adds hours,
+maximum stay and tariff detail.
+
+| Category | Records | Showable | Complete | Blank result | No evidence | On-site |
+|---|---:|---:|---:|---:|---:|---:|
+| Private / operator car park | 4,681 | 409 | 232 | 929 | 2,912 | 317 |
+| Supermarket - convenience | 1,051 | 36 | 28 | 20 | 57 | 280 |
+| Supermarket - large format | 954 | 91 | 77 | 447 | 4 | 123 |
+| Station | 841 | 130 | 117 | 94 | 149 | 73 |
+| Petrol station | 610 | 4 | 2 | 10 | 6 | 121 |
+| Fast food / drive-thru | 570 | 7 | 4 | 117 | 0 | 41 |
+| Hotel | 558 | 167 | 141 | 118 | 0 | 76 |
+| Gym / leisure centre | 488 | 98 | 38 | 250 | 2 | 85 |
+| Council car park | 476 | 406 | 338 | 6 | 17 | 27 |
+| Other | 446 | 81 | 40 | 148 | 21 | 89 |
+| Retail warehouse / DIY / trade | 325 | 16 | 14 | 82 | 69 | 109 |
+| Hospital / health centre | 236 | 129 | 29 | 46 | 2 | 44 |
+| No category | 124 | 13 | 7 | 60 | 25 | 0 |
+| Shopping centre | 121 | 42 | 36 | 64 | 7 | 14 |
+| School / college | 30 | 6 | 1 | 2 | 0 | 5 |
+| Restaurant / pub / cafe | 24 | 4 | 4 | 0 | 3 | 14 |
+| Council park / open space | 22 | 13 | 12 | 0 | 0 | 12 |
+| Park / open space | 2 | 0 | 0 | 0 | 0 | 0 |
+| Business park / office | 1 | 0 | 0 | 0 | 0 | 0 |
+| Total | 11,560 | 1,652 | 1,120 | 2,393 | 3,274 | 1,430 |
+
+What the table says. Council car parks are done at 406 showable of 476, and
+council parks and open spaces are the next best. Private and operator car parks
+are exhausted, because 2,912 of them already read No evidence. Petrol stations
+and fast food sites score almost zero, and their chain sites are measured dead,
+so they are poor targets and low value to a driver. Restaurants, pubs and cafes
+are only 24 records, so that category is too small to plan around. The big
+unworked categories are large-format supermarkets, gyms and hotels.
+
+The blocker on the three big targets is identity, not research. Every one of the
+447 blank large-format supermarket rows has no Brand, and so do all 64 blank
+shopping centre rows, all 46 blank hospital rows and all 118 blank hotel rows.
+Without a Brand we cannot pick the source that states the site. `osm-identity`
+already proposes Brand, Place Category and Notes from the OpenStreetMap
+geometry, and `data/raw/greater-london-latest.osm.pbf` is on disk, so that pass
+is read-only and needs no new code.
+
+Gyms are the one target with a reader already built. Of their 250 blank rows,
+37 are Better, 15 are PureGym and 14 are The Gym Group, and `fetch-fill` has a
+registered reader for each of those three hosts. A dry run on those 66 rows
+costs nothing and needs no new code.
+
+An OpenStreetMap fee pass is not the unlock. The London extract holds 17,988
+`amenity=parking` objects, but only 1,824 carry a `fee` tag and only 115 carry
+`maxstay`. Those tags cannot fill 954 supermarket records.
+
+Recommended order:
+
+1. Run `osm-identity` over the 675 blank rows in the four branded categories,
+   to get a Brand on large-format supermarkets, shopping centres, hospitals and
+   hotels. Read-only, no new code.
+2. Run `fetch-fill` as a dry run for `better.org.uk`, `puregym.com` and
+   `thegymgroup.com` over the 66 branded gym rows.
+3. Route again, then take shopping centres as the first bot batch. There are
+   only 64 blank rows, centre pages publish tariffs, and batch 6 and batch 7
+   proved the bot reads them well.
+4. Then take large-format supermarkets with the brands now known, and decide
+   the source first. The chain websites are dead, so this batch needs a source
+   decision from the owner, not another pass over the same pages.
+
+## How complete is each category, 13 November 2026
+
+The owner asked the right question: the category counts are a sample, not the
+whole of London. Our 11,560 records come from the sheet's own history plus the
+records created from OpenStreetMap. Nothing in the project has ever held an
+authoritative list of the places that exist, so we cannot state coverage as a
+percentage. The earlier line in this document that said chain place coverage
+"is already good" was not supported by a measurement. Treat it as withdrawn.
+
+OpenStreetMap is not a denominator either. The London extract was measured on
+13 November with `data/raw/greater-london-latest.osm.pbf`.
+
+| Brand in OpenStreetMap | London stores | With a mapped car park within 60 m | Records we hold |
+|---|---:|---:|---:|
+| Tesco | 511 | 128 | 173 |
+| Sainsbury's | 408 | 88 | 175 |
+| Co-op | 238 | 61 | 93 |
+| Lidl | 121 | 50 | 66 |
+| Marks and Spencer | 176 | 36 | 62 |
+| Waitrose | 102 | 32 | - |
+| Morrisons | 68 | 24 | - |
+| Asda | 68 | 20 | 43 |
+| Aldi | 61 | 23 | - |
+
+Read the Tesco row carefully. OpenStreetMap maps 511 Tesco stores in London and
+a car park beside only 128 of them, yet we hold 173 Tesco records. Both numbers
+are wrong in opposite directions: OpenStreetMap misses stores, and it misses
+far more car parks, because almost every Tesco Extra and Superstore has one. So
+OpenStreetMap can find places, but it cannot tell us how many we are missing.
+
+The same measurement by category, for every place type that can have a car park:
+
+| Place type in OpenStreetMap | London objects | With a mapped car park within 60 m |
+|---|---:|---:|
+| Restaurant, pub, cafe, bar | 19,975 | 3,482 |
+| Fast food | 6,192 | 1,147 |
+| Convenience shop | 5,358 | 1,040 |
+| Gym or sports centre | 1,823 | 400 |
+| Retail warehouse, DIY, trade | 1,478 | 296 |
+| Hotel or motel | 1,473 | 325 |
+| Supermarket | 1,269 | 355 |
+| Hospital or clinic | 685 | 183 |
+| Petrol station | 489 | 99 |
+| Shopping mall | 297 | 88 |
+
+### The method that does give a denominator
+
+The owner's Tesco plan is the right method, with one correction. A chain's own
+store list and a chain's parking statement are two different uses of the same
+website. `fetch_fill.SKIPPED_HOSTS` holds `www.tesco.com` because the site does
+not state parking for one named store. That does not rule out the store list.
+A store list gives the denominator, and the parking answer then comes from a
+different source.
+
+Reachability was measured on 13 November, one request per host:
+
+| Chain | robots.txt | Store list |
+|---|---|---|
+| Lidl | 200 | `https://www.lidl.co.uk/s/en-GB/store-finder/sitemap.xml`, 1,150 URLs for the whole country |
+| Morrisons | 200 | Sitemap reachable, store pages not yet counted |
+| Tesco | 403 | Blocked |
+| Aldi | 403 | Blocked |
+
+So the plan works brand by brand, and it will work for some brands and not
+others. Where a chain blocks us, the denominator stays unknown, and we must say
+unknown rather than claim completeness.
+
+### Proposed coverage register
+
+Build one table, brand by brand and category by category, with five columns: the
+list source, the national list count, the London count after the borough filter,
+the records we already hold, and the gap. `discover --source generic` already
+fetches a list, filters it to London, deduplicates it against the database and
+drafts the new places, so this needs no new module. Run it once per brand with
+the store list as `--input`, and the run's own output is the coverage row.
+
+Two limits to state in that register. For categories with no chain, which are
+independent restaurants, pubs and private car parks, no authoritative list
+exists, so coverage stays unknown for them permanently. Second, a store is not a
+parking place: a Tesco Express with no car park must not become a record, so the
+London filter needs the R10 format test, which counts a large format as having a
+car park and a convenience format only when a car park is mapped within 40 m.
+
+Driver value should pick the order, not list size. 19,975 restaurants is the
+largest category in OpenStreetMap and close to the least useful, because a
+driver does not search for restaurant parking. Supermarkets, shopping centres,
+hospitals and council car parks are what a driver needs.
+
+## The finding method, agreed 13 November 2026
+
+This is how Ferro covers a category. It was agreed with the owner on
+13 November and it replaces any plan that treats the bot as a search engine.
+
+The principle. A place earns a record only when a named source states that it
+exists. The bot reaches and reads. Ferro decides, deduplicates and writes.
+The bot is never the authority on what exists, because a find with no page
+behind it cannot be checked.
+
+Scope, decided by the owner on 13 November.
+
+- A place with no parking space is out of scope.
+- A private, residents-only or permit-only space is out of scope, because no
+  Ferro driver can enter it.
+- On-street and kerbside bays are out of scope for this database. The owner
+  collects those separately.
+- A place we examined and found no parking at still earns a record, so that
+  nobody researches it twice. Coverage itself is a count in a register, never
+  a row for a place nobody checked.
+
+The six steps, per source.
+
+1. Choose one named source: an operator's own site list, a council
+   inventory, or a chain's store list. One source per round.
+2. The bot opens that list and every site page under it. It returns the
+   places file, the parking answers, the raw page data, a page log and a
+   report. It does not deduplicate against our database, because a duplicate
+   costs one review while a dropped site never arrives.
+3. PP Checker reads the sources again and returns OK, FIX or CANNOT VERIFY
+   per cell.
+4. Ferro runs `discover --source generic` over the places file. It filters to
+   London by borough polygon, deduplicates by coordinates and name, and
+   drafts the new places. A person reviews the drafts.
+5. `db-create` creates the accepted places with identity only and never a
+   parking answer, and assigns each a Place ID. Ferro maps the bot's `Ref`
+   values to those Place IDs and runs `grok-import` over the answers.
+6. Accepted rows reach the database through `db-apply`, with an undo saved.
+   The source's London count goes into the coverage register against what we
+   hold, so the gap becomes a number.
+
+Who fetches what. Send the bot only where the site blocks us. Our own plain
+requests reached Lidl and Morrisons on 13 November, so those are parsed here
+with no bot and no transcription risk. NCP, Tesco, Aldi and the seven
+councils returning 403 need the bot's browser.
+
+Never ask the bot to type a field out. It copies the page's structured data
+or its text into a raw file, and Ferro parses the fields here with code. See
+the NCP section for why this rule exists.
+
+## NCP round 1, 13 November 2026
+
+The first operator list this project has ever taken. Files are in
+`data/raw/ncp_round1_20261113/`.
+
+Round 1 returned 120 London car parks. NCP's finder page carries no full
+list, so PP used NCP's own sitemap, which lists 346 car parks, and picked 124
+by reading their names. 120 have a Greater London address.
+
+Ferro checked all 120 rows. Every mechanical check passes. Every `Ref` is
+unique and joins to a `url` in the places file in both directions, every
+dropdown value is allowed, every Tariff Detail matches its template with
+closed, ordered and touching bands, no cell holds an en dash or an em dash,
+and every opening-hours string parses. The six priced rows were compared with
+the raw tariff text and their prices are correct.
+
+Round 1 was not imported. Seven corrections are with PP as round 2.
+
+- 69 of the 120 postcodes are incomplete, for example `WC2 N  4B` where the
+  real postcode is WC2N 4BJ. The owner opened PP's saved page source and
+  found that string in NCP's own HTML, so NCP publishes the broken value.
+  About 19 pages in 45 carry only that header address. The rest also carry
+  structured fields with a two-part postcode, for example `E1 ` and `7RA`,
+  which rebuilds cleanly. Round 2 takes the postcode from those fields.
+- No row carries a coordinate, because round 1 read the rendered text, where
+  a map widget shows no numbers. The page source carries a `schema.org`
+  block with the position.
+- NCP's own coordinates can be wrong. Saffron Hill publishes latitude
+  1.521066. The postcode EC1N 8XA returns 51.520969 from postcodes.io, so the
+  leading 5 is missing from NCP's value. Range-check every coordinate against
+  Greater London, about 51.2 to 51.7 north and -0.6 to 0.4 east, and fall
+  back to the postcode position when the check fails.
+- Cost Type reads Unknown on all 111 unpriced rows, although every one of
+  them records a "Pay on the day" heading on the page and some list a season
+  ticket price. That heading states the Cost Type. Round 2 sets `Paid` with
+  Price Status `Not published`.
+- Can Park? reads Unknown on 111 rows, although 87 publish NCP opening times
+  on NCP's own car park page. Round 2 sets `Yes` on those.
+- Rainham, Upminster and Dagenham Dock publish peak and weekend rates that
+  fit no tariff template. Their rates sit in Rules Summary. Round 2 returns
+  the raw text so Ferro can decide whether to add a template.
+- PP reports 104 of the 120 already held, 48 of them matched on name and
+  postcode. The rule that matched the other 56 is still unexplained, and any
+  postcode match needs redoing after the postcode fix.
+
+The 16 that do not match are the yield of round 1: twelve Heathrow pages,
+Kings Cross, Victoria, Waterloo and Baynard House. Heathrow sits in
+Hillingdon and is inside Greater London.
+
+PP Checker could not re-read the pages. It got through two and then hit three
+Cloudflare challenges in a row. 2 of its 105 values read OK, none need
+fixing, and 103 cannot be verified. It now checks against the page files PP
+saves, and it opens 10 pages itself, at least 10 seconds apart, with at least
+7 of them short-template pages. A page whose HTML carries no self URL is
+identified by its title, its main heading and the car park name in PP's fetch
+log URL, and all three must agree.
+
+Round 2 covers all 346 sitemap pages, at about 25 seconds each. The owner
+approved opening `ncp.co.uk` again for both bots, spaced at least 3 seconds,
+stopping if the site blocks them. NCP's `robots.txt` allows those paths, and
+the 403 is a Cloudflare challenge rather than a refusal.
 
 ## Free-source validation, 12 November 2026
 
@@ -282,6 +681,24 @@ Batch 2 corrections and batch 3 followed the same day.
 | Station rows under the new R9 | 562 | 121 | 3,751 | `apply-20261112T2114*Z` |
 | Batch 7, rows 1026 to 1225 | 200 | 160 applied | 4,662 | `apply-20261112T214843Z` |
 | Batch 8, rows 1226 to 1245 | 20 | 20 | 587 | `apply-20261112T224221Z` |
+| Batch 9, rows 1246 to 1445 | 200 | 164 applied | 4,806 | `apply-20261113T105040Z` |
+| Batch 10, rows 1446 to 1645 | 200 | 164 applied | 4,787 | `apply-20261113T105043Z` |
+| Batch 11, rows 1646 to 1845 | 200 | 154 applied | 4,479 | `apply-20261113T105045Z` |
+| Batch 12, rows 1846 to 2045 | 200 | 161 applied | 4,684 | `apply-20261113T105048Z` |
+| Batch 13, rows 2046 to 2245 | 200 | 153 applied | 4,449 | `apply-20261113T105051Z` |
+| Batch 14, rows 2246 to 2445 | 200 | 171 applied | 4,979 | `apply-20261113T105054Z` |
+| Batch 15, rows 2446 to 2645 | 200 | 173 applied | 5,031 | `apply-20261113T105057Z` |
+| Batch 16, rows 2646 to 2845 | 200 | 161 applied | 4,689 | `apply-20261113T105100Z` |
+| Batch 17, rows 2846 to 3045 | 200 | 159 applied | 4,619 | `apply-20261113T105103Z` |
+| Batch 18, rows 3046 to 3245 | 200 | 142 applied | 4,118 | `apply-20261113T105107Z` |
+| Batch 19, rows 3246 to 3445 | 200 | 161 applied | 4,669 | `apply-20261113T105110Z` |
+| Batch 20, rows 3446 to 3645 | 200 | 152 applied | 4,408 | `apply-20261113T105113Z` |
+| Batch 21, rows 3646 to 3845 | 200 | 160 applied | 4,640 | `apply-20261113T105117Z` |
+| Batch 22, rows 3846 to 4045 | 200 | 143 applied | 4,147 | `apply-20261113T105120Z` |
+| Batch 23, rows 4046 to 4245 | 200 | 148 applied | 4,292 | `apply-20261113T105123Z` |
+| Batch 24, rows 4246 to 4445 | 200 | 146 applied | 4,234 | `apply-20261113T105126Z` |
+| Batch 25, rows 4446 to 4645 | 200 | 151 applied | 4,379 | `apply-20261113T105130Z` |
+| Batch 26, rows 4646 to 4823 | 178 | 127 applied | 3,684 | `apply-20261113T105133Z` |
 
 The bot reshaped 75 Tariff Detail strings and fixed 39 "No evidence" rows, so
 batch 2 recovered from 82 accepted to 91. Batch 3 was accepted at 173 of 200,
@@ -344,9 +761,74 @@ Verification Result "No evidence" with no blocked page named: PP-007994
 Fitzjohn Avenue, PP-008152 and PP-008153 Stanhope Road. The correction was
 skipped, because those rows are finished. Reread them when Barnet is reachable.
 
-1,245 of the 4,823 queue rows are researched. 3,578 remain, which is 18 runs of
-200 rows. Use `scripts/filter_refused_lines.py` on each batch plan before
-db-apply, so one refused cell no longer blocks a whole batch.
+All 4,823 queue rows are researched. Use `scripts/filter_refused_lines.py` on
+each batch plan before db-apply, so one refused cell no longer blocks a whole
+batch.
+
+## Batches 9 to 26, 13 November 2026
+
+The bot finished the queue overnight: 3,578 result rows over 18 batches, rows
+1246 to 4823. The bot's own self-check accepted every row, and `grok-import`
+here gave the same three numbers on every batch: 3,578 accepted, 0 skipped and
+0 rejected. The Place IDs cover queue rows 1246 to 4823 exactly, with no
+duplicate and no extra row. Each batch keeps its own `db-undo` run.
+
+784 rows are held, not applied. Every page opened under those Place IDs was an
+OpenStreetMap map entry, so no site, operator or council page was ever tried.
+This is the same weak class that held 33 rows in batch 7. The held list for
+each batch is `data/runs/2026-11-13_<n>/grok_import_held/held_map_only_rows.csv`,
+where `<n>` is the batch number minus 7. Those places stay on the Grok stage.
+Most of them are unnamed car parks with no website, so a reread of the same
+sources will not help. They need an on-site check or an OpenStreetMap tag rule.
+
+2,790 places were written. 2,448 of them moved from blank to "No evidence",
+243 to "Needs on-site check", 95 to "Confirmed, details not published" and 4 to
+"Confirmed". Legacy showable rose from 1,606 to 1,649 and legacy complete from
+1,098 to 1,117. The research value of this import is low, because the tail of
+the queue holds unnamed car parks that publish nothing. Its process value is
+that 2,790 places are now research complete for now, so they do not route for
+research again.
+
+A "No evidence" row here is page-backed. The bot opened about 400 pages per
+batch of 200 rows, so this is not the batch 4 shallow-miss pattern. 530 of the
+applied rows did open site pages that all failed to load, which is the accepted
+blocked-page pattern from batch 6.
+
+The PP Checker read 145 filled cells and returned 137 OK, 4 FIX and 4 CANNOT
+VERIFY. All four FIX cells are held and need an owner decision:
+
+- PP-008515 Richmond, PP-008615 Worcester Park and PP-009801 Brentford: the bot
+  wrote an hourly Tariff Detail. National Rail states the rate, but sells it
+  only through ScanPay and RingGo from 12:00 Monday to Friday and all day at
+  the weekend. The checker asks for "Not published". Holding the cell dropped
+  the whole place, so these three places were unwritten at first.
+- PP-012460 North Greenwich: the bot wrote Hours "24/7". The council page says
+  24 hours a day, but season ticket holders only from 01:00 to 11:00 on
+  weekdays. The checker asks for
+  `Mo-Fr 00:00-01:00,11:00-24:00; Sa,Su 00:00-24:00`.
+
+
+
+All four FIX cells are now settled and applied on 13 November. PP-012460 took
+the checker's opening hours under `apply-20261113T154013Z`. The three station
+rows kept the published hourly rate, because National Rail does state it, and
+Rules Summary now carries the condition that the rate runs from 12:00 Monday to
+Friday and all day at weekends, through ScanPay or RingGo only
+(`apply-20261113T154107Z`, 93 changes across the three places). Blanking the
+Tariff Detail was not possible, because "Not published" contradicts Price Status
+Published and Tariff Type Hourly rate on the same row.
+
+The four CANNOT VERIFY rows all read a "free parking for 3 hours" or "4 hours"
+line as a Max Stay: PP-008226 Greenwich Shopping Park at 180 minutes, and
+PP-009014, PP-009015 and PP-009016 Gallions Reach at 240 minutes. A free period
+is not a maximum stay. Those cells are applied and need a review.
+
+PP-008587 was also dropped by the refusal filter. The other held cells are the
+usual causes: a Notes or Review Flag line that would replace existing text, and
+the charging-hours check.
+
+Raw results are `data/raw/grok_results_batch9..26_2026111*.csv`. Each batch also
+has a report, a page log and a checker file in the bot's own folder.
 
 Batch 7 review items: East Finchley (PP-008014) has a conflict, where Saba says
 £10.60 a day with camera control and Transport for London still says £5.00 pay
@@ -397,6 +879,38 @@ reports 944 drift errors, which is the correct answer. 943 of the 7,393
 applied changes belong to records the sheet does not hold, so the drift check
 reads "missing row". A created record reaches the sheet by an approved append,
 through `tranche1-write`, and never by an update.
+
+### 13 November dry runs
+
+An unfiltered dry run is now `data/runs/2026-11-13_39/publish/`. It plans 0 rows
+and reports 91,164 drift errors. Every one of them is "missing row" across 3,251
+places the sheet does not hold, and none is a real value conflict. One drift
+error empties the whole plan, so an unfiltered run can never write.
+
+A second dry run is `data/runs/2026-11-13_40/publish/`. It is filtered with
+`--place-ids` to the 3,511 changed places the sheet does hold. Result: 1,193
+planned rows, 0 drift errors, 2,318 refusals and 0 second-reading failures, with
+`plan.json` and `undo.json` saved. This is the first publication plan that can
+write.
+
+The 2,318 refusals break down as follows.
+
+| Cause | Rows | Meaning |
+|---|---:|---|
+| finished row | 2,165 | The writer protects a finished row. Correct, not a fault. |
+| dashes | 126 | An existing Notes cell holds an en dash. |
+| dropdown | 26 | A value does not match `config/rules.toml`. |
+| protected reviewer | 1 | The writer protects that cell. |
+
+The 126 dash rows are old data, not batch 9 to 26 text. The en dashes sit in
+Notes, and also in Location Name and the captured columns on the same records.
+Normalize them to plain hyphens before you try to publish those rows.
+
+Two of the six checks read false in `checks.json`: `locks` and `validation`.
+They read false because refusals exist, not because a planned row is wrong. The
+1,193 planned rows themselves carry no drift and no refusal. The owner's
+explicit go is still needed, with an independent second reading, before any
+`--apply`.
 
 The 20-row pilot is `data/runs/2026-11-11_106/publish_pilot20/`. It plans 20
 rows and 20 undo rows, with no drift, no refusal and no second-reading

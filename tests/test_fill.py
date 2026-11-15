@@ -247,8 +247,8 @@ def test_osm_draft_does_not_mark_finished_or_invent_geo():
     assert 'Geo Precision' not in new
 
 
-@pytest.mark.parametrize('guard,value', [('A','PP-other'), ('B','Confirmed'), ('D','Tharidu')])
-def test_writer_refuses_changed_identity_finished_or_personal_row(guard,value):
+@pytest.mark.parametrize('guard,value', [('A','PP-other'), ('D','Tharidu')])
+def test_writer_refuses_changed_identity_or_personal_row(guard,value):
     plan = [{'sheet_row':5,'place_id':'PP-5','new':{'Who Can Park':'Customers only'}}]
     undo = {5:{'place_id':'PP-5','old':{'Who Can Park':'Unknown'}}}
     store = {'ALL LONDON (clean)!A5':'PP-5','ALL LONDON (clean)!C5':'Unknown'}
@@ -256,3 +256,16 @@ def test_writer_refuses_changed_identity_finished_or_personal_row(guard,value):
     service = FakeService(store)
     fill._apply_write(service, HEADERS, plan, undo, True)
     assert not service._spreadsheets._values.batch_update_calls
+
+
+@pytest.mark.parametrize('live,writes', [('Unknown', True), ('', True), ('Anyone (paid)', False)])
+def test_a_finished_row_gives_up_a_placeholder_and_keeps_an_answer(live, writes):
+    """The per-column rule, shared with db-apply and publish. A row-wide
+    refusal here aborted 2,163 blank Place Category cells on 15 November
+    2026."""
+    plan = [{'sheet_row':5,'place_id':'PP-5','new':{'Who Can Park':'Customers only'}}]
+    undo = {5:{'place_id':'PP-5','old':{'Who Can Park':live}}}
+    service = FakeService({'ALL LONDON (clean)!A5':'PP-5','ALL LONDON (clean)!C5':live,
+                           'ALL LONDON (clean)!B5':'Confirmed'})
+    fill._apply_write(service, HEADERS, plan, undo, True)
+    assert bool(service._spreadsheets._values.batch_update_calls) is writes

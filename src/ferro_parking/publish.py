@@ -23,8 +23,12 @@ def baseline(conn):
     return values
 
 
-def build(conn, headers, rows, limit=None, place_ids=None):
-    """Drift first, followed by six controls and an independent second reading."""
+def build(conn, headers, rows, limit=None, place_ids=None, columns=None):
+    """Drift first, followed by six controls and an independent second reading.
+
+    `columns` narrows the publication to those sheet columns, for drift as well
+    as for the plan, so one approved column can be published on its own.
+    """
     if limit is not None and limit < 1:
         raise ValueError('--limit must be positive')
     if len(headers) != len(set(headers)) or fill.PLACE_ID not in headers:
@@ -32,6 +36,11 @@ def build(conn, headers, rows, limit=None, place_ids=None):
     live = unique(rows)
     old = baseline(conn)
     desired = db.owned_changes(conn)
+    if columns:
+        unknown = sorted(set(columns) - set(headers))
+        if unknown:
+            raise ValueError(f'Requested columns are not in the sheet: {unknown}')
+        desired = {key: change for key, change in desired.items() if key[1] in set(columns)}
     selected = set(place_ids or [])
     available = {pid for pid, _ in desired}
     if selected - available:
@@ -61,11 +70,24 @@ def build(conn, headers, rows, limit=None, place_ids=None):
                and str(sheets._cell_value(col, current[pid].get(col, ''))) != str(sheets._cell_value(col, target.get(col, '')))}
         if not new:
             continue
-        if target.get(fill.VERIFICATION_RESULT, '').strip():
-            refused.append(f'{pid}: finished row')
+        # The project's own two rules, not a stricter pair. `lock_refusal`
+        # holds a row a named person checked. `finished_column_refusal` is per
+        # column, so a finished row still gains a blank cell and never loses an
+        # answer it already carries. The older row-wide refusal held 2,163 of
+        # the 2,296 rows whose Place Category was filled on 10 November and
+        # never reached the sheet, and its reviewer test refused our own
+        # declared automation labels such as "Policy script".
+        locked = fill.lock_refusal(target)
+        if locked:
+            refused.append(f'{pid}: {locked}')
             continue
-        if target.get(fill.VERIFIED_BY, '') not in ('', 'PP (validation)'):
-            refused.append(f'{pid}: reviewer is protected by the existing writer')
+        held = {col: fill.finished_column_refusal(target, col, value)
+                for col, value in new.items()}
+        held = {col: why for col, why in held.items() if why}
+        for col, why in sorted(held.items()):
+            refused.append(f'{pid}: {col}: {why}')
+        new = {col: value for col, value in new.items() if col not in held}
+        if not new:
             continue
         entry = {'place_id': pid, 'sheet_row': target['_sheet_row'],
                  'name': target.get(fill.LOCATION_NAME, ''), 'new': new,
@@ -106,9 +128,9 @@ def save(out, report):
                                  'old': entry['old'][column], 'new': value})
 
 
-def execute(conn, service, out, limit=None, place_ids=None, approved=None):
+def execute(conn, service, out, limit=None, place_ids=None, approved=None, columns=None):
     headers, rows = sheets.read_tab(service, value_render_option='FORMULA')
-    report = build(conn, headers, rows, limit, place_ids)
+    report = build(conn, headers, rows, limit, place_ids, columns)
     save(out, report)
     if report['drift'] or report['refused'] or report['second_reading']:
         return report
@@ -144,6 +166,8 @@ def main(argv=None):
     parser.add_argument('--out')
     parser.add_argument('--limit', type=int)
     parser.add_argument('--place-ids', nargs='+', help='Place IDs, separated by spaces or commas')
+    parser.add_argument('--columns', nargs='+',
+                        help='Publish only these sheet columns, for drift as well as the plan')
     parser.add_argument('--apply', action='store_true')
     parser.add_argument('--approved-plan', help='Previously reviewed plan.json, required with --apply')
     args = parser.parse_args(argv)
@@ -153,7 +177,7 @@ def main(argv=None):
     conn = db.connect(args.db)
     out = reserve_output(args.out) if args.out else new_run_dir('publish')
     report = execute(conn, sheets.get_service(), out, args.limit, ids,
-                     args.approved_plan if args.apply else None)
+                     args.approved_plan if args.apply else None, args.columns)
     print(f"{len(report['plan'])} planned rows, {len(report['drift'])} drift errors, "
           f"{len(report['refused'])} refusals, {len(report['second_reading'])} second-reading failures. {out}")
     return 1 if report['drift'] or report['refused'] or report['second_reading'] else 0

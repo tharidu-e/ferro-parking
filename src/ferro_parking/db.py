@@ -11,8 +11,10 @@ log, and nothing edits them directly. db-rebuild recomputes them.
 
 A cell the database never changed always reads back the sheet's own value, so
 re-importing a fresh export is safe. Where the database does own a change, the
-newest applied change wins, and a sheet value that matches neither that
-change's old nor new value is reported as a conflict for Phase 7's drift check.
+newest applied change wins over the value it replaced. The sheet is the one
+store, so a sheet value that matches neither that change's old nor new value
+wins over the change, and the import report names it as a conflict for
+Phase 7's drift check.
 
 No row is ever deleted. A Place ID that disappears from a later export keeps
 its earlier raw rows and its derived row, and the import report names it.
@@ -300,15 +302,37 @@ def owned_changes(conn):
     return {(r["place_id"], r["column_name"]): dict(r) for r in cursor}
 
 
-def created_rows(conn, headers):
+def owned_values(conn):
+    """{(place_id, column): set of values the applied change chain held} for
+    every cell the database ever wrote. A sheet value inside that set is the
+    chain's own history, either the value a change replaced or one it wrote, so
+    the chain still wins. Any other value came from the sheet itself, and the
+    sheet is the one store, so it wins instead."""
+    out = {}
+    for row in conn.execute(
+            "SELECT place_id, column_name, old_value, new_value FROM changes"
+            " WHERE applied_at IS NOT NULL"):
+        key = (row["place_id"], row["column_name"])
+        out.setdefault(key, set()).update((row["old_value"], row["new_value"]))
+    return out
+
+
+def created_rows(conn, headers, held=()):
     """Active records the database created itself, oldest first, overlaid with
     the newest applied change per cell. These have no import: a record created
     from OpenStreetMap exists only here, so every reader that unions them in
-    keeps working after the next sheet import."""
+    keeps working after the next sheet import.
+
+    `held` names the Place IDs the newest import already holds. An appended
+    record now has a sheet row, and the sheet is the store, so its created row
+    is skipped and the row is not counted twice."""
     owned = owned_changes(conn)
+    held = set(held)
     out = []
     for record in conn.execute(
             "SELECT place_id, json FROM created WHERE active = 1 ORDER BY rowid"):
+        if record["place_id"] in held:
+            continue
         row = json.loads(record["json"])
         row = {header: row.get(header, "") for header in headers}
         for header in headers:
@@ -340,15 +364,18 @@ def effective_rows(conn, import_id=None):
     for index, row in sorted(raw_rows(conn, import_id).values(), key=lambda pair: pair[0]):
         rows.append((index, row))
     owned = owned_changes(conn)
+    history = owned_values(conn)
     out = []
     for _, row in rows:
         row = dict(row)
         for header in headers:
-            change = owned.get((row[PLACE_ID].strip(), header))
-            if change is not None:
+            key = (row[PLACE_ID].strip(), header)
+            change = owned.get(key)
+            if change is not None and row.get(header, "") in history.get(key, ()):
                 row[header] = change["new_value"]
         out.append(row)
-    return headers, out + created_rows(conn, headers)
+    return headers, out + created_rows(
+        conn, headers, held={row[PLACE_ID].strip() for row in out})
 
 
 def missing_place_ids(conn):
@@ -382,15 +409,18 @@ def current_rows(conn):
     newest = [(r["import_id"], r["row_index"], r["place_id"], json.loads(r["json"])) for r in cursor]
     newest.sort(key=lambda item: (-item[0], item[1]))
     owned = owned_changes(conn)
+    history = owned_values(conn)
     out = []
     for _, _, place_id, row in newest:
         row = dict(row)
         for header in headers:
-            change = owned.get((place_id, header))
-            if change is not None:
+            key = (place_id, header)
+            change = owned.get(key)
+            if change is not None and row.get(header, "") in history.get(key, ()):
                 row[header] = change["new_value"]
         out.append(row)
-    return headers, out + created_rows(conn, headers)
+    return headers, out + created_rows(
+        conn, headers, held={row[PLACE_ID].strip() for row in out})
 
 
 def latest_routing(conn):

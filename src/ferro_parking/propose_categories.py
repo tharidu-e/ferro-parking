@@ -8,6 +8,7 @@ from shapely.strtree import STRtree
 
 from . import discovery, osm_match
 from .discover import write_table
+from .rules import load_rules
 from .fill import PLACE_ID
 from .run_paths import new_run_dir, reserve_output
 from .triage_blanks import nearby_evidence
@@ -42,6 +43,9 @@ def normalise_type(value):
     return ' '.join(str(value or '').translate({0x2013: '-', 0x2014: '-'}).strip().casefold().split())
 
 
+RULES = load_rules()
+
+
 def category_proposal(row, categories=None, allowed=None):
     categories = categories if categories is not None else discovery.load_categories()
     allowed = set(allowed if allowed is not None else dropdowns()[CATEGORY])
@@ -59,9 +63,21 @@ def category_proposal(row, categories=None, allowed=None):
     if re.fullmatch(r'(?:retail / )?supermarket(?: \(.+\))?', typ):
         small = categories.get('supermarket', {}).get('sheet_small_format_brands', [])
         keys = [osm_match.brand_key(row), osm_match.brand_key({CAPTURED_TYPE: typ})]
+        # The store format lives in the name, not in the type: "Sainsbury's
+        # Tooting Bec Loc Local" is a convenience store and the type reads
+        # "Retail / Supermarket" either way. R10's own format test reads it,
+        # and without this the 15 November pass called 451 Local, Express,
+        # Simply Food and forecourt stores large format.
+        store_format = RULES.format_for(row.get('Location Name'))
+        if store_format == 'convenience':
+            return result('Supermarket - convenience', 'Convenience store format in the name (R10)')
         if any(osm_match.contains_word(key, osm_match.norm(brand)) for key in keys for brand in small):
             return result('Supermarket - convenience', 'Explicit supermarket type with a configured small-format brand')
-        return result('Supermarket - large format', 'Explicit supermarket type; no configured small-format brand')
+        if store_format == 'large':
+            return result('Supermarket - large format', 'Large store format in the name (R10)')
+        return result('Supermarket - large format',
+                      'Explicit supermarket type; no store format in the name and no small-format brand',
+                      'medium')
 
     if re.fullmatch(r'restaurant \(.+\)', typ):
         brands = categories.get('fast_food', {}).get('sheet_brand_in', [])
