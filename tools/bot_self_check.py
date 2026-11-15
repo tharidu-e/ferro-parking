@@ -56,6 +56,9 @@ DROPDOWNS = {
     "Evidence Age": ["Under 12 months", "1-2 years", "Older or undated"],
 }
 
+STRONG_SOURCE_TIERS = {"Official site - text", "Operator / council site",
+                       "Official site - logo or icon", "Google Maps - tariff photo"}
+
 MONEY = r"£\d+\.\d{2}"
 BAND = rf"(\d+)-(\d+) (hrs|mins) ({MONEY})"
 TARIFF_PATTERNS = {
@@ -104,6 +107,11 @@ def normalise(row):
     return out
 
 
+def max_stay_strong(value):
+    """True when Max Stay states a real limit, which needs strong evidence."""
+    return bool(value) and value not in ("Not published", "Not applicable")
+
+
 def check_row(row):
     """Return a list of problems with one normalised row."""
     problems = []
@@ -144,10 +152,62 @@ def check_row(row):
         problems.append('Verification Result is "No evidence" but Source Tier is not "None found"')
 
     if get("Who Can Park", "") == "Anyone (paid)":
-        pages_price = "£" in detail or "£" in get("Rules Summary", "")
-        if not pages_price:
-            problems.append('Who Can Park is "Anyone (paid)" but no price from that page '
-                            "is recorded. Use Unknown instead")
+        # A stated payment requirement is the evidence, with or without an
+        # amount. A page that says "pay on exit" and publishes no price gives
+        # Cost Type Paid and Price Status Not published.
+        states_payment = ("£" in detail or "£" in get("Rules Summary", "")
+                          or cost in ("Paid", "Free then paid"))
+        if not states_payment:
+            problems.append('Who Can Park is "Anyone (paid)" but the row records no price '
+                            'and no Cost Type of "Paid". Use Unknown instead')
+
+    # --- rules folded in from grok-import on 15 November 2026, so the two
+    # --- checks can no longer disagree about the same row.
+    can = get("Can Park? (Yes/No/Conditional)", "")
+    tier = get("Source Tier", "")
+    strong = tier in STRONG_SOURCE_TIERS
+    site_strong = strong and get("Specificity", "") == "Site-specific"
+
+    if can == "Yes" and not strong:
+        problems.append(f'Can Park? is "Yes" but Source Tier is "{tier}", not a strong source')
+    if can == "No" and not site_strong:
+        problems.append('Can Park? is "No" but the evidence is not a site-specific '
+                        "statement from a strong source")
+    if can == "No":
+        for column in ("Hours (OpenStreetMap opening_hours format)", "Hours Basis",
+                       "Parking Control Type (Cameras / Barrier / Patrol)"):
+            if get(column, "") not in ("", "Not applicable"):
+                problems.append(f'Can Park? is "No" so {column} must read "Not applicable"')
+
+    if get("Location Status", "") == "Closed" and can != "No":
+        problems.append('Location Status is "Closed" but Can Park? is not "No"')
+
+    if get("Verification Result", "") == "Confirmed":
+        missing = [c for c in ("Who Can Park", "Max Stay (mins)",
+                               "Hours (OpenStreetMap opening_hours format)")
+                   if get(c, "") in ("", "Unknown", "Not published")]
+        if not site_strong or missing:
+            problems.append('Verification Result is "Confirmed" but the evidence is not '
+                            "complete and site-specific. Missing: "
+                            + (", ".join(missing) or "a site-specific strong source")
+                            + '. Use "Confirmed, details not published" instead')
+
+    if get("Conflict", "") == "Yes" and not get("Review Flag", ""):
+        problems.append('Conflict is "Yes" but Review Flag is blank')
+    if get("Review Flag", "") and not get("Flag Status", ""):
+        problems.append("Review Flag is set but Flag Status is blank")
+
+    if max_stay_strong(get("Max Stay (mins)", "")) and not site_strong:
+        problems.append("Max Stay needs strong site-specific evidence")
+
+    # Only a real result row needs the round stamp. A fragment with no Place
+    # ID is a fragment, and the demo below checks one rule at a time.
+    if get("Place ID", "") and not re.search(r"\bRoute\b", get("Decision Reason", "")):
+        problems.append('Decision Reason must name the round, as "Route: <round>"')
+
+    agreeing = get("Agreeing Sources", "")
+    if agreeing and agreeing not in ("0", "1", "2", "3"):
+        problems.append(f'Agreeing Sources is "{agreeing}", which must be 0, 1, 2 or 3')
 
     for column, value in row.items():
         if "–" in value or "—" in value:
@@ -204,6 +264,23 @@ def demo():
     assert not check_row({"Max Stay (mins)": "Not published"})
     assert check_row({"Max Stay (mins)": "about an hour"})
     assert check_row({"Can Park? (Yes/No/Conditional)": "Maybe"})
+    # Rules folded in from grok-import, so the two checks agree.
+    assert not check_row({"Who Can Park": "Anyone (paid)", "Cost Type": "Paid",
+                          "Price Status": "Not published"})
+    assert check_row({"Can Park? (Yes/No/Conditional)": "Yes", "Source Tier": "Directory"})
+    assert check_row({"Can Park? (Yes/No/Conditional)": "No", "Source Tier": "Official site - text",
+                      "Specificity": "Site-specific", "Hours Basis": "Site hours"})
+    assert not check_row({"Can Park? (Yes/No/Conditional)": "No", "Source Tier": "Official site - text",
+                          "Specificity": "Site-specific", "Hours Basis": "Not applicable"})
+    assert check_row({"Location Status": "Closed", "Can Park? (Yes/No/Conditional)": "Yes"})
+    assert check_row({"Verification Result": "Confirmed", "Source Tier": "Official site - text",
+                      "Specificity": "Site-specific", "Who Can Park": "Anyone",
+                      "Max Stay (mins)": "120"})
+    assert check_row({"Conflict": "Yes"})
+    assert check_row({"Review Flag": "Check the tariff"})
+    assert check_row({"Place ID": "PP-1", "Decision Reason": "hospital1"})
+    assert not check_row({"Place ID": "PP-1", "Decision Reason": "Route: hospital1"})
+    assert check_row({"Agreeing Sources": "4"})
     print("self-check passed")
 
 

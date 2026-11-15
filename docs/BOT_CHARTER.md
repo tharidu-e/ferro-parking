@@ -251,7 +251,38 @@ line, and 14 rows went unread.
 - A report: pages opened, rows with a value, rows with nothing, blocked
   addresses, conflicts, and any car park found that is not in the queue.
 
-## 5. The round loop and the stop rules
+## 5. The write path, settled 15 November 2026
+
+A bot never writes a cell by hand or by its own judgment. It runs one script,
+`sheet_write.py`, and that script holds the guards.
+
+- It reads the live cell immediately before writing, and writes only when that
+  cell is blank, "Unknown" or "Not yet checked". An answer is never replaced.
+- It refuses every identity and payment column outright, whatever the brief
+  says. The sheet's protected ranges are the first layer and this is the
+  second.
+- It refuses a Place ID that is not in the round's queue.
+- It stops the whole round when the plan is larger than `--max-cells`.
+- It appends one line per write to the round log: round, Place ID, column, old
+  value, new value, time, URL and quote.
+
+Run it without `--apply` first. It plans, prints the counts and writes nothing.
+
+`sheet_undo.py` undoes one round from that log. It restores a cell only when
+the cell still holds what the round wrote, so a cell somebody changed since is
+left alone and reported. The sheet's version history cannot do this, because it
+restores the whole sheet to a moment and wipes everything written since.
+
+`bot_self_check.py` runs before the writer, and it now holds every rule the old
+importer held, so the two can no longer disagree about the same row.
+
+The checking bot draws its sample at random with a seed, and the seed goes in
+the round log, so nobody can pick the easy rows.
+
+New places take a block of Place IDs reserved before the round starts, for
+example PP-013000 to PP-013499, so two bots can never invent the same ID.
+
+## 6. The round loop and the stop rules
 
 One source per round. Follow these steps in order.
 
@@ -278,6 +309,6 @@ Stop and ask the owner when any of these happen.
 
 ## Open questions
 
-5. Which parts of the checking work Dr Eggbot owns.
-6. What happens to a place whose answer needs an on-site check, because 1,430
+7. Which parts of the checking work Dr Eggbot owns.
+8. What happens to a place whose answer needs an on-site check, because 1,430
    places now wait on one.
