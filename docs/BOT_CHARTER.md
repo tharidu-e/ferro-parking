@@ -61,8 +61,11 @@ with a worse one. The site's postal address belongs in Notes.
 
 ### Limit 2: every write carries its round name
 
-- Write the round name into Decision Reason on every row you touch, for example
-  `centres1`.
+- Stamp the round in Decision Reason, but only on a row that gained a value and
+  only where that cell is blank. Write it as "Route: <round>", for example
+  "Route: hospital1". The word Route is required, because `page_fill` refuses a
+  Decision Reason without it. Where the cell already holds text, leave it: the
+  round log and the write time carry the attribution.
 - Keep a round log. One line per row, with the Place ID, the column, the old
   value, the new value and the time in GMT. Report the first and last write
   time of the round.
@@ -99,9 +102,8 @@ its detector missed the block and six more pages went out. The self check then
 printed "64 rows checked, 0 problems", because that script reads format and
 never asks whether the page was real.
 
-Treat a page as blocked when the body carries challenge text, whatever the HTTP
-code. Search for "One moment", "Just a moment", "Enable JavaScript",
-"Attention Required" and "you have been blocked". Stop on the first match.
+Treat a page as blocked by the rule in section 4, under "Pace and blocks".
+Stop on the first real block.
 
 ## 3. Order of work, settled 15 November 2026
 
@@ -228,10 +230,18 @@ never states parking.
 One page every 3 seconds. 25 seconds for a site that challenges us. Stop at the
 first block, name the blocked address, and do not retry it.
 
-A page is blocked when its body carries challenge text, whatever the HTTP code.
-Search for "One moment", "Just a moment", "Enable JavaScript", "Attention
-Required" and "you have been blocked". HTTP 200 is not proof that a page
-loaded.
+A page is blocked when its rendered text carries challenge text, whatever the
+HTTP code. HTTP 200 is not proof that a page loaded.
+
+The phrases are "One moment", "Just a moment", "Attention Required" and "you
+have been blocked". Search the rendered text only, never the HTML source. A
+match counts as a block only when the rendered text is under 500 characters, or
+the phrase is in the page title, because a challenge page is short and says so
+in its title.
+
+"Enable JavaScript" is not a block phrase. On 15 November it stopped the
+hospital round at a contact form whose hidden fallback notice carried that
+line, and 14 rows went unread.
 
 ### What a round returns
 
