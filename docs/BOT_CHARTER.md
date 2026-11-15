@@ -4,11 +4,12 @@ Started 15 November 2026. This file holds the rules the bots run on, one
 section per settled decision. It is a draft. Dr Eggbot reviews it, Claude
 finalizes it, and then the bots run on it.
 
-Read `docs/LAUNCH_PLAN.md` for the round loop and the stop rules. This file
-never repeats a rule table from the repository, because a copy drifts from the
-original. It states decisions and limits only.
+The bots cannot reach this project's repository, so this file never sends them
+to another file in it. Everything a bot must obey is written here. Ferro keeps
+`docs/LAUNCH_PLAN.md` for its own side of the work.
 
-Status: questions 1 to 4 settled. Open questions are at the end.
+Status: questions 1 to 4 settled, and Dr Eggbot's first review is applied.
+Open questions are at the end.
 
 ## 1. What a driver sees, settled 15 November 2026
 
@@ -27,7 +28,7 @@ Customers only or Permit holders. A place needs both before it shows.
 
 3,158 places pass this bar on the 15 November export. 800 of them carry known
 hours, 1,619 a known Cost Type and 308 a known Max Stay. `readiness.bars` holds
-this bar in code, and `docs/LAUNCH_PLAN.md` section 5 states it.
+this bar in code on Ferro's side.
 
 Fill every field the page states on one visit. The fields are Can Park?, Who
 Can Park, Cost Type, Price Status, Tariff Type, Tariff Detail, Max Stay (mins),
@@ -70,6 +71,22 @@ with a worse one. The site's postal address belongs in Notes.
 
 A round is then reversible three ways: the sheet version history pinned to the
 round window, the import diff, and the round log's old values.
+
+### Limit 3: the row rules
+
+- Address a row by its Place ID only. Never by its sheet row number, its name
+  or its address, because a row moves and a name repeats.
+- Never overwrite a cell that already holds a value. Fill a blank cell, or a
+  cell that reads Unknown or Not yet checked, and leave every other cell as it
+  stands. A stronger source does not change this: report the conflict instead.
+- Never add a row and never delete a row. A place the sheet does not hold goes
+  in the tab "NEW PLACE CANDIDATES". Ferro creates the row and the Place ID.
+- Run `python3 bot_self_check.py results.csv` on the result before you send it,
+  and send only when it exits 0. It checks the dropdown values, the tariff
+  strings, the opening-hours strings and the rule pairs.
+- Then build a copy of the database from the snapshot Ferro sends that day and
+  run `grok-import` against that copy. Report the three numbers it prints.
+  The snapshot must be the full 66-column export, not an identity-only file.
 
 ### The bot that researches a row never signs it off
 
@@ -147,7 +164,9 @@ evidence". Measured on 15 November 2026.
 | Petrol station | 610 | 459 | 145 |
 | Hospital / health centre | 236 | 140 | 95 |
 | Shopping centre | 121 | 44 | 76 |
-| Hospital, school, parks and the rest | 679 | 496 | 158 |
+| Council car park | 476 | 411 | 48 |
+| School, parks and the rest | 203 | 65 | 110 |
+| Total | 11,562 | 3,158 | 5,185 |
 
 ### The order of the rounds
 
@@ -220,6 +239,31 @@ loaded.
 - The page log, one line per address with the time and the status.
 - A report: pages opened, rows with a value, rows with nothing, blocked
   addresses, conflicts, and any car park found that is not in the queue.
+
+## 5. The round loop and the stop rules
+
+One source per round. Follow these steps in order.
+
+1. Name the source.
+2. Run the three-page source check. Say which fields those pages publish.
+3. Ferro runs the yield test and says whether the round runs.
+4. Fetch at the stated pace, save every page, stop at the first block.
+5. Fill only what the page states.
+6. Run the self check, then the database copy check.
+7. Write the answers to the sheet, with the round name in Decision Reason.
+8. The checking bot re-reads the saved pages for 15 to 20 percent of the rows,
+   and for the judgment cells only, which are Can Park?, Who Can Park and the
+   tariff reading. If that sample needs a fix on more than 5 percent of rows,
+   run a full pass.
+9. Ferro rebuilds the database from the sheet and reports the counts.
+
+Stop and ask the owner when any of these happen.
+
+- The site blocks us.
+- A page contradicts itself or another page of the same site. Record both
+  values and pick neither.
+- A write would change a filled cell, or a cell a person checked.
+- The source turns out to publish nothing we need, which ends the round.
 
 ## Open questions
 
