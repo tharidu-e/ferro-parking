@@ -160,8 +160,12 @@ def check_row(row, context=None):
     cost = get("Cost Type", "")
     if cost == "Free" and kind and not kind.startswith("Free"):
         problems.append(f'Cost Type is "Free" but Tariff Type is "{kind}"')
+    # A free period then a daily rate has no template, so the page's own words
+    # go in Rules Summary and the type reads "Not published". Luton's
+    # motorcycle bays, free for 14 days then the daily rate, are the case.
     if cost == "Free then paid" and kind and kind not in ("Free period, then hourly",
-                                                          "Banded by stay length"):
+                                                          "Banded by stay length",
+                                                          "Not published"):
         problems.append(f'Cost Type is "Free then paid" but Tariff Type is "{kind}"')
 
     if get("Source Tier", "") == "None found":
