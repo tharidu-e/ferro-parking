@@ -4,6 +4,10 @@ Updated 13 November 2026. Read this for priorities and remaining work only.
 
 ## Next session, first actions
 
+Read `docs/LAUNCH_PLAN.md` first. It owns the process agreed on 14 and 15
+November: the sheet is the one store, the bots write parking answers only,
+and airports come first.
+
 1. Read this file, then `docs/PLAN.md`. Nothing else is needed to start.
 2. Ask the owner whether PP has sent the NCP v2 folder. If it has, check it
    the way the NCP section below describes, then run `discover`.

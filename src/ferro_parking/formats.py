@@ -3,7 +3,7 @@ import re
 from decimal import Decimal
 
 MONEY = r'£\d+\.\d{2}'
-BAND = rf'(\d+)-(\d+) hrs ({MONEY})'
+BAND = rf'(\d+)-(\d+) (hrs|mins) ({MONEY})'
 TARIFF_PATTERNS = {
     'Free (time limit not published)': r'Free',
     'Free with time limit': r'Free for up to \d+ (?:hrs|mins)',
@@ -11,6 +11,7 @@ TARIFF_PATTERNS = {
     'Hourly rate': rf'{MONEY} per hour',
     'Flat rate per 24 hours': rf'{MONEY} per 24 hours',
     'Flat rate per night': rf'{MONEY} per night',
+    'Flat rate per entry': rf'{MONEY} per entry',
     'Banded by stay length': rf'{BAND}(?:; {BAND})*',
     'Not published': r'Not published', 'Not applicable': r'Not applicable',
 }
@@ -20,7 +21,11 @@ def tariff_valid(kind, detail):
     if not re.fullmatch(TARIFF_PATTERNS.get(kind, r'(?!)'), str(detail)):
         return False
     if kind == 'Banded by stay length':
-        bands = [(int(a), int(b)) for a, b in re.findall(r'(\d+)-(\d+) hrs', detail)]
+        # One unit for the whole string: airport tariffs band by minutes, car parks by hours.
+        found = re.findall(r'(\d+)-(\d+) (hrs|mins)', detail)
+        if len({unit for _, _, unit in found}) > 1:
+            return False
+        bands = [(int(a), int(b)) for a, b, _ in found]
         return all(a < b for a, b in bands) and all(bands[i][1] == bands[i+1][0] for i in range(len(bands)-1))
     return True
 

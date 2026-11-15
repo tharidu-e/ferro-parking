@@ -290,3 +290,19 @@ def test_discovery_keeps_inconsistent_tariff_as_flagged_draft(tmp_path):
         row = next(csv.DictReader(stream))
     assert row['Tariff Detail'] == 'Not published'
     assert json.loads(row['flags'])['tariff_inconsistent'] is True
+
+
+def test_flat_rate_per_entry_matches_only_a_full_entry_price():
+    """Airport drop-off charges are per entry, not per hour or per day."""
+    from ferro_parking import formats
+    assert formats.tariff_valid('Flat rate per entry', '£7.00 per entry')
+    assert not formats.tariff_valid('Flat rate per entry', '£7 per entry')
+    assert not formats.tariff_valid('Flat rate per entry', '£7.00 per hour')
+
+
+def test_bands_may_be_in_minutes_but_not_mixed_units():
+    """Airport tariffs band by minutes; a string must not mix minutes and hours."""
+    from ferro_parking import formats
+    assert formats.tariff_valid('Banded by stay length', '0-29 mins £8.50; 29-44 mins £12.50')
+    assert not formats.tariff_valid('Banded by stay length', '0-29 mins £8.50; 1-2 hrs £12.50')
+    assert not formats.tariff_valid('Banded by stay length', '0-29 mins £8.50; 30-44 mins £12.50')
