@@ -24,13 +24,24 @@ def usable_pin(row):
 
 
 def bars(row):
+    """(showable, complete) for one row.
+
+    The owner set the showable bar on 15 November 2026: a driver sees a place
+    when a source says that they can park, the pin is usable, and we know who
+    may park. The app then writes "hours not published" or "price not
+    published" on a place whose hours or price we do not hold, because hours
+    are unknown on 2,358 of the places that pass this bar, and hiding them
+    would hide most of the database. Complete keeps the stricter bar, so the
+    two counts together say how much is still missing.
+    """
     showable = (row.get(CAN_PARK) in ('Yes', 'Conditional') and usable_pin(row)
-                and known(row.get('Who Can Park')) and known(row.get('Cost Type')))
+                and known(row.get('Who Can Park')))
     has_source = known(row.get(SOURCE_URLS)) and str(row.get(SOURCE_URLS, '')).strip() != 'Not applicable'
     def time_known(column):
         value = str(row.get(column) or '').strip()
         return known(value) or (value == 'Not published' and has_source)
-    complete = showable and time_known(HOURS) and time_known('Max Stay (mins)') and known(row.get('Tariff Detail'))
+    complete = (showable and known(row.get('Cost Type')) and time_known(HOURS)
+                and time_known('Max Stay (mins)') and known(row.get('Tariff Detail')))
     return bool(showable), bool(complete)
 
 
