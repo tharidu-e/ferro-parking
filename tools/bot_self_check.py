@@ -4,6 +4,11 @@
 One file, standard library only. Copy it to the bot's computer and run:
 
     python3 bot_self_check.py results.csv
+    python3 bot_self_check.py results.csv live.csv
+
+The second form reads a fresh export of the tab as well, and checks each row
+as it will read after the write. A blank cell in the results file means "keep
+the sheet's value", so use this form whenever the export is to hand.
 
 It prints one line per problem and exits 1 when anything is wrong. Fix every
 line, run it again, and only send the file when it exits 0.
@@ -56,6 +61,19 @@ DROPDOWNS = {
     "Evidence Age": ["Under 12 months", "1-2 years", "Older or undated"],
 }
 
+# An answer column. A row with one of these filled writes to the sheet, so it
+# carries the round stamp. Bookkeeping columns alone do not.
+STAMPED_COLUMNS = (
+    "Can Park? (Yes/No/Conditional)", "Who Can Park", "Cost Type", "Price Status",
+    "Tariff Type", "Tariff Detail", "Max Stay (mins)",
+    "Hours (OpenStreetMap opening_hours format)", "Hours Basis", "Operator",
+    "PCN (Penalty Charge Notice) amount (£)", "Rules Summary", "Location Status",
+    "Parking Control Type (Cameras / Barrier / Patrol)", "Verification Result",
+)
+
+STRONG_SOURCE_TIERS = {"Official site - text", "Operator / council site",
+                       "Official site - logo or icon", "Google Maps - tariff photo"}
+
 MONEY = r"£\d+\.\d{2}"
 BAND = rf"(\d+)-(\d+) (hrs|mins) ({MONEY})"
 TARIFF_PATTERNS = {
@@ -104,10 +122,21 @@ def normalise(row):
     return out
 
 
-def check_row(row):
-    """Return a list of problems with one normalised row."""
+def max_stay_strong(value):
+    """True when Max Stay states a real limit, which needs strong evidence."""
+    return bool(value) and value not in ("Not published", "Not applicable")
+
+
+def check_row(row, context=None):
+    """Problems with one normalised row.
+
+    `row` is what this round writes. `context` is that row merged onto the
+    sheet's own row, so a rule that asks "is this value known" sees the cell
+    the round is keeping. A rule about what the round wrote reads `row`, never
+    the context: the sheet holds old en dashes that this round never typed."""
     problems = []
-    get = row.get
+    merged = {**(context or {}), **{k: v for k, v in row.items() if v}}
+    get = merged.get
 
     for column, allowed in DROPDOWNS.items():
         value = get(column, "")
@@ -120,7 +149,9 @@ def check_row(row):
                         "Put the page's own wording in Rules Summary instead")
 
     hours = get("Hours (OpenStreetMap opening_hours format)", "")
-    if hours and hours != "Not published" and not hours_valid(hours):
+    # "Not applicable" is what a Can Park? No row must hold, so it can never
+    # be rejected as a badly formed opening-hours string.
+    if hours and hours not in ("Not published", "Not applicable") and not hours_valid(hours):
         problems.append(f'Hours "{hours}" is not a valid opening hours string')
 
     if get("Price Status", "") == "Published" and "£" not in detail and "free" not in detail.lower():
@@ -129,8 +160,12 @@ def check_row(row):
     cost = get("Cost Type", "")
     if cost == "Free" and kind and not kind.startswith("Free"):
         problems.append(f'Cost Type is "Free" but Tariff Type is "{kind}"')
+    # A free period then a daily rate has no template, so the page's own words
+    # go in Rules Summary and the type reads "Not published". Luton's
+    # motorcycle bays, free for 14 days then the daily rate, are the case.
     if cost == "Free then paid" and kind and kind not in ("Free period, then hourly",
-                                                          "Banded by stay length"):
+                                                          "Banded by stay length",
+                                                          "Not published"):
         problems.append(f'Cost Type is "Free then paid" but Tariff Type is "{kind}"')
 
     if get("Source Tier", "") == "None found":
@@ -144,17 +179,71 @@ def check_row(row):
         problems.append('Verification Result is "No evidence" but Source Tier is not "None found"')
 
     if get("Who Can Park", "") == "Anyone (paid)":
-        pages_price = "£" in detail or "£" in get("Rules Summary", "")
-        if not pages_price:
-            problems.append('Who Can Park is "Anyone (paid)" but no price from that page '
-                            "is recorded. Use Unknown instead")
+        # A stated payment requirement is the evidence, with or without an
+        # amount. A page that says "pay on exit" and publishes no price gives
+        # Cost Type Paid and Price Status Not published.
+        states_payment = ("£" in detail or "£" in get("Rules Summary", "")
+                          or cost in ("Paid", "Free then paid"))
+        if not states_payment:
+            problems.append('Who Can Park is "Anyone (paid)" but the row records no price '
+                            'and no Cost Type of "Paid". Use Unknown instead')
+
+    # --- rules folded in from grok-import on 15 November 2026, so the two
+    # --- checks can no longer disagree about the same row.
+    can = get("Can Park? (Yes/No/Conditional)", "")
+    tier = get("Source Tier", "")
+    strong = tier in STRONG_SOURCE_TIERS
+    site_strong = strong and get("Specificity", "") == "Site-specific"
+
+    if can == "Yes" and not strong:
+        problems.append(f'Can Park? is "Yes" but Source Tier is "{tier}", not a strong source')
+    if can == "No" and not site_strong:
+        problems.append('Can Park? is "No" but the evidence is not a site-specific '
+                        "statement from a strong source")
+    if can == "No":
+        for column in ("Hours (OpenStreetMap opening_hours format)", "Hours Basis",
+                       "Parking Control Type (Cameras / Barrier / Patrol)"):
+            if get(column, "") not in ("", "Not applicable"):
+                problems.append(f'Can Park? is "No" so {column} must read "Not applicable"')
+
+    if get("Location Status", "") == "Closed" and can != "No":
+        problems.append('Location Status is "Closed" but Can Park? is not "No"')
+
+    if get("Verification Result", "") == "Confirmed":
+        missing = [c for c in ("Who Can Park", "Max Stay (mins)",
+                               "Hours (OpenStreetMap opening_hours format)")
+                   if get(c, "") in ("", "Unknown", "Not published")]
+        if not site_strong or missing:
+            problems.append('Verification Result is "Confirmed" but the evidence is not '
+                            "complete and site-specific. Missing: "
+                            + (", ".join(missing) or "a site-specific strong source")
+                            + '. Use "Confirmed, details not published" instead')
+
+    if get("Conflict", "") == "Yes" and not get("Review Flag", ""):
+        problems.append('Conflict is "Yes" but Review Flag is blank')
+    if get("Review Flag", "") and not get("Flag Status", ""):
+        problems.append("Review Flag is set but Flag Status is blank")
+
+    if max_stay_strong(get("Max Stay (mins)", "")) and not site_strong:
+        problems.append("Max Stay needs strong site-specific evidence")
+
+    # Only a row that writes something needs the round stamp. A row the round
+    # read and did not change writes nothing, so it carries no stamp. On
+    # 15 November this rule flagged 66 hospital rows that the round left alone.
+    writes_something = any(get(column, "") for column in STAMPED_COLUMNS)
+    if (get("Place ID", "") and writes_something and not get("Decision Reason", "")):
+        problems.append('Decision Reason is blank. Write the round, as "Route: <round>"')
+
+    agreeing = get("Agreeing Sources", "")
+    if agreeing and agreeing not in ("0", "1", "2", "3"):
+        problems.append(f'Agreeing Sources is "{agreeing}", which must be 0, 1, 2 or 3')
 
     for column, value in row.items():
-        if "–" in value or "—" in value:
+        if "–" in str(value) or "—" in str(value):
             problems.append(f"{column} holds a dash character that the sheet refuses. "
                             "Use a plain hyphen")
 
-    evidence = get("Evidence Detail (what the source shows)", "")
+    evidence = row.get("Evidence Detail (what the source shows)", "")
     if "£" in evidence and re.search(r"\d{2}:\d{2}", evidence):
         problems.append("Evidence Detail holds a price and an opening time together. "
                         "One field for each evidence cell")
@@ -175,13 +264,44 @@ def check_row(row):
     return problems
 
 
-def check_file(path):
+def sheet_rows(sheet_path):
+    """{Place ID: normalised row} from a downloaded export of the tab."""
+    live = {}
+    with open(sheet_path, newline="", encoding="utf-8-sig") as stream:
+        for row in csv.DictReader(stream):
+            live[str(row.get("Place ID", "")).strip()] = normalise(row)
+    return live
+
+
+def merge_with_sheet(rows, sheet_path):
+    """Each result row overlaid on the sheet's own row, by Place ID.
+
+    A blank cell in a result file means "keep the sheet's value". Checking the
+    file alone reads that blank as an empty answer, which is what produced 99
+    problems on the hospital round of 15 November. The checks run on the row as
+    it will read after the write."""
+    live = {}
+    with open(sheet_path, newline="", encoding="utf-8-sig") as stream:
+        for row in csv.DictReader(stream):
+            live[str(row.get("Place ID", "")).strip()] = normalise(row)
+    out = []
+    for row in rows:
+        existing = live.get(str(row.get("Place ID", "")).strip(), {})
+        merged = dict(existing)
+        merged.update({k: v for k, v in row.items() if v})
+        out.append(merged)
+    return out
+
+
+def check_file(path, sheet_path=None):
     with open(path, newline="", encoding="utf-8-sig") as handle:
         rows = [normalise(row) for row in csv.DictReader(handle)]
+    live = sheet_rows(sheet_path) if sheet_path else {}
     problems = []
     for number, row in enumerate(rows, start=2):
         name = row.get("Location Name") or row.get("Place ID") or row.get("Ref") or "?"
-        for problem in check_row(row):
+        context = live.get(str(row.get("Place ID", "")).strip(), {})
+        for problem in check_row(row, context):
             problems.append(f"row {number} ({name}): {problem}")
     return len(rows), problems
 
@@ -204,17 +324,58 @@ def demo():
     assert not check_row({"Max Stay (mins)": "Not published"})
     assert check_row({"Max Stay (mins)": "about an hour"})
     assert check_row({"Can Park? (Yes/No/Conditional)": "Maybe"})
+    # Rules folded in from grok-import, so the two checks agree.
+    assert not check_row({"Who Can Park": "Anyone (paid)", "Cost Type": "Paid",
+                          "Price Status": "Not published"})
+    assert check_row({"Can Park? (Yes/No/Conditional)": "Yes", "Source Tier": "Directory"})
+    assert check_row({"Can Park? (Yes/No/Conditional)": "No", "Source Tier": "Official site - text",
+                      "Specificity": "Site-specific", "Hours Basis": "Site hours"})
+    assert not check_row({"Can Park? (Yes/No/Conditional)": "No", "Source Tier": "Official site - text",
+                          "Specificity": "Site-specific", "Hours Basis": "Not applicable"})
+    assert check_row({"Location Status": "Closed", "Can Park? (Yes/No/Conditional)": "Yes"})
+    assert check_row({"Verification Result": "Confirmed", "Source Tier": "Official site - text",
+                      "Specificity": "Site-specific", "Who Can Park": "Anyone",
+                      "Max Stay (mins)": "120"})
+    assert check_row({"Conflict": "Yes"})
+    assert check_row({"Review Flag": "Check the tariff"})
+    assert check_row({"Place ID": "PP-1", "Cost Type": "Paid", "Decision Reason": ""})
+    assert not check_row({"Place ID": "PP-1", "Cost Type": "Paid",
+                          "Decision Reason": "Route: hospital1"})
+    # A row the round read and did not change needs no stamp.
+    assert not check_row({"Place ID": "PP-1", "Notes": "nothing published"})
+    assert check_row({"Agreeing Sources": "4"})
+    assert not check_row({"Can Park? (Yes/No/Conditional)": "No",
+                          "Source Tier": "Official site - text", "Specificity": "Site-specific",
+                          "Hours (OpenStreetMap opening_hours format)": "Not applicable",
+                          "Hours Basis": "Not applicable",
+                          "Parking Control Type (Cameras / Barrier / Patrol)": "Not applicable"})
+    assert not check_row({"Place ID": "PP-1", "Cost Type": "Paid",
+                          "Decision Reason": "Route C: operator page"})
+    # The merge: a blank in the results file keeps the sheet's value.
+    import tempfile, os
+    with tempfile.TemporaryDirectory() as folder:
+        export = os.path.join(folder, "live.csv")
+        with open(export, "w", newline="", encoding="utf-8") as stream:
+            writer = csv.DictWriter(stream, fieldnames=["Place ID", "Cost Type",
+                                                        "Decision Reason"])
+            writer.writeheader()
+            writer.writerow({"Place ID": "PP-1", "Cost Type": "Free then paid",
+                             "Decision Reason": "Route B: earlier round"})
+        merged = merge_with_sheet([normalise({"Place ID": "PP-1",
+                                              "Who Can Park": "Anyone (paid)"})], export)
+        assert merged[0]["Cost Type"] == "Free then paid"
+        assert not check_row(merged[0])
     print("self-check passed")
 
 
 def main(argv):
-    if len(argv) != 2:
+    if len(argv) not in (2, 3):
         print(__doc__)
         return 2
     if argv[1] == "--demo":
         demo()
         return 0
-    rows, problems = check_file(argv[1])
+    rows, problems = check_file(argv[1], argv[2] if len(argv) == 3 else None)
     for problem in problems:
         print(problem)
     print(f"{rows} rows checked, {len(problems)} problems")
