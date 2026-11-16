@@ -209,6 +209,22 @@ Rules for the values.
   "customers only", "permit holders", "open to the public". Where the page
   states a price and no access rule, Who Can Park stays Unknown and Cost Type
   reads Paid.
+
+  One widening, settled 16 November 2026, because the rule as first written
+  held 814 places that a driver could use. A venue's own page that lists a car
+  park among its facilities states who it is for, by being that venue's page.
+  A store page gives "Customers only", a hotel page gives "Guests only", and a
+  gym or leisure centre page gives "Customers only". Record those with
+  Evidence Level "Chain policy", never "Verified", so the weaker basis stays
+  visible and can be filtered or reversed later.
+
+  Still not enough on its own: a price, a photograph, a map entry, and a page
+  for a different site in the same retail park.
+
+  An operator car park whose own page says a driver may arrive and pay, for
+  example "first come first served" with "payment must be made upon arrival",
+  is "Anyone (paid)" with Evidence Level "Verified". Arriving and paying is
+  an access statement, not a price.
 - One field per cell. Never join hours and rates in one cell.
 - A price that fits no tariff template goes in Rules Summary, word for word.
 - A blank day is not an opening time. If a page lists closed days and leaves
